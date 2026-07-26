@@ -103,9 +103,19 @@ def _hash(identifier: str) -> str:
     return hashlib.sha256(identifier.encode("utf-8")).hexdigest()[:32]
 
 
-def _keys(scope: str, identifier: str) -> tuple[str, str, str]:
-    digest = _hash(identifier)
-    base = f"{CACHE_PREFIX}:{scope}:{digest}"
+#: How much more tolerant the account-wide counter is than the per-source one.
+#: Counting failures only per account lets anyone who knows a parent's email
+#: lock them out of their own invoices at will, indefinitely — a denial of
+#: service disguised as a security control. Counting only per source lets a
+#: botnet grind an account down for free. Both counters exist; the account-wide
+#: one simply sits at a higher threshold. Found in adversarial review.
+ACCOUNT_WIDE_MULTIPLIER = 4
+
+
+def _keys(scope: str, identifier: str, source: str | None = None) -> tuple[str, str, str]:
+    digest = _hash(identifier if source is None else f"{identifier}|{source}")
+    marker = "acct" if source is None else "src"
+    base = f"{CACHE_PREFIX}:{scope}:{marker}:{digest}"
     return f"{base}:failures", f"{base}:tier", f"{base}:until"
 
 
@@ -115,9 +125,26 @@ def _now() -> float:
     return time.monotonic()
 
 
-def peek(scope: str, identifier: str, policy: LockoutPolicy) -> ThrottleState:
-    """Current state without recording anything."""
-    failures_key, tier_key, until_key = _keys(scope, identifier)
+def peek(
+    scope: str, identifier: str, policy: LockoutPolicy, *, source: str | None = None
+) -> ThrottleState:
+    """Current state without recording anything.
+
+    When ``source`` is given (a client IP, a kiosk device id), both the
+    per-source and the account-wide counters are consulted and the stricter
+    result wins.
+    """
+    if source is not None:
+        per_source = _peek_one(scope, identifier, source)
+        account_wide = _peek_one(scope, identifier, None)
+        if per_source.locked or not account_wide.locked:
+            return per_source
+        return account_wide
+    return _peek_one(scope, identifier, None)
+
+
+def _peek_one(scope: str, identifier: str, source: str | None) -> ThrottleState:
+    failures_key, tier_key, until_key = _keys(scope, identifier, source)
     failures = cache.get(failures_key, 0)
     tier = cache.get(tier_key, 0)
     locked_until = cache.get(until_key)
@@ -133,22 +160,51 @@ def peek(scope: str, identifier: str, policy: LockoutPolicy) -> ThrottleState:
     return ThrottleState(locked=True, failures=failures, tier=tier, retry_after=remaining)
 
 
-def enforce(scope: str, identifier: str, policy: LockoutPolicy) -> ThrottleState:
+def enforce(
+    scope: str, identifier: str, policy: LockoutPolicy, *, source: str | None = None
+) -> ThrottleState:
     """Raise ``Throttled`` if locked out. Call *before* checking a credential."""
-    state = peek(scope, identifier, policy)
+    state = peek(scope, identifier, policy, source=source)
     if state.locked:
         raise Throttled(state)
     return state
 
 
-def register_failure(scope: str, identifier: str, policy: LockoutPolicy) -> ThrottleState:
-    """Record a failed attempt and lock out if the threshold is crossed."""
-    failures_key, tier_key, until_key = _keys(scope, identifier)
+def register_failure(
+    scope: str, identifier: str, policy: LockoutPolicy, *, source: str | None = None
+) -> ThrottleState:
+    """Record a failed attempt and lock out if the threshold is crossed.
+
+    With a ``source``, two counters advance: one for this source at the policy
+    threshold, and one account-wide at a multiple of it. A hostile source locks
+    only itself out until the account-wide threshold is genuinely reached.
+    """
+    if source is not None:
+        per_source = _register_one(scope, identifier, source, policy, policy.max_attempts)
+        account_wide = _register_one(
+            scope,
+            identifier,
+            None,
+            policy,
+            policy.max_attempts * ACCOUNT_WIDE_MULTIPLIER,
+        )
+        return per_source if per_source.locked else account_wide
+    return _register_one(scope, identifier, None, policy, policy.max_attempts)
+
+
+def _register_one(
+    scope: str,
+    identifier: str,
+    source: str | None,
+    policy: LockoutPolicy,
+    threshold: int,
+) -> ThrottleState:
+    failures_key, tier_key, until_key = _keys(scope, identifier, source)
 
     failures = cache.get(failures_key, 0) + 1
     cache.set(failures_key, failures, policy.window_seconds)
 
-    if failures < policy.max_attempts:
+    if failures < threshold:
         return ThrottleState(
             locked=False,
             failures=failures,
@@ -168,16 +224,19 @@ def register_failure(scope: str, identifier: str, policy: LockoutPolicy) -> Thro
     return ThrottleState(locked=True, failures=failures, tier=tier, retry_after=duration)
 
 
-def register_success(scope: str, identifier: str) -> None:
+def register_success(scope: str, identifier: str, *, source: str | None = None) -> None:
     """Clear counters after a genuine success.
 
     The escalation tier is cleared too: a legitimate user who eventually signs
     in should not carry a hair-trigger lockout around for the rest of the day.
     """
-    for key in _keys(scope, identifier):
+    for key in _keys(scope, identifier, None):
         cache.delete(key)
+    if source is not None:
+        for key in _keys(scope, identifier, source):
+            cache.delete(key)
 
 
-def reset(scope: str, identifier: str) -> None:
+def reset(scope: str, identifier: str, *, source: str | None = None) -> None:
     """Administrative unlock — e.g. a dojo admin clearing a student's PIN lockout."""
-    register_success(scope, identifier)
+    register_success(scope, identifier, source=source)

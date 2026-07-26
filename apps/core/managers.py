@@ -119,7 +119,45 @@ class ScopedQuerySet(models.QuerySet):
 
     def update(self, **kwargs):
         self._guard()
+        self._reject_guarded_field_writes(kwargs.keys())
         return super().update(**kwargs)
+
+    def bulk_create(self, objs, *args, **kwargs):
+        """Enforce the same-organisation invariant that ``save()`` enforces.
+
+        ``bulk_create`` never calls ``save()``, so without this one queryset
+        call could plant a row spanning two tenants. Found in adversarial
+        review — see tests/test_review_findings.py.
+        """
+        for obj in objs:
+            check = getattr(obj, "check_same_organization", None)
+            if check is not None:
+                check()
+        return super().bulk_create(objs, *args, **kwargs)
+
+    def _reject_guarded_field_writes(self, field_names) -> None:
+        """``QuerySet.update()`` issues raw SQL and bypasses model validation.
+
+        Rather than try to validate a set-based write, refuse to repoint the
+        fields whose cross-organisation consistency we guarantee. Callers that
+        genuinely need to move one of these must load the instance and save it,
+        where the check runs.
+        """
+        guarded = set(getattr(self.model, "same_organization_fields", ()))
+        if not guarded:
+            return
+
+        attempted = {name.split("__")[0].removesuffix("_id") for name in field_names}
+        collisions = sorted(attempted & guarded)
+        if collisions:
+            from django.core.exceptions import ValidationError
+
+            raise ValidationError(
+                f"{self.model.__name__}.update() may not change "
+                f"{', '.join(collisions)} — these fields are guarded against "
+                f"spanning organisations, and update() bypasses that check. "
+                f"Load the instance and save() it instead."
+            )
 
     def delete(self):
         self._guard()

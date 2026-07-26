@@ -20,7 +20,21 @@ def actor_for_user(user) -> Actor:
     if user is None or not getattr(user, "is_authenticated", False):
         return Actor(user_id=None, person_id=None, organization_id=None)
 
+    if not getattr(user, "is_active", False):
+        return Actor(user_id=getattr(user, "pk", None), person_id=None, organization_id=None)
+
     person = getattr(user, "person", None)
+
+    # ⚠ Removing someone must revoke their access, not merely hide them from
+    # lists. Without this a soft-deleted or suspended instructor keeps a live
+    # session and full scope until it happens to expire. Found in adversarial
+    # review — see tests/test_review_findings.py.
+    if person is not None and (
+        getattr(person, "deleted_at", None) is not None
+        or not getattr(person, "is_active", True)
+    ):
+        return Actor(user_id=user.pk, person_id=None, organization_id=None)
+
     if person is None:
         # A user without a Person (e.g. a bare superuser) gets no tenant scope.
         return Actor(
