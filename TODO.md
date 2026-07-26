@@ -224,7 +224,8 @@ Other agents pick up your work with `git rebase main` in their own worktree.
 
 | Task | Agent | Since |
 |---|---|---|
-| _(none)_ | | |
+| `1.2.1` `1.2.2` `1.2.3` `1.2.11` — rank ladders | CommandCode (`mimo-v2.5-pro`) | 2026-07-26 |
+| `0.3.7` — Setting model + resolver | Claude | 2026-07-26 |
 
 ---
 
