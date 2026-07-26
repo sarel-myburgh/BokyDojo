@@ -211,14 +211,17 @@ OUTPUT
   reset and API, but **not yet wired into any view** — wire them when `0.6.2` /
   `0.6.6` land, and when the kiosk PIN check is built (`1.7.8`).
 
-- ⚠ **REVIEW DEBT — do this before treating `1.1.x` as done.** `1.1.1`,
-  `1.1.3` and `1.1.5` are merged and green, but only the **models** were
-  reviewed (tenant paths, the self-guardian `CheckConstraint`, unique
-  (guardian, student), independent booleans — all correct). The test files
-  `tests/test_student_profile.py` and `tests/test_guardian_link.py` have **not
-  been read line by line**. Both delegated agents have previously shipped
-  inflated tests that missed the case that mattered. Merging on green is not
-  reviewing. Read those two files.
+- ✅ **Review debt on `1.1.x` is cleared.** Reading those tests surfaced a bug
+  none of them covered — see `same_organization_fields` below.
+
+- ⚠ **New invariant every model author must know:**
+  `TenantScopedModel.same_organization_fields`. Scoping decides who may *read*
+  a row; it does not stop a row being *created* that points at two different
+  organisations. Any model reached through an indirect tenant path must declare
+  it, e.g. `same_organization_fields = ("person", "home_dojo")` — first name is
+  the reference, the rest must match it. Enforced in `save()`, not just
+  `full_clean()`. `tests/test_cross_org_integrity.py` fails if a new model
+  references more than one organisation-bearing record without declaring it.
 
 - **Next task after that:** `0.3.9` ⚠ — `Document` model + validated upload
   (unblocked by `0.3.8`). Worth splitting: model + upload validation first,
@@ -356,6 +359,7 @@ Other agents pick up your work with `git rebase main` in their own worktree.
 Apply to every task, including delegated ones. Violating these is the most likely way a multi-agent handoff produces a broken codebase.
 
 - [ ] **Tenancy** — every model carries `organization` (directly or via an unambiguous FK chain). No exceptions. `§7.2`
+- [ ] **No row spans two organisations** — if a model has more than one FK to an organisation-bearing record, declare `same_organization_fields`. Scoping controls reads; this controls what can exist. `SEC §2.2`
 - [ ] **Scoped access** — all queries go through a scoped manager requiring an actor context. The unscoped manager is private (`_unscoped`) and its use outside migrations/admin commands fails lint. `SEC §2.2`
 - [ ] **Opaque IDs** — UUIDv7 primary keys; never expose sequential integers in URLs or API responses. `SEC §2.2`
 - [ ] **Money** — integer minor units + explicit currency code. Never floats. Never a bare number. `§6`
