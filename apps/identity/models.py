@@ -327,3 +327,41 @@ class RoleAssignment(TenantScopedModel):
         # Role assignments are visible org-wide to anyone who can see them at all;
         # the permission layer decides who that is.
         return models.Q(organization_id=actor.organization_id)
+
+
+class InstructorAssignment(TenantScopedModel):
+    """A Person teaching at a Dojo — plan §4.3."""
+
+    tenant_org_path = "dojo__organization_id"
+    tenant_dojo_path = "dojo_id"
+
+    dojo = models.ForeignKey(
+        Dojo, on_delete=models.PROTECT, related_name="instructor_assignments"
+    )
+    person = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="instructor_assignments"
+    )
+    is_head_instructor = models.BooleanField(_("head instructor"), default=False)
+    started_on = models.DateField(_("started on"))
+    ended_on = models.DateField(_("ended on"), null=True, blank=True)
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("instructor assignment")
+        verbose_name_plural = _("instructor assignments")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["person", "dojo"],
+                condition=models.Q(ended_on__isnull=True),
+                name="unique_active_instructor_assignment",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        role = _("Head instructor") if self.is_head_instructor else _("Instructor")
+        return f"{self.person} — {role} @ {self.dojo}"
+
+    @property
+    def is_active(self) -> bool:
+        return self.ended_on is None
