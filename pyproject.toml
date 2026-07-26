@@ -10,6 +10,9 @@ dependencies = [
     # Field-level encryption (AES-GCM envelope) for medical and safeguarding
     # data — TODO 0.3.8, SEC 2.3. No stdlib equivalent exists.
     "cryptography>=43.0",
+    # Image re-encoding to strip EXIF (including GPS) from uploaded
+    # photographs — TODO 0.3.9, SEC 2.3.
+    "Pillow>=11.0",
     "python-dotenv>=1.0",
     "python-json-logger>=3.2",
     "celery[redis]>=5.4",
