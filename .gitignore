@@ -16,3 +16,5 @@ htmlcov/
 .idea/
 .vscode/
 *.log
+
+dev.sqlite3
