@@ -316,6 +316,9 @@ class Document(TenantScopedModel):
         return timezone.localdate() > self.retention_until
 
 
+from .exchange import ExchangeRate  # noqa: E402,F401  (registers the model)
+
+
 class AuditLogQuerySet(models.QuerySet):
     """Append-only at the queryset level too.
 

@@ -35,9 +35,20 @@ def test_bool_is_rejected_as_minor_units():
         Money(True, "USD")
 
 
-def test_unknown_currency_rejected():
-    with pytest.raises(ValueError):
-        Money(100, "XYZ")
+def test_an_unlisted_but_well_formed_currency_is_accepted():
+    """Unlisted codes default to two decimals rather than raising.
+
+    Refusing an unfamiliar currency would mean a code change every time an
+    organisation outside the launch market signs up. Only the exceptions —
+    zero-decimal KHR, three-decimal KWD — need naming.
+    """
+    assert Money(100, "XYZ").currency == "XYZ"
+
+
+def test_a_malformed_currency_is_still_rejected():
+    for bad in ("US", "USDD", "1USD", ""):
+        with pytest.raises(ValueError):
+            Money(100, bad)
 
 
 def test_currency_is_normalised_to_upper():

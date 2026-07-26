@@ -13,17 +13,56 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
-#: ISO 4217 minor-unit exponents for the currencies we support.
+#: ISO 4217 minor-unit exponents.
+#:
+#: Anything not listed here defaults to 2, which is correct for the large
+#: majority of world currencies — so an organisation can adopt a currency we
+#: have never seen without a code change. Only the exceptions need naming.
+DEFAULT_EXPONENT = 2
+
 CURRENCY_EXPONENTS: dict[str, int] = {
-    "USD": 2,
+    # Zero-decimal currencies. KHR is the one that matters here: riel has no
+    # subdivision in practice, so 4000 KHR is four thousand riel, not forty.
     "KHR": 0,
-    "EUR": 2,
-    "GBP": 2,
-    "THB": 2,
-    "SGD": 2,
-    "AUD": 2,
     "JPY": 0,
+    "KRW": 0,
+    "VND": 0,
+    "IDR": 0,
+    "LAK": 0,
+    "MMK": 0,
+    "CLP": 0,
+    "ISK": 0,
+    "PYG": 0,
+    "RWF": 0,
+    "UGX": 0,
+    "XAF": 0,
+    "XOF": 0,
+    "XPF": 0,
+    # Three-decimal currencies.
+    "BHD": 3,
+    "IQD": 3,
+    "JOD": 3,
+    "KWD": 3,
+    "LYD": 3,
+    "OMR": 3,
+    "TND": 3,
 }
+
+#: Currencies offered in the UI by default. Not a restriction — any valid
+#: three-letter code is accepted.
+COMMON_CURRENCIES: tuple[str, ...] = (
+    "USD",
+    "KHR",
+    "THB",
+    "VND",
+    "SGD",
+    "MYR",
+    "EUR",
+    "GBP",
+    "AUD",
+    "JPY",
+    "CNY",
+)
 
 
 class CurrencyMismatch(TypeError):
@@ -31,10 +70,18 @@ class CurrencyMismatch(TypeError):
 
 
 def exponent_for(currency: str) -> int:
-    try:
-        return CURRENCY_EXPONENTS[currency.upper()]
-    except KeyError as exc:
-        raise ValueError(f"Unknown currency {currency!r}") from exc
+    """Minor-unit exponent for a currency code.
+
+    Unlisted codes get the two-decimal default rather than an error: refusing
+    an unfamiliar currency would mean a code change every time an organisation
+    outside our launch market signs up. The shape of the code is still checked.
+    """
+    code = (currency or "").upper()
+    if len(code) != 3 or not code.isalpha():
+        raise ValueError(
+            f"Invalid currency {currency!r}: expected a three-letter ISO 4217 code"
+        )
+    return CURRENCY_EXPONENTS.get(code, DEFAULT_EXPONENT)
 
 
 @dataclass(frozen=True, order=False)
