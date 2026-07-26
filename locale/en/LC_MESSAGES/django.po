@@ -1,0 +1,5 @@
+# English translation for DojoMaster
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"

@@ -1,0 +1,40 @@
+# =============================================================================
+# DojoMaster — Caddyfile
+# TODO 0.2.3 — automatic HTTPS
+# =============================================================================
+
+# Replace {$DOMAIN} with your domain in .env, or set it directly here.
+# Caddy handles TLS certificate provisioning automatically via Let's Encrypt.
+
+{$DOMAIN:localhost} {
+    # Proxy to the Django app
+    reverse_proxy web:8000 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Real-IP {remote_host}
+    }
+
+    # Serve static files directly
+    handle /static/* {
+        root * /app/staticfiles
+        file_server
+    }
+
+    # Serve media files
+    handle /media/* {
+        root * /app/media
+        file_server
+    }
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}

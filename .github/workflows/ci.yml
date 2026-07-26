@@ -1,0 +1,81 @@
+# =============================================================================
+# DojoMaster CI — TODO 0.2.6 + 0.2.7
+# Lint, test, build image, dependency audit, SAST, secret scanning
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: pytest --tb=short -q
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t dojomaster:ci .
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # Dependency audit — TODO 0.2.7 / SEC §7.4
+      - run: pip install pip-audit
+      - run: pip-audit
+      # SAST with Bandit — TODO 0.2.7
+      - run: pip install bandit[toml]
+      - run: bandit -r apps/ -c pyproject.toml --severity-level medium
+      # Secret scanning with detect-secrets — TODO 0.2.7
+      - run: pip install detect-secrets
+      - run: detect-secrets scan --all-files --exclude-files '\.env\.example$' | python -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          results = data.get('results', {})
+          if results:
+              print('Secrets found:')
+              for f, findings in results.items():
+                  for f in findings:
+                      print(f'  {f[\"type\"]} in {f[\"line_number\"]}')
+              sys.exit(1)
+          print('No secrets detected.')
+          "
+      # Untranslated strings check — TODO 0.4.6
+      - name: Check for untranslated template strings
+        run: |
+          if find templates -name '*.html' -exec grep -lP '(?<=>)[A-Z][a-z]+(?:\s+[a-z]+)+(?=<)' {} \; 2>/dev/null | head -1; then
+            echo "ERROR: Found hardcoded English strings in templates."
+            echo "All user-facing strings must use {% translate %}."
+            exit 1
+          fi
+          echo "No untranslated template strings found."
