@@ -206,11 +206,38 @@ OUTPUT
 - **Where to work:** each agent has its own directory and branch — see
   *Multi-agent workflow* below. Do not work in `Code/DojoMaster`; that is `main`.
 - **Current phase:** Phase 0 — in progress
-- **Last completed task:** `1.2.1`–`1.2.3` + `1.2.11` (ranks, delegated + reviewed)
-- **Next task:** `0.3.9` ⚠ — `Document` model + validated upload (depends on `0.3.8`, now available)
-- **Test suite:** 267 passing, 15 skipped. From a worktree:
+- **Last completed task:** `0.6.5` — rate limiting + progressive lockout
+  (`apps/core/throttle.py`). Policies shipped for login, kiosk PIN, password
+  reset and API, but **not yet wired into any view** — wire them when `0.6.2` /
+  `0.6.6` land, and when the kiosk PIN check is built (`1.7.8`).
+
+- ⚠ **WORK IN FLIGHT — check this before starting anything.** opencode was
+  dispatched `1.1.1` (StudentProfile), `1.1.3` (GuardianLink) and `1.1.5`
+  (EmergencyContact) on `opencode-go/mimo-v2.5-pro`. At last check it had
+  written `apps/identity/models.py` and migration `0004_*` but **not yet the
+  tests**, and was still running. The work is **uncommitted in
+  `Code/DojoMaster-opencode`**. To pick it up:
+  1. `cd Code/DojoMaster-opencode && git status`
+  2. `git rebase main` — main moved after dispatch (`0.6.5` landed)
+  3. run pytest and ruff
+  4. **Review the diff properly.** See the review warning in the delegation
+     section: check what is *missing*, not just what is present.
+  5. Commit on `agent/opencode`, merge to main, delete `TASK_BRIEF.md`
+  If it never finished, the brief is still in `TASK_BRIEF.md` — rewrite it as a
+  continuation brief and dispatch again.
+
+- **Next task after that:** `0.3.9` ⚠ — `Document` model + validated upload
+  (unblocked by `0.3.8`). Worth splitting: model + upload validation first,
+  permission-checked serving view second.
+- **Test suite:** 297 passing, 16 skipped on `main`. From a worktree:
   `../DojoMaster/.venv/Scripts/python.exe -m pytest`
-- **Remaining in Phase 0:** `0.1.6`, `0.3.9` ⚠, `0.4.4`, `0.6.2` ⚠–`0.6.7`, `0.7.3`, `0.7.4`
+- **Remaining in Phase 0:** `0.3.9` ⚠, `0.6.2` ⚠, `0.6.3`, `0.6.4`, `0.6.6` ⚠,
+  `0.6.7`, `0.7.3`, `0.7.4`. (`0.1.6` and `0.4.4` are **done** — an earlier
+  version of this line listed them as outstanding and was wrong.)
+- ⚠ **Never edit TODO.md with PowerShell `Get-Content -Raw` / `Set-Content`.**
+  PS 5.1 reads a BOM-less file as ANSI and rewrites it as UTF-8, mangling every
+  em-dash and `§` in the document. Use an editor/Edit tool, or Python with
+  explicit `encoding="utf-8"`.
 - **New in this session:** `ScopedQuerySet.for_organization()` — the sanctioned
   actorless scoping entry point, for subject-driven reads with no logged-in user
   (kiosk, background jobs). Use it instead of `.unscoped()` whenever a tenant
@@ -410,7 +437,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `0.6.2` ⚠ TOTP 2FA, mandatory for org/dojo admin and any financial or PII-export role `SEC §2.1`
 - [ ] `0.6.3` Recovery codes (generate once, show once, hashed at rest)
 - [ ] `0.6.4` Session config: HttpOnly, Secure, SameSite=Lax, idle timeout, absolute cap, rotate on privilege change
-- [ ] `0.6.5` Rate limiting + progressive lockout: login, reset, PIN, API
+- [x] `0.6.5` Rate limiting + progressive lockout: login, reset, PIN, API — `apps/core/throttle.py`. ⚠ Policies exist but are **not wired into any view yet**; wire on `0.6.2`/`0.6.6`/`1.7.8`.
 - [ ] `0.6.6` ⚠ Password reset: single-use, short-lived, no user enumeration (response *and* timing)
 - [ ] `0.6.7` Security headers + strict CSP with nonces, no `unsafe-inline` `SEC §2.4`
 
