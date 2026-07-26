@@ -111,12 +111,32 @@ commandcode -p "Read TASK_BRIEF.md in the repository root and carry out exactly 
   --max-turns 120 --skip-onboarding -t --yolo
 ```
 
+#### Codex — high-stakes second opinion
+
+Runs in `Code/DojoMaster-codex`. Installed and available with **GPT Tera** and
+**GPT Sol**. Reserved for work where being wrong is expensive, not for volume:
+
+- Adversarial review of ⚠ work before it merges — the permission resolver, the
+  `same_organization_fields` guard, payment callback verification, the AI tool
+  catalogue.
+- The Phase 6 multi-model security review (`6.11`), where it is one of the
+  named reviewers alongside GLM 5.2 and Kimi K3.
+- A second opinion when a cheaper model produced something that looked right
+  but a review found defects — the pattern has now recurred three times.
+
+Do **not** route routine `[DS]` volume here. The value is a different model
+family looking at the same code, and that is wasted on boilerplate.
+
 #### Choosing between them
 
-Prefer **opencode** — it needs no permission bypass, which is a real security
-difference, not a convenience one. Reach for **CommandCode** when opencode is
-throttled, when you want a second opinion from a different model on work that
-looked wrong, or when a task suits a model only it offers.
+| Need | Use |
+|---|---|
+| Routine `[DS]` volume | **opencode** — no permission bypass required |
+| opencode throttled, or a model only it has | **CommandCode** |
+| ⚠ review, security work, high-stakes correctness | **Codex** (Tera / Sol) |
+
+Prefer **opencode** by default — needing no permission bypass is a real security
+difference, not a convenience one.
 
 #### Operational notes (both CLIs)
 
@@ -223,9 +243,12 @@ OUTPUT
   `full_clean()`. `tests/test_cross_org_integrity.py` fails if a new model
   references more than one organisation-bearing record without declaring it.
 
-- **Next task after that:** `0.3.9` ⚠ — `Document` model + validated upload
-  (unblocked by `0.3.8`). Worth splitting: model + upload validation first,
-  permission-checked serving view second.
+- **`0.3.9` is split and half done.** `0.3.9a` (upload validation) is merged:
+  `apps/core/uploads.py` — magic-byte sniffing, SVG refused outright, EXIF
+  stripped by re-encoding, storage names generated from our own id rather than
+  the uploaded filename. **`0.3.9b` is next**: the `Document` model plus a
+  permission-checked serving view (never a direct static URL), with
+  `Content-Disposition: attachment` and retention fields.
 - **Test suite:** 324 passing, 17 skipped on `main`. From a worktree:
   `../DojoMaster/.venv/Scripts/python.exe -m pytest`
 - **Remaining in Phase 0:** `0.3.9` ⚠, `0.6.2` ⚠, `0.6.3`, `0.6.4`, `0.6.6` ⚠,
