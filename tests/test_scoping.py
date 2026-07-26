@@ -161,6 +161,28 @@ def test_scope_survives_further_filtering(two_orgs):
     assert [p.given_name for p in qs] == ["Alice"]
 
 
+def test_for_organization_scopes_without_an_actor(two_orgs):
+    """The actorless entry point still applies the tenant filter — it is a
+    scoping method, not an escape hatch."""
+    names = {p.given_name for p in Person.objects.for_organization(two_orgs["org_a"].pk)}
+    assert names == {"Alice", "Ian"}
+
+
+def test_for_organization_does_not_leak_across_tenants(two_orgs):
+    names = {p.given_name for p in Person.objects.for_organization(two_orgs["org_b"].pk)}
+    assert names == {"Bob"}
+
+
+def test_for_organization_rejects_none(two_orgs):
+    """A None organisation id would otherwise filter on nothing at all."""
+    with pytest.raises(UnscopedAccessError):
+        Person.objects.for_organization(None)
+
+
+def test_for_organization_result_is_readable(two_orgs):
+    assert Person.objects.for_organization(two_orgs["org_a"].pk).count() == 2
+
+
 def test_unauthenticated_user_yields_anonymous_actor():
     actor = actor_for_user(None)
     assert actor.is_anonymous

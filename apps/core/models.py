@@ -106,6 +106,42 @@ class SoftDeleteModel(TenantScopedModel):
         self.save(update_fields=["deleted_at", "deleted_by", "updated_at"])
 
 
+class Setting(TenantScopedModel):
+    """A setting value bound to one level of the hierarchy — TODO 0.3.7, plan §13.2.
+
+    Rows here are *overrides*. An absent row means "inherit"; the declared
+    default in apps/core/setting_registry.py is the floor. Resolution order and
+    per-key merge rules live in apps/core/setting_resolver.py — never
+    reimplement them at a call site.
+    """
+
+    tenant_org_path = "organization_id"
+
+    organization = models.ForeignKey(
+        "identity.Organization", on_delete=models.CASCADE, related_name="settings"
+    )
+    scope_type = models.CharField(_("scope"), max_length=20)
+    #: Null at organisation scope; otherwise the dojo/template/session/student id.
+    scope_id = models.UUIDField(null=True, blank=True)
+    key = models.CharField(_("key"), max_length=100, db_index=True)
+    value = models.JSONField(_("value"))
+
+    class Meta:
+        verbose_name = _("setting")
+        verbose_name_plural = _("settings")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "scope_type", "scope_id", "key"],
+                name="unique_setting_per_scope",
+            ),
+        ]
+        indexes = [models.Index(fields=["organization", "key"])]
+
+    def __str__(self) -> str:
+        target = self.scope_id or "org"
+        return f"{self.key}={self.value!r} @ {self.scope_type}:{target}"
+
+
 class AuditLog(models.Model):
     """Append-only record of every state change — TODO 0.3.5 / SEC 2.6.
 

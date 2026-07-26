@@ -60,6 +60,27 @@ class ScopedQuerySet(models.QuerySet):
         clone._scope_actor = actor
         return clone
 
+    def for_organization(self, organization_id) -> ScopedQuerySet:
+        """Scope to one organisation without an actor.
+
+        For subject-driven reads that legitimately have no logged-in user — the
+        check-in kiosk resolving a student's PIN policy, a background job acting
+        on one tenant. This is a *scoping* entry point, not an escape hatch: the
+        tenant filter is still applied and cannot be forgotten.
+
+        ``organization_id`` must always be server-derived (from a device token,
+        a job argument, a subject record). Passing a client-supplied value here
+        is a tenant bypass.
+        """
+        if organization_id is None:
+            raise UnscopedAccessError(
+                f"{self.model.__name__}.for_organization() called with None"
+            )
+        clone = self.filter(**{self.model.tenant_org_path: organization_id})
+        clone._scope_applied = True
+        clone._scope_actor = None
+        return clone
+
     def unscoped(self, reason: str) -> ScopedQuerySet:
         """Explicit, greppable escape hatch. Requires a written justification."""
         if not reason:
