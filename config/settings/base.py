@@ -40,6 +40,8 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.identity",
     "apps.ranks",
+    "apps.scheduling",
+    "apps.staffing",
 ]
 
 MIDDLEWARE = [
