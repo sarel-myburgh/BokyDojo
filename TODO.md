@@ -90,6 +90,22 @@ commandcode -p "<delegation prompt>" \
   --max-turns 40 --skip-onboarding --auto-accept
 ```
 
+⚠ **`--yolo` is required and is authorised.** CommandCode will not write files or
+run shell commands in headless (`-p`) mode under any lesser permission —
+`--auto-accept`, `-t --auto-accept`, `--permission-mode auto-accept` and
+`--config permissions.defaultMode` were all tried and refused. The user
+authorised `--yolo` on 2026-07-26 **for runs confined to an agent worktree**.
+
+Conditions attached to that authorisation:
+- Run only from the agent's own worktree, on its own branch.
+- Everything else committed first, so repo damage is recoverable via git.
+- Always cap `--max-turns`.
+- Every diff reviewed before it reaches `main`. The agent does not commit.
+- ⚠ Understand what git does *not* cover: the worktree isolates repository
+  changes, but `--yolo` also permits arbitrary shell commands, which run as the
+  user and can touch anything on the machine. That residual risk was accepted
+  knowingly; do not describe the worktree as a sandbox.
+
 - `--skip-onboarding` is required — taste onboarding blocks a headless run.
 - Do **not** pass `-w/--worktree`; the agent already has one. Stacking them
   puts the work somewhere nobody is looking.
