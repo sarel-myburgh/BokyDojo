@@ -153,10 +153,19 @@ OUTPUT
 - **Where to work:** each agent has its own directory and branch — see
   *Multi-agent workflow* below. Do not work in `Code/DojoMaster`; that is `main`.
 - **Current phase:** Phase 0 — in progress
-- **Last completed task:** `0.7.2` (demo reset command) — all `[DS]` tasks in Phase 0 are now complete
-- **Next task:** `0.3.7` — `Setting` model + hierarchy resolver (⚠, not delegable)
-- **Test suite:** 160 passing, 11 skipped. `make test` / `.venv\Scripts\python -m pytest`
-- **Remaining in Phase 0 (all ⚠):** `0.3.7`, `0.3.8`, `0.3.9`, `0.6.2`–`0.6.7`, `0.7.3`, `0.7.4`
+- **Last completed task:** `0.3.8` — envelope encryption for medical/safeguarding fields
+- **Next task:** `0.3.9` ⚠ — `Document` model + validated upload (depends on `0.3.8`, now available)
+- **Test suite:** 227 passing, 13 skipped. From a worktree:
+  `../DojoMaster/.venv/Scripts/python.exe -m pytest`
+- **Remaining in Phase 0:** `0.1.6`, `0.3.9` ⚠, `0.4.4`, `0.6.2` ⚠–`0.6.7`, `0.7.3`, `0.7.4`
+- **New in this session:** `ScopedQuerySet.for_organization()` — the sanctioned
+  actorless scoping entry point, for subject-driven reads with no logged-in user
+  (kiosk, background jobs). Use it instead of `.unscoped()` whenever a tenant
+  filter *is* being applied, just not from an actor.
+- **Encryption is available:** `EncryptedTextField` / `EncryptedCharField` from
+  `apps.core.fields`. Task `1.1.2` (medical fields) is unblocked.
+  ⚠ Encrypted columns cannot be filtered, ordered or indexed — the field
+  constructor refuses `db_index` and `unique` rather than failing silently.
 - **Open questions blocking work:** `D7` (licence) blocks the LICENSE file only. Nothing else in Phase 0 is blocked.
 - **Deviations from the plan so far:**
   - `Person` was made a `SoftDeleteModel` rather than a plain `TenantScopedModel`. Rationale: student records are attached to attendance, rank awards and invoices, all of which are evidence; erasure requests go through redaction, not DELETE. Consistent with plan §2 ("never hard-delete user data"). Migration `identity/0002`.
@@ -320,8 +329,8 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `0.3.4` Lint rule / test that fails on `_unscoped` use outside allowed paths
 - [x] `0.3.5` `[DS]` `AuditLog` model + write helper + middleware capturing actor/IP/UA `SEC §2.6`
 - [x] `0.3.6` `[DS]` `Money` value type — integer minor units + currency, arithmetic guarded against mixed currency
-- [ ] `0.3.7` `Setting` model + resolver for the hierarchy `org → dojo → class → session → student` `§13.2`
-- [ ] `0.3.8` ⚠ Field-level encryption helper (envelope, per-org data key, keys outside DB) `SEC §2.3`
+- [x] `0.3.7` `Setting` model + resolver for the hierarchy `org → dojo → class → session → student` `§13.2`
+- [x] `0.3.8` ⚠ Field-level encryption helper (envelope, per-org data key, keys outside DB) `SEC §2.3`
 - [ ] `0.3.9` ⚠ `Document` model + validated upload (magic bytes, size cap, generated names, outside web root), permission-checked serving view, EXIF stripping, SVG rejected `SEC §2.3`
 
 ### 0.4 i18n scaffolding
