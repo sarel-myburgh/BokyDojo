@@ -111,10 +111,39 @@ commandcode -p "Read TASK_BRIEF.md in the repository root and carry out exactly 
   --max-turns 120 --skip-onboarding -t --yolo
 ```
 
+#### Grok — fourth dispatcher
+
+Runs in `Code/DojoMaster-grok`. Installed at `C:\Users\Sarel\.grok\bin\grok.exe`
+(Windows PATH, added at install time — a shell opened earlier will not see it).
+Logged in via grok.com.
+
+⚠ **Only `grok-4.5` is available on this account.** Composer 2.5 is not
+present; `grok models` lists one model. Verify before assuming otherwise.
+
+```bash
+grok --cwd <worktree> --always-approve -m grok-4.5 \
+  -p "Read TASK_BRIEF.md in the repository root and carry out exactly what it specifies."
+```
+
+`--always-approve` is the equivalent of CommandCode's `--yolo` and carries the
+same caveats. `-p/--single` is the headless flag. Suited to large self-contained
+features rather than review.
+
 #### Codex — high-stakes second opinion
 
 Runs in `Code/DojoMaster-codex`. Installed and available with **GPT Tera** and
-**GPT Sol**. Reserved for work where being wrong is expensive, not for volume:
+**GPT Sol**. **The highest-value agent so far**: one adversarial review found
+18 issues including a critical cross-tenant privilege escalation, every one with
+a working reproduction. See `security_review_2026-07-26.md`.
+
+Note it has a dedicated `codex review` subcommand as well as `codex exec`, and a
+`--sandbox` policy (`read-only` / `workspace-write`) rather than an all-or-
+nothing bypass.
+
+⚠ **Do not pipe `codex exec` through `Select-Object -Last N`** — it truncates
+the report and discards findings. Have it write to a file instead.
+
+Reserved for work where being wrong is expensive, not for volume:
 
 - Adversarial review of ⚠ work before it merges — the permission resolver, the
   `same_organization_fields` guard, payment callback verification, the AI tool
@@ -133,7 +162,13 @@ family looking at the same code, and that is wasted on boilerplate.
 |---|---|
 | Routine `[DS]` volume | **opencode** — no permission bypass required |
 | opencode throttled, or a model only it has | **CommandCode** |
+| Large self-contained feature | **Grok** (`grok-4.5`) |
 | ⚠ review, security work, high-stakes correctness | **Codex** (Tera / Sol) |
+
+Four agents can run at once, one per worktree. Before dispatching a parallel
+batch, **pre-create any shared scaffolding yourself** (new app skeletons,
+`INSTALLED_APPS` entries) so no two agents edit the same shared file. Doing that
+once removed the whole class of collision from the four-way fan-out.
 
 Prefer **opencode** by default — needing no permission bypass is a real security
 difference, not a convenience one.
@@ -431,7 +466,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `0.3.6` `[DS]` `Money` value type — integer minor units + currency, arithmetic guarded against mixed currency
 - [x] `0.3.7` `Setting` model + resolver for the hierarchy `org → dojo → class → session → student` `§13.2`
 - [x] `0.3.8` ⚠ Field-level encryption helper (envelope, per-org data key, keys outside DB) `SEC §2.3`
-- [ ] `0.3.9` ⚠ `Document` model + validated upload (magic bytes, size cap, generated names, outside web root), permission-checked serving view, EXIF stripping, SVG rejected `SEC §2.3`
+- [x] `0.3.9` ⚠ `Document` model + validated upload (magic bytes, size cap, generated names, outside web root), permission-checked serving view, EXIF stripping, SVG rejected `SEC §2.3`
 
 ### 0.4 i18n scaffolding
 - [x] `0.4.1` `[DS]` `LocaleMiddleware`, locale paths, `USE_I18N`
@@ -495,13 +530,13 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.2.1` `[DS]` `Style` model `§4.4`
 - [x] `1.2.2` `[DS]` `RankLadder` (adult / junior variants) `§4.4`
 - [x] `1.2.3` `[DS]` `Rank` — order, name, colour, stripes, min months, min classes, min age
-- [ ] `1.2.4` ⚠ `StudentStyleTrack` — rank is **per style**, not per student `§4.2`
-- [ ] `1.2.5` `[DS]` `RankAward` + derived `current_rank` (denormalised, recomputed on write)
+- [x] `1.2.4` ⚠ `StudentStyleTrack` — rank is **per style**, not per student `§4.2`
+- [x] `1.2.5` `[DS]` `RankAward` + derived `current_rank` (denormalised, recomputed on write)
 - [ ] `1.2.6` `[DS]` Manual promotion flow with audit
 - [ ] `1.2.7` `[DS]` **Bulk promotion** — 30 students in one action after a grading `§2 item 24`
 - [ ] `1.2.8` ⚠ `InstructorProfile.max_grading_rank_id` — grading ceiling enforced `§4.2`
-- [ ] `1.2.9` `[DS]` External / transfer-in rank recognition (`awarded_by_external_org`, recognised / provisional / not recognised) `§12.6`
-- [ ] `1.2.10` Negating award record for rank stripping (never delete) `§12.6`
+- [x] `1.2.9` `[DS]` External / transfer-in rank recognition (`awarded_by_external_org`, recognised / provisional / not recognised) `§12.6`
+- [x] `1.2.10` Negating award record for rank stripping (never delete) `§12.6`
 - [x] `1.2.11` `[DS]` Seed a Shotokan adult ladder + a junior mon ladder as fixtures
 
 ### 1.3 Enrolment & transfers
@@ -509,16 +544,16 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `1.3.2` Multi-dojo enrolment (several active at once)
 - [ ] `1.3.3` ⚠ Transfer flow: end old enrolment, create new, write `TransferRecord`. Never mutate history. `§4.3`
 - [ ] `1.3.4` ⚠ Test: attendance/invoice history survives transfer intact
-- [ ] `1.3.5` `[DS]` `InstructorAssignment` — person ↔ dojo
+- [x] `1.3.5` `[DS]` `InstructorAssignment` — person ↔ dojo
 
 ### 1.4 Scheduling
-- [ ] `1.4.1` `[DS]` `ClassTemplate` — rrule, time, duration, room, capacity, rank/age bounds `§4.5`
+- [x] `1.4.1` `[DS]` `ClassTemplate` — rrule, time, duration, room, capacity, rank/age bounds `§4.5`
 - [ ] `1.4.2` ⚠ `ClassSession` materialisation job, rolling 90-day horizon (mind DST)
-- [ ] `1.4.3` ⚠ `ClosurePeriod` (org/dojo, date range, reason, `suppress_billing`) consulted by the generator `§12.2`
-- [ ] `1.4.4` `[DS]` Seed public holidays for Cambodia; make the set per-country data
+- [x] `1.4.3` ⚠ `ClosurePeriod` (org/dojo, date range, reason, `suppress_billing`) consulted by the generator `§12.2`
+- [x] `1.4.4` `[DS]` Seed public holidays for Cambodia; make the set per-country data
 - [ ] `1.4.5` ⚠ Template edit semantics: "this occurrence" vs "this and future" `§4.5`
-- [ ] `1.4.6` `[DS]` Ad-hoc one-off sessions (no template)
-- [ ] `1.4.7` `[DS]` Cancel session + reason + notification hook
+- [x] `1.4.6` `[DS]` Ad-hoc one-off sessions (no template)
+- [x] `1.4.7` `[DS]` Cancel session + reason + notification hook
 - [ ] `1.4.8` `[DS]` Substitute instructor assignment
 - [ ] `1.4.9` `[DS]` Calendar views: week/month, per dojo, filtered by instructor
 - [ ] `1.4.10` `ClassTemplate.counts_toward[]` tags — which class types count for which eligibility rules `§2 item 23`
@@ -555,14 +590,14 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `1.7.12` ⚠ Test: revoked device token is cut off immediately
 
 ### 1.8 Notes
-- [ ] `1.8.1` `[DS]` `Note` — polymorphic subject, visibility levels, pinned `§4.7`
+- [x] `1.8.1` `[DS]` `Note` — polymorphic subject, visibility levels, pinned `§4.7`
 - [ ] `1.8.2` ⚠ Visibility enforcement: `private` / `instructors` / `admins` / `parent_visible`
-- [ ] `1.8.3` `[DS]` Pinned notes surface on the student header
+- [x] `1.8.3` `[DS]` Pinned notes surface on the student header
 - [ ] `1.8.4` ⚠ Safeguarding notes restricted to a named role, encrypted, access-logged `SEC §4`
 
 ### 1.9 Instructor time (basic)
-- [ ] `1.9.1` `[DS]` `InstructorProfile` — pay type, rate, currency `§4.2`
-- [ ] `1.9.2` `[DS]` `TimeEntry` model + `pay_rate_snapshot` `§4.8`
+- [x] `1.9.1` `[DS]` `InstructorProfile` — pay type, rate, currency `§4.2`
+- [x] `1.9.2` `[DS]` `TimeEntry` model + `pay_rate_snapshot` `§4.8`
 - [ ] `1.9.3` `[DS]` Auto-draft entry when a session's attendance is completed
 - [ ] `1.9.4` `[DS]` Weekly timesheet view for the instructor
 
