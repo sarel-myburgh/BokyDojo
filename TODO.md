@@ -51,12 +51,18 @@ picker offers.
 
 | Model | Budget | Use for |
 |---|---|---|
-| `xiaomi/mimo-v2.5-pro` | **$100** | Default workhorse — the bulk of `[DS]` tasks |
-| `deepseek/deepseek-v4-pro` | **$40** | Second opinion; tasks the workhorse struggled with |
-| `minimaxai/minimax-m3` | **$20** | Smallest budget — short, well-bounded tasks only |
+| `xiaomi/mimo-v2.5` | **$100** | Bulk volume — the largest pool, for straightforward `[DS]` tasks |
+| `xiaomi/mimo-v2.5-pro` | **$50** | Designated default; the harder or longer-context `[DS]` tasks |
+| `deepseek/deepseek-v4-pro` | **$40** | Second opinion; anything the others struggled with |
+| `minimaxai/minimax-m3` | **$20** | Smallest pool — short, well-bounded tasks only |
 
-Spend the largest budget first and keep the smallest in reserve; a depleted
-budget mid-task means a half-finished branch.
+Total pool ≈ **$210**. Match the model to the task rather than always reaching
+for the best one: burning the `-pro` budget on model boilerplate leaves nothing
+for the tasks that actually need it. Keep `minimax-m3` in reserve — a budget
+that empties mid-task leaves a half-finished branch nobody can evaluate.
+
+**Log spend per run** (`--output-format json` reports usage) so the remaining
+budget is a known number rather than a surprise.
 
 Dispatch form (run from `Code/DojoMaster-commandcode`):
 
