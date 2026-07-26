@@ -59,12 +59,73 @@ class TenantScopedModel(BaseModel):
     class Meta:
         abstract = True
 
+    #: Foreign keys that must all resolve to the same organisation. The first
+    #: name is the reference; the rest are checked against it.
+    #:
+    #: Scoping decides who may *read* a row; it says nothing about whether the
+    #: row should have been creatable. A record pointing at two organisations is
+    #: a tenant boundary violation baked into the data — scoping will faithfully
+    #: show it to one side and hide it from the other, and neither view is right.
+    #: Declare this on any model reached through an indirect tenant path::
+    #:
+    #:     same_organization_fields = ("person", "home_dojo")
+    same_organization_fields: tuple[str, ...] = ()
+
+    def save(self, *args, **kwargs):
+        # Enforced on save, not only in full_clean(): most writes are service
+        # code and fixtures that never call full_clean(), and this is the one
+        # invariant that must not be bypassable by convenience.
+        self.check_same_organization()
+        return super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        self.check_same_organization()
+
     @classmethod
     def tenant_scope_q(cls, actor: Actor):
         q = org_scope_q(cls.tenant_org_path, actor)
         if cls.tenant_dojo_path:
             q &= dojo_scope_q(cls.tenant_dojo_path, actor)
         return q
+
+    @staticmethod
+    def _organization_of(obj):
+        if obj is None:
+            return None
+        organization_id = getattr(obj, "organization_id", None)
+        if organization_id is not None:
+            return organization_id
+        # An Organization is its own organisation.
+        if obj.__class__.__name__ == "Organization":
+            return obj.pk
+        return None
+
+    def check_same_organization(self) -> None:
+        """Raise ValidationError if declared references span organisations."""
+        if len(self.same_organization_fields) < 2:
+            return
+
+        from django.core.exceptions import ValidationError
+
+        reference_name, *others = self.same_organization_fields
+        reference_org = self._organization_of(getattr(self, reference_name, None))
+        if reference_org is None:
+            return
+
+        for name in others:
+            other_org = self._organization_of(getattr(self, name, None))
+            if other_org is None or other_org == reference_org:
+                continue
+            raise ValidationError(
+                {
+                    name: _(
+                        "%(field)s belongs to a different organisation than "
+                        "%(reference)s. A record may not span two organisations."
+                    )
+                    % {"field": name, "reference": reference_name}
+                }
+            )
 
 
 class SoftDeleteModel(TenantScopedModel):

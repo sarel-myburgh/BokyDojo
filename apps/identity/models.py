@@ -270,6 +270,9 @@ class RoleAssignment(TenantScopedModel):
     """
 
     tenant_org_path = "organization_id"
+    #: ⚠ Without this, a person from another organisation could be granted a
+    #: role here — the most direct privilege-escalation route in the schema.
+    same_organization_fields = ("organization", "person", "dojo")
 
     organization = models.ForeignKey(
         Organization, on_delete=models.CASCADE, related_name="role_assignments"
@@ -335,6 +338,8 @@ class InstructorAssignment(TenantScopedModel):
 
     tenant_org_path = "dojo__organization_id"
     tenant_dojo_path = "dojo_id"
+    #: An instructor from another organisation must not be assignable here.
+    same_organization_fields = ("dojo", "person")
 
     dojo = models.ForeignKey(
         Dojo, on_delete=models.PROTECT, related_name="instructor_assignments"
@@ -377,6 +382,9 @@ class StudentProfile(TenantScopedModel):
 
     tenant_org_path = "person__organization_id"
     tenant_dojo_path = "home_dojo_id"
+    #: A student in one organisation must not have a home dojo in another —
+    #: the two tenant paths would disagree about who owns the row.
+    same_organization_fields = ("person", "home_dojo")
 
     class Status(models.TextChoices):
         PROSPECT = "prospect", _("Prospect")
@@ -443,6 +451,9 @@ class GuardianLink(TenantScopedModel):
     """
 
     tenant_org_path = "student__organization_id"
+    #: The tenant path runs through the student, so a guardian from another
+    #: organisation would be a one-way window into that tenant's people.
+    same_organization_fields = ("student", "guardian")
 
     class Relationship(models.TextChoices):
         MOTHER = "mother", _("Mother")
