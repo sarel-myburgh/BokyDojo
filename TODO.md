@@ -43,6 +43,37 @@ Tasks marked `[DS]` are self-contained and mechanical: standard framework boiler
 
 **Capability note:** the `[DS]` line was originally drawn conservatively. MiniMax M2.5-class models (~80% SWE-bench Verified) handle this tier comfortably, so several tasks were promoted on 2026-07-26. The line is now drawn by **blast radius and reviewability**, not by difficulty — a subtle error in the permission resolver is a cross-tenant leak that no test you thought to write will catch, which is why ⚠ items stay in-house regardless of model capability.
 
+### Approved models and budgets ⚠
+
+Delegated work runs through **CommandCode** (`commandcode`, v1.4.1, authenticated).
+Only these three models are approved. Do not use any other, whatever the model
+picker offers.
+
+| Model | Budget | Use for |
+|---|---|---|
+| `xiaomi/mimo-v2.5-pro` | **$100** | Default workhorse — the bulk of `[DS]` tasks |
+| `deepseek/deepseek-v4-pro` | **$40** | Second opinion; tasks the workhorse struggled with |
+| `minimaxai/minimax-m3` | **$20** | Smallest budget — short, well-bounded tasks only |
+
+Spend the largest budget first and keep the smallest in reserve; a depleted
+budget mid-task means a half-finished branch.
+
+Dispatch form (run from `Code/DojoMaster-commandcode`):
+
+```bash
+commandcode -p "<delegation prompt>" \
+  -m xiaomi/mimo-v2.5-pro \
+  --max-turns 40 --skip-onboarding --auto-accept
+```
+
+- `--skip-onboarding` is required — taste onboarding blocks a headless run.
+- Do **not** pass `-w/--worktree`; the agent already has one. Stacking them
+  puts the work somewhere nobody is looking.
+- Prefer `--auto-accept` over `--yolo`: same headless file editing, without
+  disabling every other guard.
+- `--output-format json` emits an NDJSON event stream — use it when you want a
+  record of what the agent actually did, and to track token spend per run.
+
 ### Delegation prompt template
 
 ```
