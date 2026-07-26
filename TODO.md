@@ -46,8 +46,8 @@ Tasks marked `[DS]` are self-contained and mechanical: standard framework boiler
 ### Approved models and budgets ⚠
 
 Delegated work runs through **CommandCode** (`commandcode`, v1.4.1, authenticated).
-Only these three models are approved. Do not use any other, whatever the model
-picker offers.
+Only the models listed below are approved. Do not use any other, whatever the
+model picker offers — it lists 48.
 
 Rates from [commandcode.ai pricing](https://commandcode.ai/docs/resources/pricing-limits).
 **"Effective" is cost against your credit balance, after the usage multiplier** —
@@ -79,16 +79,22 @@ only wall-clock time. Work down the order; escalate on a real failure, not a
 hunch. Log spend per run (`--output-format json`) so the remaining balance is a
 known number.
 
-**Log spend per run** (`--output-format json` reports usage) so the remaining
-budget is a known number rather than a surprise.
-
 Dispatch form (run from `Code/DojoMaster-commandcode`):
 
 ```bash
-commandcode -p "<delegation prompt>" \
-  -m xiaomi/mimo-v2.5-pro \
-  --max-turns 40 --skip-onboarding --auto-accept
+commandcode -p "Read TASK_BRIEF.md in the repository root and carry out exactly what it specifies." \
+  -m poolside/laguna-s-2.1-free \
+  --max-turns 120 --skip-onboarding -t --yolo
 ```
+
+⚠ **Put the brief in a `TASK_BRIEF.md` file, not in the `-p` argument.** The npm
+`.ps1` shim mangles multi-line string arguments — a long prompt fails with
+`too many arguments. Expected 1 argument but got 2`. Pointing at a file also
+leaves a record of exactly what was asked.
+
+⚠ **Budget ~120 turns.** A four-model batch with tests hit the 60-turn cap
+mid-fix (exit code 8 means cap-hit, not failure). Work is resumable: rewrite
+`TASK_BRIEF.md` with a continuation brief and dispatch again.
 
 ⚠ **`--yolo` is required and is authorised.** CommandCode will not write files or
 run shell commands in headless (`-p`) mode under any lesser permission —
@@ -109,8 +115,6 @@ Conditions attached to that authorisation:
 - `--skip-onboarding` is required — taste onboarding blocks a headless run.
 - Do **not** pass `-w/--worktree`; the agent already has one. Stacking them
   puts the work somewhere nobody is looking.
-- Prefer `--auto-accept` over `--yolo`: same headless file editing, without
-  disabling every other guard.
 - `--output-format json` emits an NDJSON event stream — use it when you want a
   record of what the agent actually did, and to track token spend per run.
 
@@ -153,9 +157,9 @@ OUTPUT
 - **Where to work:** each agent has its own directory and branch — see
   *Multi-agent workflow* below. Do not work in `Code/DojoMaster`; that is `main`.
 - **Current phase:** Phase 0 — in progress
-- **Last completed task:** `0.3.8` — envelope encryption for medical/safeguarding fields
+- **Last completed task:** `1.2.1`–`1.2.3` + `1.2.11` (ranks, delegated + reviewed)
 - **Next task:** `0.3.9` ⚠ — `Document` model + validated upload (depends on `0.3.8`, now available)
-- **Test suite:** 227 passing, 13 skipped. From a worktree:
+- **Test suite:** 267 passing, 15 skipped. From a worktree:
   `../DojoMaster/.venv/Scripts/python.exe -m pytest`
 - **Remaining in Phase 0:** `0.1.6`, `0.3.9` ⚠, `0.4.4`, `0.6.2` ⚠–`0.6.7`, `0.7.3`, `0.7.4`
 - **New in this session:** `ScopedQuerySet.for_organization()` — the sanctioned
@@ -273,8 +277,7 @@ Other agents pick up your work with `git rebase main` in their own worktree.
 
 | Task | Agent | Since |
 |---|---|---|
-| `1.2.1` `1.2.2` `1.2.3` `1.2.11` — rank ladders | CommandCode (`mimo-v2.5-pro`) | 2026-07-26 |
-| `0.3.7` — Setting model + resolver | Claude | 2026-07-26 |
+| _(none)_ | | |
 
 ---
 
@@ -392,9 +395,9 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `1.1.14` Student photo upload + re-encode + consent gate
 
 ### 1.2 Ranks
-- [ ] `1.2.1` `[DS]` `Style` model `§4.4`
-- [ ] `1.2.2` `[DS]` `RankLadder` (adult / junior variants) `§4.4`
-- [ ] `1.2.3` `[DS]` `Rank` — order, name, colour, stripes, min months, min classes, min age
+- [x] `1.2.1` `[DS]` `Style` model `§4.4`
+- [x] `1.2.2` `[DS]` `RankLadder` (adult / junior variants) `§4.4`
+- [x] `1.2.3` `[DS]` `Rank` — order, name, colour, stripes, min months, min classes, min age
 - [ ] `1.2.4` ⚠ `StudentStyleTrack` — rank is **per style**, not per student `§4.2`
 - [ ] `1.2.5` `[DS]` `RankAward` + derived `current_rank` (denormalised, recomputed on write)
 - [ ] `1.2.6` `[DS]` Manual promotion flow with audit
@@ -402,7 +405,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `1.2.8` ⚠ `InstructorProfile.max_grading_rank_id` — grading ceiling enforced `§4.2`
 - [ ] `1.2.9` `[DS]` External / transfer-in rank recognition (`awarded_by_external_org`, recognised / provisional / not recognised) `§12.6`
 - [ ] `1.2.10` Negating award record for rank stripping (never delete) `§12.6`
-- [ ] `1.2.11` `[DS]` Seed a Shotokan adult ladder + a junior mon ladder as fixtures
+- [x] `1.2.11` `[DS]` Seed a Shotokan adult ladder + a junior mon ladder as fixtures
 
 ### 1.3 Enrolment & transfers
 - [ ] `1.3.1` `Enrollment` — student ↔ dojo, primary flag, status, dates `§4.3`
