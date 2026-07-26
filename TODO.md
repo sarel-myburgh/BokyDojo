@@ -206,30 +206,24 @@ OUTPUT
 - **Where to work:** each agent has its own directory and branch — see
   *Multi-agent workflow* below. Do not work in `Code/DojoMaster`; that is `main`.
 - **Current phase:** Phase 0 — in progress
-- **Last completed task:** `0.6.5` — rate limiting + progressive lockout
+- **Last completed task:** `1.1.1`/`1.1.3`/`1.1.5` (delegated). Before that `0.6.5` — rate limiting + progressive lockout
   (`apps/core/throttle.py`). Policies shipped for login, kiosk PIN, password
   reset and API, but **not yet wired into any view** — wire them when `0.6.2` /
   `0.6.6` land, and when the kiosk PIN check is built (`1.7.8`).
 
-- ⚠ **WORK IN FLIGHT — check this before starting anything.** opencode was
-  dispatched `1.1.1` (StudentProfile), `1.1.3` (GuardianLink) and `1.1.5`
-  (EmergencyContact) on `opencode-go/mimo-v2.5-pro`. At last check it had
-  written `apps/identity/models.py` and migration `0004_*` but **not yet the
-  tests**, and was still running. The work is **uncommitted in
-  `Code/DojoMaster-opencode`**. To pick it up:
-  1. `cd Code/DojoMaster-opencode && git status`
-  2. `git rebase main` — main moved after dispatch (`0.6.5` landed)
-  3. run pytest and ruff
-  4. **Review the diff properly.** See the review warning in the delegation
-     section: check what is *missing*, not just what is present.
-  5. Commit on `agent/opencode`, merge to main, delete `TASK_BRIEF.md`
-  If it never finished, the brief is still in `TASK_BRIEF.md` — rewrite it as a
-  continuation brief and dispatch again.
+- ⚠ **REVIEW DEBT — do this before treating `1.1.x` as done.** `1.1.1`,
+  `1.1.3` and `1.1.5` are merged and green, but only the **models** were
+  reviewed (tenant paths, the self-guardian `CheckConstraint`, unique
+  (guardian, student), independent booleans — all correct). The test files
+  `tests/test_student_profile.py` and `tests/test_guardian_link.py` have **not
+  been read line by line**. Both delegated agents have previously shipped
+  inflated tests that missed the case that mattered. Merging on green is not
+  reviewing. Read those two files.
 
 - **Next task after that:** `0.3.9` ⚠ — `Document` model + validated upload
   (unblocked by `0.3.8`). Worth splitting: model + upload validation first,
   permission-checked serving view second.
-- **Test suite:** 297 passing, 16 skipped on `main`. From a worktree:
+- **Test suite:** 324 passing, 17 skipped on `main`. From a worktree:
   `../DojoMaster/.venv/Scripts/python.exe -m pytest`
 - **Remaining in Phase 0:** `0.3.9` ⚠, `0.6.2` ⚠, `0.6.3`, `0.6.4`, `0.6.6` ⚠,
   `0.6.7`, `0.7.3`, `0.7.4`. (`0.1.6` and `0.4.4` are **done** — an earlier
@@ -455,11 +449,11 @@ Apply to every task, including delegated ones. Violating these is the most likel
 **Do not start Phase 2 until a real dojo is using this.**
 
 ### 1.1 Students & families
-- [ ] `1.1.1` `[DS]` `StudentProfile` — status, home dojo, sizes, licence `§4.2`
+- [x] `1.1.1` `[DS]` `StudentProfile` — status, home dojo, sizes, licence `§4.2`
 - [ ] `1.1.2` ⚠ Medical fields (allergies, conditions, medications, doctor, `do_not_spar`) with field-level encryption `SEC §2.3`
-- [ ] `1.1.3` `[DS]` `GuardianLink` — relationship, contact / emergency / financial / custody flags, independent of each other `§4.2`
+- [x] `1.1.3` `[DS]` `GuardianLink` — relationship, contact / emergency / financial / custody flags, independent of each other `§4.2`
 - [ ] `1.1.4` Multiple guardians per student, each independently contactable `§2 item 26`
-- [ ] `1.1.5` `[DS]` `EmergencyContact` (Person link or plain name/phone)
+- [x] `1.1.5` `[DS]` `EmergencyContact` (Person link or plain name/phone)
 - [ ] `1.1.6` ⚠ `ConsentRecord` — versioned, granular, revocable, timestamped `§4.2`
 - [ ] `1.1.7` ⚠ Medical consent collected as its own deliberate act, not bundled into terms `SEC §6.5`
 - [ ] `1.1.8` Waiver flow: present versioned document, capture signature + IP + timestamp
