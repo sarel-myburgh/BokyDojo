@@ -238,6 +238,84 @@ class OrganizationDataKey(models.Model):
         )
 
 
+class Document(TenantScopedModel):
+    """An uploaded file — TODO 0.3.9b / SEC 2.3.
+
+    Waivers, medical letters, certificates, and identity documents uploaded for
+    tournament age verification. Validation lives in ``apps/core/uploads.py``;
+    this model records the outcome and controls access.
+
+    ⚠ Never served from a static URL. ``storage_key`` is deliberately not a
+    guessable path and files must live outside the web root — reads go through
+    a permission-checked view so that every access to a minor's document is
+    authorised and audited (SEC §2.3, §2.6).
+    """
+
+    class Kind(models.TextChoices):
+        WAIVER = "waiver", _("Signed waiver")
+        MEDICAL = "medical", _("Medical letter")
+        IDENTITY = "identity", _("Identity document")
+        CERTIFICATE = "certificate", _("Certificate")
+        PHOTO = "photo", _("Photograph")
+        OTHER = "other", _("Other")
+
+    tenant_org_path = "organization_id"
+    same_organization_fields = ("organization", "uploaded_by", "subject_person")
+
+    organization = models.ForeignKey(
+        "identity.Organization", on_delete=models.CASCADE, related_name="documents"
+    )
+    #: The person this document is *about*, which is not always who uploaded it.
+    subject_person = models.ForeignKey(
+        "identity.Person",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="documents",
+    )
+    uploaded_by = models.ForeignKey(
+        "identity.Person",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="uploaded_documents",
+    )
+
+    kind = models.CharField(_("kind"), max_length=16, choices=Kind.choices)
+    #: Shown to users. Never used to build a path — see uploads.generated_storage_name.
+    original_filename = models.CharField(_("file name"), max_length=255)
+    storage_key = models.CharField(max_length=255, unique=True, editable=False)
+    content_type = models.CharField(max_length=100, editable=False)
+    byte_size = models.PositiveIntegerField(editable=False)
+    #: SHA-256 of the stored bytes, for integrity checking and de-duplication.
+    checksum = models.CharField(max_length=64, editable=False)
+
+    #: Documents holding health or identity data are the ones SEC §1.1 ranks
+    #: most damaging; flagging them lets retention and access rules be stricter
+    #: without inspecting the file.
+    is_sensitive = models.BooleanField(default=False)
+    #: Automated purge target — SEC §6.4 data minimisation.
+    retention_until = models.DateField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("document")
+        verbose_name_plural = _("documents")
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["organization", "kind"]),
+            models.Index(fields=["subject_person", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.get_kind_display()}: {self.original_filename}"
+
+    @property
+    def is_expired(self) -> bool:
+        if self.retention_until is None:
+            return False
+        return timezone.localdate() > self.retention_until
+
+
 class AuditLog(models.Model):
     """Append-only record of every state change — TODO 0.3.5 / SEC 2.6.
 
