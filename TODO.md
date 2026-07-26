@@ -49,17 +49,35 @@ Delegated work runs through **CommandCode** (`commandcode`, v1.4.1, authenticate
 Only these three models are approved. Do not use any other, whatever the model
 picker offers.
 
-| Model | Budget | Use for |
-|---|---|---|
-| `xiaomi/mimo-v2.5` | **$100** | Bulk volume — the largest pool, for straightforward `[DS]` tasks |
-| `xiaomi/mimo-v2.5-pro` | **$50** | Designated default; the harder or longer-context `[DS]` tasks |
-| `deepseek/deepseek-v4-pro` | **$40** | Second opinion; anything the others struggled with |
-| `minimaxai/minimax-m3` | **$20** | Smallest pool — short, well-bounded tasks only |
+Rates from [commandcode.ai pricing](https://commandcode.ai/docs/resources/pricing-limits).
+**"Effective" is cost against your credit balance, after the usage multiplier** —
+which is what actually matters, and is not the headline number.
 
-Total pool ≈ **$210**. Match the model to the task rather than always reaching
-for the best one: burning the `-pro` budget on model boilerplate leaves nothing
-for the tasks that actually need it. Keep `minimax-m3` in reserve — a budget
-that empties mid-task leaves a half-finished branch nobody can evaluate.
+| Order | Model | Budget | Effective in / out per M | Notes |
+|---|---|---|---|---|
+| 1 | `poolside/laguna-s-2.1-free` | free | $0 / $0 | **Try first.** Agentic, long-horizon. "While capacity lasts". |
+| 2 | `inclusionai/ling-3.0-flash-free` | free | $0 / $0 | Smoke tests, one-liners. ⚠ **Free only until 2026-08-02.** |
+| 3 | `xiaomi/mimo-v2.5` | $100 | **$0.14 / $0.28** | Cheapest paid option by 3×, and the largest pool. The real workhorse. |
+| 4 | `xiaomi/mimo-v2.5-pro` | $50 | $0.435 / $0.87 | ~3× plain's cost. Worth it only when plain has actually failed. |
+| 5 | `minimaxai/minimax-m3` | $20 | $0.60 / $2.40 | 2× multiplier. Expensive output. |
+| 6 | `deepseek/deepseek-v4-pro` | $40 | **$1.74 / $3.48** | ⚠ 4× multiplier — **the most expensive per unit of work**, despite an attractive headline rate. Last resort. |
+
+⚠ **The 4× multiplier on DeepSeek V4 Pro is easy to miss.** Its headline
+$0.435/$0.87 looks identical to MiMo Pro, but credits deplete four times faster,
+making it ~12× the cost of `mimo-v2.5` for the same job. Do not reach for it
+because "pro" sounds better.
+
+All discounts are stated as permanent; both free tiers are explicitly not
+(Ling expires 2026-08-02, Laguna is capacity-dependent). **Do not build the
+delegation plan around free capacity** — assume `mimo-v2.5` is the floor.
+
+**Throttling:** included monthly credits are capped at 30% in any rolling 5-hour
+window and 60% weekly. Large batches can hit this. On-demand top-ups bypass it.
+
+Every delegated task is reviewed before merge, so a failed free attempt costs
+only wall-clock time. Work down the order; escalate on a real failure, not a
+hunch. Log spend per run (`--output-format json`) so the remaining balance is a
+known number.
 
 **Log spend per run** (`--output-format json` reports usage) so the remaining
 budget is a known number rather than a surprise.
