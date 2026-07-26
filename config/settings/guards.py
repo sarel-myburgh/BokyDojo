@@ -39,8 +39,19 @@ def assert_safe_production_config(
     secret_key: str,
     debug: bool,
     allowed_hosts: list[str],
+    field_encryption_keys: str | None = None,
 ) -> None:
     problems: list[str] = []
+
+    # TODO 0.3.8 / SEC 2.3 — without this, medical and safeguarding data would be
+    # written in plaintext. Fail at boot rather than discover it in a breach.
+    if field_encryption_keys is not None and not field_encryption_keys.strip():
+        problems.append(
+            "DJANGO_FIELD_ENCRYPTION_KEYS is not set. Medical and safeguarding data "
+            "cannot be encrypted without it. Generate one with:\n"
+            "  python -c \"import base64,os;print('1:'+base64.urlsafe_b64encode("
+            "os.urandom(32)).decode())\""
+        )
 
     key = (secret_key or "").strip()
     if key in INSECURE_SECRET_KEYS or key.startswith("django-insecure"):

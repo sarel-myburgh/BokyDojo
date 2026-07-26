@@ -18,4 +18,5 @@ assert_safe_production_config(
     secret_key=SECRET_KEY,
     debug=DEBUG,
     allowed_hosts=ALLOWED_HOSTS,
+    field_encryption_keys=env("DJANGO_FIELD_ENCRYPTION_KEYS", ""),
 )

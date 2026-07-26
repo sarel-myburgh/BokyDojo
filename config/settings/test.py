@@ -15,3 +15,7 @@ DATABASES = {
 }
 
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# Fixed test key. Never used anywhere real — production refuses to start without
+# its own (see config/settings/guards.py).
+FIELD_ENCRYPTION_KEYS = "1:ZG9qb21hc3Rlci10ZXN0LWtleS1kby1ub3QtdXNlISE="

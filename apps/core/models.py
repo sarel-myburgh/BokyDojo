@@ -142,6 +142,41 @@ class Setting(TenantScopedModel):
         return f"{self.key}={self.value!r} @ {self.scope_type}:{target}"
 
 
+class OrganizationDataKey(models.Model):
+    """One wrapped data-encryption key per organisation — TODO 0.3.8 / SEC 2.3.
+
+    Stores the DEK *wrapped* by the master key, which lives outside the database.
+    A stolen dump therefore yields no readable ciphertext. Rotating the master key
+    rewraps these few rows rather than re-encrypting every protected column.
+
+    Not a TenantScopedModel: it is infrastructure keyed by organisation, read by
+    the encryption layer before any actor exists, and never exposed to a request.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
+    organization = models.OneToOneField(
+        "identity.Organization", on_delete=models.CASCADE, related_name="data_key"
+    )
+    wrapped_key = models.BinaryField(editable=False)
+    master_key_version = models.PositiveIntegerField(editable=False)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    rotated_at = models.DateTimeField(null=True, blank=True, editable=False)
+
+    class Meta:
+        verbose_name = _("organisation data key")
+        verbose_name_plural = _("organisation data keys")
+
+    def __str__(self) -> str:
+        return f"data key for {self.organization_id} (master v{self.master_key_version})"
+
+    def delete(self, *args, **kwargs):
+        raise NotImplementedError(
+            "Deleting a data key permanently destroys every encrypted value for this "
+            "organisation. If that is genuinely intended (offboarding, erasure), do it "
+            "explicitly in a management command."
+        )
+
+
 class AuditLog(models.Model):
     """Append-only record of every state change — TODO 0.3.5 / SEC 2.6.
 

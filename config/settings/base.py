@@ -86,6 +86,10 @@ DATABASES = {
 
 AUTH_USER_MODEL = "identity.User"
 
+# Field-level encryption master keys — TODO 0.3.8, SEC 2.3.
+# Format: "1:<base64 32 bytes>", comma-separated for rotation. NEVER in the repo.
+FIELD_ENCRYPTION_KEYS = env("DJANGO_FIELD_ENCRYPTION_KEYS", "")
+
 # Argon2id first — TODO 0.6.1, SEC 2.1
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
