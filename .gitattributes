@@ -1,0 +1,20 @@
+# Normalise line endings so agents working on different branches don't generate
+# phantom conflicts from CRLF/LF churn. Without this, a file touched on Windows
+# by one agent and on Linux by another looks 100% changed at merge time.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.mo binary
+*.sqlite3 binary
+
+# Generated — collapse in diffs and let git resolve them by regeneration, not by hand.
+apps/*/migrations/*.py linguist-generated=false
+locale/**/*.po merge=union

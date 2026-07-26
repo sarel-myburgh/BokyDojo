@@ -89,27 +89,60 @@ OUTPUT
   - `Person` was made a `SoftDeleteModel` rather than a plain `TenantScopedModel`. Rationale: student records are attached to attendance, rank awards and invoices, all of which are evidence; erasure requests go through redaction, not DELETE. Consistent with plan §2 ("never hard-delete user data"). Migration `identity/0002`.
   - `0.3.6` (Money) and `0.3.1` (BaseModel) were marked `[DS]` but built in-house — everything else depends on them, so the parallel track would have blocked.
 
-### ⚠ Concurrency protocol — two agents are working this repo
+### ⚠ Multi-agent workflow — read before writing any code
 
-Both a primary agent and a delegated agent (OpenCode/MiniMax) have written to this
-working tree simultaneously. That has already caused one duplicate implementation
-(`0.3.4` was written twice, as `test_scoping_guard.py` and `test_unscoped_guard.py`;
-the duplicate was removed) and two tasks ticked before they were finished.
+Several agents work this repo. Running them in one shared working tree already
+caused a duplicate implementation (`0.3.4` written twice) and two tasks ticked
+before they were finished. Each agent now has its own branch.
 
-**Rules from here:**
+#### Branches
 
-1. **Claim before you build.** Add your task id to the Claimed list below *before*
-   writing code. If it is already claimed, pick another.
-2. **Tick only what is tested.** A model class existing is not the task done. If
-   the task says "model + write helper + middleware", all three plus tests.
-3. **Never rewrite TODO.md wholesale** — surgical edits only. The other agent is
-   editing it too.
-4. **Prefer separate files over shared ones.** If you must edit a shared file
-   (`config/settings/base.py`, `pyproject.toml`), make the smallest possible edit.
-5. Better still: give each agent its own **git worktree or branch** and merge.
-   Shared-tree concurrency works, but it is luck, not design.
+| Branch | Agent |
+|---|---|
+| `main` | integration branch — **nobody commits here directly** |
+| `agent/claude` | Claude |
+| `agent/commandcode` | CommandCode |
+| `agent/opencode` | OpenCode / MiniMax |
+| `agent/codex` | Codex |
 
-**Claimed right now:** _(none — both agents idle)_
+#### Rules
+
+1. **Work only on your own branch.** First thing, every session:
+   `git checkout agent/<you> && git merge main`
+2. **Claim before you build.** Add your task id to the Claimed list below and
+   commit that change *first*. If a task is already claimed, take another.
+3. **Tick only what is tested.** A model class existing is not the task done.
+   "Model + write helper + middleware" means all three, plus tests, or the box
+   stays empty. This has already gone wrong twice.
+4. **Small, frequent merges to `main`.** Finish a task → tests green → ruff
+   clean → merge to `main` → push. Do not sit on a branch for twenty tasks.
+5. **Rebase on `main` before merging** so `main` stays linear and readable.
+6. **Shared files are the collision risk.** `config/settings/base.py`,
+   `pyproject.toml`, `TODO.md`. Make the smallest possible edit; never rewrite
+   `TODO.md` wholesale.
+7. **Migrations conflict badly.** If you add a model, merge to `main`
+   immediately — two agents generating `0003_*` on separate branches is a manual
+   fix. If it happens: delete one, re-run `makemigrations` after merging.
+8. **Never `git push --force` a shared branch.**
+
+#### Merging a finished task
+
+```bash
+git checkout agent/<you>
+git add -A && git commit -m "..."
+git fetch && git rebase main
+python -m pytest && python -m ruff check .
+git checkout main && git merge --ff-only agent/<you>
+```
+
+If the rebase conflicts in `TODO.md`, keep **both** sides' ticks — you are each
+completing different tasks.
+
+#### Claimed right now
+
+| Task | Agent | Since |
+|---|---|---|
+| _(none)_ | | |
 
 ---
 
