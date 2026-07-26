@@ -19,4 +19,5 @@ assert_safe_production_config(
     debug=DEBUG,
     allowed_hosts=ALLOWED_HOSTS,
     field_encryption_keys=env("DJANGO_FIELD_ENCRYPTION_KEYS", ""),
+    shared_cache_url=env("REDIS_URL", ""),
 )

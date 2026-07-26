@@ -40,8 +40,19 @@ def assert_safe_production_config(
     debug: bool,
     allowed_hosts: list[str],
     field_encryption_keys: str | None = None,
+    shared_cache_url: str | None = None,
 ) -> None:
     problems: list[str] = []
+
+    # Rate limiting and lockout state live in the cache. With per-process
+    # LocMemCache and multiple Gunicorn workers, failures split across workers
+    # and no threshold is ever reached — the throttle becomes decorative.
+    if shared_cache_url is not None and not shared_cache_url.strip():
+        problems.append(
+            "REDIS_URL is not set. Login lockouts would use a per-process cache "
+            "while Gunicorn runs several workers, so failed attempts would split "
+            "across processes and never reach a lockout threshold."
+        )
 
     # TODO 0.3.8 / SEC 2.3 — without this, medical and safeguarding data would be
     # written in plaintext. Fail at boot rather than discover it in a breach.

@@ -87,6 +87,26 @@ DATABASES = {
     }
 }
 
+# ⚠ Lockout counters live in the cache. Django's default LocMemCache is
+# per-process, and we run Gunicorn with four workers — five failed logins spread
+# 2/1/1/1 across workers would never reach a threshold, and a lockout on one
+# worker would not exist on the next. Found in adversarial review. Redis is
+# already in docker-compose; wire it here or the throttle is decorative.
+_REDIS_URL = env("REDIS_URL", "")
+CACHES = {
+    "default": (
+        {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": _REDIS_URL,
+        }
+        if _REDIS_URL
+        else {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "dojomaster-local",
+        }
+    )
+}
+
 AUTH_USER_MODEL = "identity.User"
 
 # Field-level encryption master keys — TODO 0.3.8, SEC 2.3.

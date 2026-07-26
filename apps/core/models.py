@@ -316,6 +316,28 @@ class Document(TenantScopedModel):
         return timezone.localdate() > self.retention_until
 
 
+class AuditLogQuerySet(models.QuerySet):
+    """Append-only at the queryset level too.
+
+    Blocking only ``instance.delete()`` left ``AuditLog.objects.filter(...).delete()``
+    and ``.update()`` wide open — an attacker who reached the ORM could erase or
+    rewrite the evidence of what they did. Found in adversarial review.
+    """
+
+    def delete(self):
+        raise NotImplementedError(
+            "Audit log entries are append-only. Retention is enforced by a "
+            "dedicated purge command, not by ad-hoc deletion."
+        )
+
+    def update(self, **kwargs):
+        raise NotImplementedError("Audit log entries are append-only and immutable.")
+
+    def purge_before(self, cutoff):
+        """The single sanctioned deletion path, for retention policy (SEC §6.4)."""
+        return models.QuerySet.delete(self.filter(at__lt=cutoff))
+
+
 class AuditLog(models.Model):
     """Append-only record of every state change — TODO 0.3.5 / SEC 2.6.
 
@@ -363,6 +385,8 @@ class AuditLog(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.CharField(max_length=512, blank=True)
     note = models.CharField(max_length=512, blank=True)
+
+    objects = AuditLogQuerySet.as_manager()
 
     class Meta:
         verbose_name = _("audit log entry")

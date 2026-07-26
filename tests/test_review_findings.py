@@ -180,3 +180,104 @@ def test_source_is_optional_for_non_network_scopes(two_orgs):
 
 
 _ = datetime  # keep the import meaningful if tests are extended
+
+
+# -- Finding: ORM paths that bypassed the scope guard -------------------------
+
+
+def test_iterator_is_guarded(two_orgs):
+    """iterator() talks to the SQL compiler directly and never fills the result
+    cache, so _fetch_all() never ran."""
+    from apps.core.scoping import UnscopedAccessError
+
+    with pytest.raises(UnscopedAccessError):
+        list(Person.objects.all().iterator())
+
+
+def test_raw_sql_is_refused_on_a_tenant_model(two_orgs):
+    """RawQuerySet is not a ScopedQuerySet, so no guard can run on it."""
+    from apps.core.scoping import UnscopedAccessError
+
+    with pytest.raises(UnscopedAccessError):
+        list(Person.objects.raw(f"SELECT * FROM {Person._meta.db_table}"))
+
+
+def test_raw_sql_is_permitted_inside_an_explicit_escape_hatch(two_orgs):
+    with allow_unscoped("deliberate cross-tenant maintenance query"):
+        rows = list(Person.objects.raw(f"SELECT * FROM {Person._meta.db_table}"))
+    assert rows
+
+
+def test_union_with_an_unscoped_operand_is_refused(two_orgs):
+    """The combined queryset is cloned from the left operand, so it inherited a
+    valid scope flag while absorbing the right operand's rows."""
+    from apps.core.scoping import Actor, UnscopedAccessError
+
+    actor = Actor(user_id=None, person_id=None, organization_id=two_orgs["a"].pk)
+    scoped = Person.objects.for_actor(actor)
+    unscoped_foreign = Person.objects.filter(organization_id=two_orgs["b"].pk)
+
+    with pytest.raises(UnscopedAccessError):
+        scoped.union(unscoped_foreign)
+    with pytest.raises(UnscopedAccessError):
+        scoped | unscoped_foreign
+
+
+def test_union_of_two_scoped_querysets_is_allowed(two_orgs):
+    from apps.core.scoping import Actor
+
+    actor = Actor(user_id=None, person_id=None, organization_id=two_orgs["a"].pk)
+    # order_by() cleared: SQLite refuses ORDER BY inside a compound statement,
+    # and Person carries a default ordering.
+    scoped = Person.objects.for_actor(actor).order_by()
+    assert list(scoped.union(scoped))
+
+
+# -- Finding: soft-deleted rows resurfaced via the actorless path -------------
+
+
+def test_for_organization_excludes_soft_deleted_rows(two_orgs):
+    with allow_unscoped("test setup"):
+        gone = Person.objects.create(
+            organization=two_orgs["a"], given_name="Gone", family_name="Away"
+        )
+        gone.soft_delete()
+
+    visible = Person.objects.for_organization(two_orgs["a"].pk).filter(pk=gone.pk)
+    assert list(visible) == []
+
+
+# -- Finding: audit log was only immutable at the instance level --------------
+
+
+def test_audit_entries_cannot_be_deleted_by_queryset(two_orgs):
+    """An attacker reaching the ORM could otherwise erase the evidence."""
+    from apps.core.audit import record
+    from apps.core.models import AuditLog
+
+    entry = record(AuditLog.Action.PERMISSION_CHANGE, subject_type="x", subject_id="y")
+    with pytest.raises(NotImplementedError):
+        AuditLog.objects.filter(pk=entry.pk).delete()
+
+
+def test_audit_entries_cannot_be_rewritten_by_queryset(two_orgs):
+    from apps.core.audit import record
+    from apps.core.models import AuditLog
+
+    entry = record(AuditLog.Action.EXPORT, subject_type="x", subject_id="y")
+    with pytest.raises(NotImplementedError):
+        AuditLog.objects.filter(pk=entry.pk).update(action=AuditLog.Action.VIEW)
+
+
+def test_retention_purge_is_the_one_sanctioned_deletion_path(two_orgs):
+    import datetime as _dt
+
+    from django.utils import timezone
+
+    from apps.core.audit import record
+    from apps.core.models import AuditLog
+
+    record(AuditLog.Action.VIEW, subject_type="x", subject_id="old")
+    future = timezone.now() + _dt.timedelta(days=1)
+    deleted, _detail = AuditLog.objects.purge_before(future)
+    assert deleted >= 1

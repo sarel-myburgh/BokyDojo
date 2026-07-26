@@ -105,6 +105,52 @@ class ScopedQuerySet(models.QuerySet):
         self._guard()
         return super()._fetch_all()
 
+    def iterator(self, *args, **kwargs):
+        # Talks to the SQL compiler directly and never populates the result
+        # cache, so _fetch_all() never runs. Found in adversarial review.
+        self._guard()
+        return super().iterator(*args, **kwargs)
+
+    def aiterator(self, *args, **kwargs):
+        self._guard()
+        return super().aiterator(*args, **kwargs)
+
+    def union(self, *others, **kwargs):
+        self._require_scoped_operands("union", others)
+        return super().union(*others, **kwargs)
+
+    def intersection(self, *others):
+        self._require_scoped_operands("intersection", others)
+        return super().intersection(*others)
+
+    def difference(self, *others):
+        self._require_scoped_operands("difference", others)
+        return super().difference(*others)
+
+    def __or__(self, other):
+        self._require_scoped_operands("|", (other,))
+        return super().__or__(other)
+
+    def __and__(self, other):
+        self._require_scoped_operands("&", (other,))
+        return super().__and__(other)
+
+    def _require_scoped_operands(self, operation: str, others) -> None:
+        """A combined queryset is cloned from the left operand, so it inherits
+        the left's scope flag while silently absorbing the right's rows.
+
+        Requiring every operand to be scoped closes that. Found in adversarial
+        review — a scoped queryset unioned with an unscoped one returned both
+        tenants' rows and passed the guard.
+        """
+        for other in others:
+            if isinstance(other, ScopedQuerySet) and not other._scope_applied:
+                raise UnscopedAccessError(
+                    f"{self.model.__name__}: every operand of {operation}() must be "
+                    f"scoped. The result inherits the left operand's scope flag, so "
+                    f"an unscoped operand would leak silently."
+                )
+
     def count(self):
         self._guard()
         return super().count()
@@ -169,6 +215,22 @@ class ScopedManager(models.Manager.from_queryset(ScopedQuerySet)):
 
     use_in_migrations = False
 
+    def raw(self, raw_query, *args, **kwargs):
+        """``RawQuerySet`` is not a ``ScopedQuerySet``, so none of the guards
+        can run on it — raw SQL against a tenant table would read every tenant.
+
+        Found in adversarial review. Refused outright: if raw SQL is genuinely
+        needed, do it inside ``allow_unscoped()`` where the intent is visible.
+        """
+        from .scoping import unscoped_access_permitted
+
+        if not unscoped_access_permitted():
+            raise UnscopedAccessError(
+                f"{self.model.__name__}.objects.raw() cannot be tenant-scoped. "
+                f"Wrap it in allow_unscoped('reason') if that is genuinely intended."
+            )
+        return super().raw(raw_query, *args, **kwargs)
+
 
 class SoftDeleteQuerySet(ScopedQuerySet):
     """Scoped queryset that hides soft-deleted rows by default — TODO 0.3.2.
@@ -186,6 +248,11 @@ class SoftDeleteQuerySet(ScopedQuerySet):
     def for_actor(self, actor: Actor) -> SoftDeleteQuerySet:
         return super().for_actor(actor).filter(deleted_at__isnull=True)
 
+    def for_organization(self, organization_id) -> SoftDeleteQuerySet:
+        # Must exclude soft-deleted rows exactly as for_actor() does, or the
+        # actorless path resurrects deleted people. Found in adversarial review.
+        return super().for_organization(organization_id).filter(deleted_at__isnull=True)
+
     def for_actor_including_deleted(self, actor: Actor) -> SoftDeleteQuerySet:
         return super().for_actor(actor)
 
@@ -199,7 +266,13 @@ class SoftDeleteQuerySet(ScopedQuerySet):
         return ScopedQuerySet.delete(self)
 
 
-class SoftDeleteManager(models.Manager.from_queryset(SoftDeleteQuerySet)):
+class SoftDeleteManager(ScopedManager.from_queryset(SoftDeleteQuerySet)):
+    """Inherits ScopedManager so the ``raw()`` guard applies here too.
+
+    Deriving from a plain Manager left soft-delete models — including Person,
+    which holds the PII — without the raw-SQL guard.
+    """
+
     use_in_migrations = False
 
 
