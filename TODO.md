@@ -45,59 +45,103 @@ Tasks marked `[DS]` are self-contained and mechanical: standard framework boiler
 
 ### Approved models and budgets ⚠
 
-Delegated work runs through **CommandCode** (`commandcode`, v1.4.1, authenticated).
-Only the models listed below are approved. Do not use any other, whatever the
-model picker offers — it lists 48.
+Two CLIs are available, both authenticated. **Neither is metered in a way that
+should make you ration it** — spend capacity on getting the work right rather
+than conserving it.
 
-Rates from [commandcode.ai pricing](https://commandcode.ai/docs/resources/pricing-limits).
-**"Effective" is cost against your credit balance, after the usage multiplier** —
-which is what actually matters, and is not the headline number.
+#### opencode — default dispatcher
 
-| Order | Model | Budget | Effective in / out per M | Notes |
-|---|---|---|---|---|
-| 1 | `poolside/laguna-s-2.1-free` | free | $0 / $0 | **Try first.** Agentic, long-horizon. "While capacity lasts". |
-| 2 | `inclusionai/ling-3.0-flash-free` | free | $0 / $0 | Smoke tests, one-liners. ⚠ **Free only until 2026-08-02.** |
-| 3 | `xiaomi/mimo-v2.5` | $100 | **$0.14 / $0.28** | Cheapest paid option by 3×, and the largest pool. The real workhorse. |
-| 4 | `xiaomi/mimo-v2.5-pro` | $50 | $0.435 / $0.87 | ~3× plain's cost. Worth it only when plain has actually failed. |
-| 5 | `minimaxai/minimax-m3` | $20 | $0.60 / $2.40 | 2× multiplier. Expensive output. |
-| 6 | `deepseek/deepseek-v4-pro` | $40 | **$1.74 / $3.48** | ⚠ 4× multiplier — **the most expensive per unit of work**, despite an attractive headline rate. Last resort. |
+Runs in `Code/DojoMaster-opencode`. Writes files headlessly with **no permission
+flags at all**, which is why it is the default.
 
-⚠ **The 4× multiplier on DeepSeek V4 Pro is easy to miss.** Its headline
-$0.435/$0.87 looks identical to MiMo Pro, but credits deplete four times faster,
-making it ~12× the cost of `mimo-v2.5` for the same job. Do not reach for it
-because "pro" sounds better.
+**Only these two families are approved.** The picker lists 448 models; most are
+pay-per-token OpenRouter routes and are *not* approved.
 
-All discounts are stated as permanent; both free tiers are explicitly not
-(Ling expires 2026-08-02, Laguna is capacity-dependent). **Do not build the
-delegation plan around free capacity** — assume `mimo-v2.5` is the floor.
+| Family | Count | Cost | Use |
+|---|---|---|---|
+| `opencode-go/*` | 16 | flat $10/month subscription, **no per-token cost** | The workhorse. |
+| `opencode/*-free` | 7 | $0 | Smoke tests, throwaway checks, trivial tasks. |
 
-**Throttling:** included monthly credits are capped at 30% in any rolling 5-hour
-window and 60% weekly. Large batches can hit this. On-demand top-ups bypass it.
+The full Go-plan set (verify with `opencode models \| grep opencode-go`):
 
-Every delegated task is reviewed before merge, so a failed free attempt costs
-only wall-clock time. Work down the order; escalate on a real failure, not a
-hunch. Log spend per run (`--output-format json`) so the remaining balance is a
-known number.
+```
+deepseek-v4-flash   deepseek-v4-pro   glm-5.1        glm-5.2
+grok-4.5            hy3               kimi-k2.6      kimi-k2.7-code
+kimi-k3             mimo-v2.5         mimo-v2.5-pro  minimax-m2.7
+minimax-m3          qwen3.6-plus      qwen3.7-max    qwen3.7-plus
+```
 
-Dispatch form (run from `Code/DojoMaster-commandcode`):
+Free tier: `opencode/mimo-v2.5-free`, `laguna-s-2.1-free`, `ling-3.0-flash-free`,
+`deepseek-v4-flash-free`, `nemotron-3-ultra-free`, `north-mini-code-free`,
+`big-pickle`. These are limited-time beta offers — do not build the plan around
+them.
+
+⚠ **`opencode/*` without a `-free` suffix is pay-as-you-go Zen credit and is NOT
+approved.** `opencode/glm-5.2` bills per token; `opencode-go/glm-5.2` is covered
+by the subscription. One character apart, completely different bill.
+
+Go has 5-hour / weekly / monthly usage caps rather than per-token charges, so a
+very large batch can be throttled. That is the only reason to pace it.
 
 ```bash
+# from Code/DojoMaster-opencode
+opencode run "Read TASK_BRIEF.md in the repository root and carry out exactly what it specifies." \
+  -m opencode-go/mimo-v2.5-pro
+```
+
+#### CommandCode — second dispatcher
+
+Runs in `Code/DojoMaster-commandcode`. **$1 bought $100 of usage**, so it is
+effectively free capacity — roughly 100× leverage. Use it freely; do not treat
+the credit figures as a scarce budget.
+
+Approved: `xiaomi/mimo-v2.5`, `xiaomi/mimo-v2.5-pro`, `deepseek/deepseek-v4-pro`,
+`minimaxai/minimax-m3`, plus the free `poolside/laguna-s-2.1-free` and
+`inclusionai/ling-3.0-flash-free`.
+
+Only one cost note still matters, and only for very heavy use: **DeepSeek V4 Pro
+carries a 4× usage multiplier and MiniMax M3 a 2×**, so they consume the balance
+several times faster than MiMo for the same work. Not a reason to avoid them,
+just not the first reach.
+
+```bash
+# from Code/DojoMaster-commandcode
 commandcode -p "Read TASK_BRIEF.md in the repository root and carry out exactly what it specifies." \
-  -m poolside/laguna-s-2.1-free \
+  -m xiaomi/mimo-v2.5-pro \
   --max-turns 120 --skip-onboarding -t --yolo
 ```
 
-⚠ **Put the brief in a `TASK_BRIEF.md` file, not in the `-p` argument.** The npm
-`.ps1` shim mangles multi-line string arguments — a long prompt fails with
-`too many arguments. Expected 1 argument but got 2`. Pointing at a file also
-leaves a record of exactly what was asked.
+#### Choosing between them
 
-⚠ **Budget ~120 turns.** A four-model batch with tests hit the 60-turn cap
-mid-fix (exit code 8 means cap-hit, not failure). Work is resumable: rewrite
-`TASK_BRIEF.md` with a continuation brief and dispatch again.
+Prefer **opencode** — it needs no permission bypass, which is a real security
+difference, not a convenience one. Reach for **CommandCode** when opencode is
+throttled, when you want a second opinion from a different model on work that
+looked wrong, or when a task suits a model only it offers.
 
-⚠ **`--yolo` is required and is authorised.** CommandCode will not write files or
-run shell commands in headless (`-p`) mode under any lesser permission —
+#### Operational notes (both CLIs)
+
+⚠ **Put the brief in a `TASK_BRIEF.md` file, not in the command argument.** The
+npm `.ps1` shim mangles multi-line string arguments — a long CommandCode prompt
+fails with `too many arguments. Expected 1 argument but got 2`. Pointing at a
+file also leaves a record of exactly what was asked.
+
+⚠ **Review is not optional, and test count is not a quality signal.** Both
+agents have shipped correct-looking work with real defects:
+- CommandCode wrapped *stored rank names* in `gettext_lazy`, which would have
+  made `get_or_create` miss its own rows under a different locale and silently
+  duplicate an entire ladder.
+- opencode wrote 16 tests for one model, of which two pairs were exact
+  duplicates and two asserted a constant equals itself — while omitting the only
+  test that mattered, cross-dojo isolation.
+
+Read the diff. Check what is *missing*, not just what is present.
+
+⚠ **CommandCode only: budget ~120 turns.** A four-model batch with tests hit the
+60-turn cap mid-fix (exit code 8 means cap-hit, not failure). Work is resumable:
+rewrite `TASK_BRIEF.md` with a continuation brief and dispatch again.
+
+⚠ **CommandCode only: `--yolo` is required and is authorised.** It will not write
+files or run shell commands in headless (`-p`) mode under any lesser permission —
 `--auto-accept`, `-t --auto-accept`, `--permission-mode auto-accept` and
 `--config permissions.defaultMode` were all tried and refused. The user
 authorised `--yolo` on 2026-07-26 **for runs confined to an agent worktree**.
@@ -112,7 +156,12 @@ Conditions attached to that authorisation:
   user and can touch anything on the machine. That residual risk was accepted
   knowingly; do not describe the worktree as a sandbox.
 
-- `--skip-onboarding` is required — taste onboarding blocks a headless run.
+**opencode needs none of this.** It writes files headlessly with no permission
+flag, so the `--yolo` exposure above applies to CommandCode runs only. That is
+the main reason opencode is the default.
+
+- `--skip-onboarding` is required for CommandCode — taste onboarding blocks a
+  headless run.
 - Do **not** pass `-w/--worktree`; the agent already has one. Stacking them
   puts the work somewhere nobody is looking.
 - `--output-format json` emits an NDJSON event stream — use it when you want a
