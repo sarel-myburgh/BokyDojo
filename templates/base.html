@@ -1,0 +1,33 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="{{ request.LANGUAGE_CODE|default:'en' }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}DojoMaster{% endblock %}</title>
+
+    {# Tailwind CSS via CDN — swap for compiled in production #}
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    {# Khmer font — Noto Sans Khmer for proper shaping (§13.4) #}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    {# Custom CSS for Khmer line-breaking and layout #}
+    <link rel="stylesheet" href="{% static 'css/dojo.css' %}">
+
+    {# HTMX #}
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+
+    {# Alpine.js #}
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="min-h-screen bg-gray-50 text-gray-900 antialiased">
+    {% block body %}{% endblock %}
+
+    {# Alpine.js x-cloak — hide elements until Alpine initialises #}
+    <style>[x-cloak] { display: none !important; }</style>
+</body>
+</html>

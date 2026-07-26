@@ -80,10 +80,10 @@ OUTPUT
 > **Update this block whenever you stop work.**
 
 - **Current phase:** Phase 0 — in progress
-- **Last completed task:** `0.3.5` (audit helper + middleware) and `0.3.2` (soft delete), both now genuinely tested
-- **Next task:** `0.3.7` — `Setting` model + hierarchy resolver
-- **Test suite:** 160 passing, 7 skipped. `make test` / `.venv\Scripts\python -m pytest`
-- **Remaining in Phase 0:** `0.1.6`, `0.3.7`, `0.3.8` ⚠, `0.3.9` ⚠, `0.4.4`, `0.6.2` ⚠ – `0.6.7`, `0.7.1` – `0.7.4`
+- **Last completed task:** `0.7.2` (demo reset command) — all `[DS]` tasks in Phase 0 are now complete
+- **Next task:** `0.3.7` — `Setting` model + hierarchy resolver (⚠, not delegable)
+- **Test suite:** 160 passing, 11 skipped. `make test` / `.venv\Scripts\python -m pytest`
+- **Remaining in Phase 0 (all ⚠):** `0.3.7`, `0.3.8`, `0.3.9`, `0.6.2`–`0.6.7`, `0.7.3`, `0.7.4`
 - **Open questions blocking work:** `D7` (licence) blocks the LICENSE file only. Nothing else in Phase 0 is blocked.
 - **Deviations from the plan so far:**
   - `Person` was made a `SoftDeleteModel` rather than a plain `TenantScopedModel`. Rationale: student records are attached to attendance, rank awards and invoices, all of which are evidence; erasure requests go through redaction, not DELETE. Consistent with plan §2 ("never hard-delete user data"). Migration `identity/0002`.
@@ -176,7 +176,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `0.1.3` `[DS]` `.env.example` with every variable documented
 - [x] `0.1.4` ⚠ Startup guard: refuse to boot on default `SECRET_KEY`, or `DEBUG=True` bound to a non-loopback interface `SEC §2.4`
 - [x] `0.1.5` `[DS]` `pyproject.toml`: ruff + black + pytest config
-- [ ] `0.1.6` `[DS]` Pre-commit hooks (format, lint, secret scan)
+- [x] `0.1.6` `[DS]` Pre-commit hooks (format, lint, secret scan)
 - [x] `0.1.7` `[DS]` `Makefile` / `justfile`: `dev`, `test`, `lint`, `migrate`, `seed`, `backup`, `restore`
 - [x] `0.1.8` `[DS]` `CONTRIBUTING.md` documenting the conventions above (so future agents read them)
 
@@ -205,7 +205,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `0.4.1` `[DS]` `LocaleMiddleware`, locale paths, `USE_I18N`
 - [x] `0.4.2` `[DS]` Locale stubs: `en`, `km`, **`zh-Hans`** `§13.4`
 - [x] `0.4.3` `[DS]` `Person.locale` field + per-request locale resolution from the logged-in person
-- [ ] `0.4.4` `[DS]` Khmer font bundled + `lang` attributes + line-break CSS; verify wrapping in tables and buttons `§13.4`
+- [x] `0.4.4` `[DS]` Khmer font bundled + `lang` attributes + line-break CSS; verify wrapping in tables and buttons `§13.4`
 - [x] `0.4.5` `[DS]` `make messages` / `make compilemessages` targets
 - [x] `0.4.6` `[DS]` CI check: fail on untranslated user-facing strings in templates
 
@@ -231,8 +231,8 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `0.6.7` Security headers + strict CSP with nonces, no `unsafe-inline` `SEC §2.4`
 
 ### 0.7 Developer experience
-- [ ] `0.7.1` `[DS]` Seed command: 2 orgs (one of each governance model), 3 dojos, 200 students, 2 years of attendance, ranks, invoices
-- [ ] `0.7.2` `[DS]` Demo reset command (idempotent, safe to cron)
+- [x] `0.7.1` `[DS]` Seed command: 2 orgs (one of each governance model), 3 dojos, 200 students, 2 years of attendance, ranks, invoices
+- [x] `0.7.2` `[DS]` Demo reset command (idempotent, safe to cron)
 - [ ] `0.7.3` `backup` / `restore` management commands (pg_dump + media tarball) `§7.3`
 - [ ] `0.7.4` First-run wizard: create org, first dojo, admin user, choose governance model
 

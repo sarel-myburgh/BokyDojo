@@ -1,0 +1,90 @@
+/*
+ * DojoMaster custom styles — TODO 0.4.4
+ *
+ * Khmer has no inter-word spaces, so naive word-wrap breaks mid-word or
+ * doesn't break at all. These rules apply line-breaking strategies that
+ * work for Khmer, Chinese, and Latin text.
+ *
+ * Test in tables and buttons early — Khmer breaks naive CSS there first.
+ */
+
+/* -- Font stack ----------------------------------------------------------------
+ * Khmer: Noto Sans Khmer (loaded via Google Fonts in base.html)
+ * Latin / CJK: Inter + system fallbacks
+ */
+:root {
+    --font-base: 'Inter', 'Noto Sans Khmer', system-ui, -apple-system, sans-serif;
+    --font-khmer: 'Noto Sans Khmer', 'Inter', system-ui, sans-serif;
+}
+
+/* -- Khmer line-breaking -------------------------------------------------------
+ * word-break: break-word is the safest for Khmer: it allows breaks at any
+ * character position when overflow would occur, which is what Khmer needs
+ * since there are no spaces to break on.
+ *
+ * overflow-wrap: break-word is the modern equivalent; both are set for
+ * maximum browser coverage.
+ *
+ * line-break: strict enables CJK-style line-breaking rules where the
+ * browser supports them.
+ */
+[lang="km"],
+.km,
+[data-locale="km"] {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    line-break: strict;
+    font-family: var(--font-khmer);
+}
+
+/* -- General line-breaking for all content ------------------------------------ */
+body {
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+/* -- Table cells ----------------------------------------------------------------
+ * Tables are the first place Khmer breaks: long Khmer strings in a cell
+ * overflow or push the table wider than the viewport. This forces cells to
+ * wrap and constrains max-width.
+ */
+td, th {
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-width: 0; /* forces table-layout: fixed behavior even without it */
+}
+
+table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+/* -- Buttons -------------------------------------------------------------------
+ * Khmer text in buttons is often longer than English. Buttons must not
+ * overflow; they should wrap or truncate gracefully.
+ */
+.btn, button {
+    overflow-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
+}
+
+/* -- Truncation ----------------------------------------------------------------
+ * When truncation is used (ellipsipsis), Khmer text needs a different
+ * strategy: truncate at the character level rather than the word level.
+ */
+.truncate-khmer {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: break-all; /* break at any character for Khmer */
+}
+
+/* -- Mobile-first helpers ------------------------------------------------------- */
+@media (max-width: 640px) {
+    /* Smaller padding on mobile buttons to fit Khmer text */
+    .btn {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+}
