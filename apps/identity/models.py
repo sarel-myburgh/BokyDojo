@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.db import models
+from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -365,3 +366,155 @@ class InstructorAssignment(TenantScopedModel):
     @property
     def is_active(self) -> bool:
         return self.ended_on is None
+
+
+class StudentProfile(TenantScopedModel):
+    """Student-specific data hanging off a Person — TODO 1.1.1, plan §4.2.
+
+    One-to-one with Person. A person who is a student at one or more dojos
+    gets exactly one StudentProfile row.
+    """
+
+    tenant_org_path = "person__organization_id"
+    tenant_dojo_path = "home_dojo_id"
+
+    class Status(models.TextChoices):
+        PROSPECT = "prospect", _("Prospect")
+        TRIAL = "trial", _("Trial")
+        ACTIVE = "active", _("Active")
+        ON_HOLD = "on_hold", _("On hold")
+        LAPSED = "lapsed", _("Lapsed")
+        ALUMNI = "alumni", _("Alumni")
+
+    person = models.OneToOneField(
+        Person, on_delete=models.CASCADE, related_name="student_profile"
+    )
+    home_dojo = models.ForeignKey(
+        Dojo,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="home_students",
+    )
+    status = models.CharField(
+        _("status"),
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PROSPECT,
+        db_index=True,
+    )
+    joined_on = models.DateField(_("joined on"), null=True, blank=True)
+    hold_reason = models.CharField(_("hold reason"), max_length=200, blank=True)
+
+    shirt_size = models.CharField(_("shirt size"), max_length=20, blank=True)
+    gi_size = models.CharField(_("gi size"), max_length=20, blank=True)
+
+    federation_licence_no = models.CharField(
+        _("federation licence number"), max_length=100, blank=True
+    )
+    licence_expires_on = models.DateField(
+        _("licence expires on"), null=True, blank=True
+    )
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("student profile")
+        verbose_name_plural = _("student profiles")
+
+    def __str__(self) -> str:
+        return f"Student: {self.person}"
+
+    @property
+    def is_active(self) -> bool:
+        return self.status == self.Status.ACTIVE
+
+    @property
+    def is_training(self) -> bool:
+        return self.status in (self.Status.ACTIVE, self.Status.TRIAL)
+
+
+class GuardianLink(TenantScopedModel):
+    """Links a guardian Person to a student Person — TODO 1.1.3, plan §4.2.
+
+    A student may have 0..n guardians. The four boolean flags are deliberately
+    independent: divorced and separated families are common. The parent who pays
+    may not be the emergency contact; custody is separate from both.
+    """
+
+    tenant_org_path = "student__organization_id"
+
+    class Relationship(models.TextChoices):
+        MOTHER = "mother", _("Mother")
+        FATHER = "father", _("Father")
+        GUARDIAN = "guardian", _("Guardian")
+        GRANDPARENT = "grandparent", _("Grandparent")
+        SIBLING = "sibling", _("Sibling")
+        OTHER = "other", _("Other")
+
+    guardian = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="guarded_links"
+    )
+    student = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="guardian_links"
+    )
+    relationship = models.CharField(
+        _("relationship"), max_length=16, choices=Relationship.choices
+    )
+
+    is_primary_contact = models.BooleanField(_("primary contact"), default=False)
+    is_emergency_contact = models.BooleanField(_("emergency contact"), default=False)
+    is_financially_responsible = models.BooleanField(
+        _("financially responsible"), default=False
+    )
+    has_custody = models.BooleanField(_("has custody"), default=False)
+
+    notes = models.CharField(_("notes"), max_length=255, blank=True)
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("guardian link")
+        verbose_name_plural = _("guardian links")
+        constraints = [
+            UniqueConstraint(fields=["guardian", "student"], name="unique_guardian_student"),
+            models.CheckConstraint(
+                condition=~Q(guardian=models.F("student")),
+                name="guardian_may_not_be_own_student",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.guardian} → {self.student} ({self.get_relationship_display()})"
+
+
+class EmergencyContact(TenantScopedModel):
+    """Emergency contact who may not be a system Person — TODO 1.1.5.
+
+    For neighbours, aunts, family friends — anyone the dojo needs to call
+    who does not have (and should not need) a Person row in the system.
+    """
+
+    tenant_org_path = "person__organization_id"
+
+    person = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="emergency_contacts"
+    )
+    name = models.CharField(_("name"), max_length=200)
+    phone = models.CharField(_("phone"), max_length=40)
+    relationship = models.CharField(_("relationship"), max_length=100, blank=True)
+    priority = models.PositiveSmallIntegerField(
+        _("priority"),
+        default=1,
+        help_text=_("1 = try first"),
+    )
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("emergency contact")
+        verbose_name_plural = _("emergency contacts")
+        ordering = ("priority",)
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.phone})"
