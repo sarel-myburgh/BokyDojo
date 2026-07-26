@@ -402,3 +402,6 @@ class AuditLog(models.Model):
 
     def delete(self, *args, **kwargs):
         raise NotImplementedError("Audit log entries are append-only.")
+
+
+from .notes import Note  # noqa: E402,F401
