@@ -79,6 +79,8 @@ OUTPUT
 
 > **Update this block whenever you stop work.**
 
+- **Where to work:** each agent has its own directory and branch — see
+  *Multi-agent workflow* below. Do not work in `Code/DojoMaster`; that is `main`.
 - **Current phase:** Phase 0 — in progress
 - **Last completed task:** `0.7.2` (demo reset command) — all `[DS]` tasks in Phase 0 are now complete
 - **Next task:** `0.3.7` — `Setting` model + hierarchy resolver (⚠, not delegable)
@@ -91,24 +93,58 @@ OUTPUT
 
 ### ⚠ Multi-agent workflow — read before writing any code
 
-Several agents work this repo. Running them in one shared working tree already
-caused a duplicate implementation (`0.3.4` written twice) and two tasks ticked
-before they were finished. Each agent now has its own branch.
+Several agents work this repo. Running them in one shared working tree caused a
+duplicate implementation (`0.3.4` written twice), two tasks ticked before they
+were finished, and one test run against a half-written file. Each agent now has
+its **own branch and its own directory** (a git worktree), all sharing one
+`.git`. Agents no longer see each other's uncommitted work.
 
-#### Branches
+#### Worktrees — find your directory
 
-| Branch | Agent |
-|---|---|
-| `main` | integration branch — **nobody commits here directly** |
-| `agent/claude` | Claude |
-| `agent/commandcode` | CommandCode |
-| `agent/opencode` | OpenCode / MiniMax |
-| `agent/codex` | Codex |
+| Directory | Branch | Agent |
+|---|---|---|
+| `Code/DojoMaster` | `main` | integration + inspection — **nobody commits here** |
+| `Code/DojoMaster-claude` | `agent/claude` | Claude |
+| `Code/DojoMaster-commandcode` | `agent/commandcode` | CommandCode |
+| `Code/DojoMaster-opencode` | `agent/opencode` | OpenCode / MiniMax |
+| `Code/DojoMaster-codex` | `agent/codex` | Codex |
+
+**Work only in your own directory.** `cd` there and stay there. Your branch is
+already checked out; you never need `git checkout`, and attempting to check out
+another agent's branch will fail (git refuses a branch checked out elsewhere —
+that refusal is the safety mechanism).
+
+#### Environment inside a worktree
+
+There is one shared virtualenv, in the primary directory. From any worktree:
+
+```bash
+../DojoMaster/.venv/Scripts/python.exe -m pytest        # Windows
+../DojoMaster/.venv/bin/python -m pytest                # POSIX
+```
+
+- `.env` is gitignored, so a new worktree has none. Copy it: `cp ../DojoMaster/.env .env`
+- `media/`, `staticfiles/` and `__pycache__` are per-worktree. That is fine.
+- ⚠ **Do not run `docker compose up` in two worktrees at once** — they bind the
+  same host ports and share the same volume names. One at a time, or set
+  `COMPOSE_PROJECT_NAME` and override the ports per worktree.
+
+#### Managing worktrees
+
+```bash
+git worktree list                                  # show all
+git worktree add ../DojoMaster-foo agent/foo       # add one
+git worktree remove ../DojoMaster-foo              # remove (must be clean)
+git worktree prune                                 # tidy stale entries
+```
+
+Removing a worktree does not delete the branch or any commits.
 
 #### Rules
 
-1. **Work only on your own branch.** First thing, every session:
-   `git checkout agent/<you> && git merge main`
+1. **Never leave work uncommitted at the end of a session.** It is invisible to
+   everyone else and will be stranded if branches move. Commit, even if the
+   message is "WIP".
 2. **Claim before you build.** Add your task id to the Claimed list below and
    commit that change *first*. If a task is already claimed, take another.
 3. **Tick only what is tested.** A model class existing is not the task done.
@@ -127,16 +163,31 @@ before they were finished. Each agent now has its own branch.
 
 #### Merging a finished task
 
+Run all of this **from your own worktree**. `git checkout main` will not work —
+`main` is checked out in the primary directory, and git will refuse.
+
 ```bash
-git checkout agent/<you>
+# 1. commit your work
 git add -A && git commit -m "..."
-git fetch && git rebase main
-python -m pytest && python -m ruff check .
-git checkout main && git merge --ff-only agent/<you>
+
+# 2. pick up anything main gained while you were working
+git rebase main
+
+# 3. prove it still works, post-rebase
+../DojoMaster/.venv/Scripts/python.exe -m pytest
+../DojoMaster/.venv/Scripts/python.exe -m ruff check .
+
+# 4. fast-forward main without leaving your directory
+git -C ../DojoMaster merge --ff-only agent/<you>
 ```
 
+Step 3 matters: a rebase can produce a tree that compiles but fails, and nobody
+checks after the fact.
+
 If the rebase conflicts in `TODO.md`, keep **both** sides' ticks — you are each
-completing different tasks.
+completing different tasks, and neither tick is wrong.
+
+Other agents pick up your work with `git rebase main` in their own worktree.
 
 #### Claimed right now
 
