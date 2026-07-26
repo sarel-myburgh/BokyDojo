@@ -284,3 +284,164 @@ class StudentStyleTrack(TenantScopedModel):
             started_on=on_date,
         )
 
+    def recompute_current_rank(self) -> Rank | None:
+        """Derive ``current_rank`` from this track's award history.
+
+        The rank a student holds is the highest-ordered rank they have been
+        awarded and not had revoked. Storing it directly is a cache; this is the
+        truth. Called after every award or revocation (task 1.2.5).
+        """
+        awards = (
+            RankAward.objects.for_organization(self.student.organization_id)
+            .filter(track=self, revoked_at__isnull=True)
+            .select_related("rank")
+            .order_by("-rank__order")
+        )
+        newest = awards.first()
+        rank = newest.rank if newest else None
+
+        if rank != self.current_rank:
+            self.current_rank = rank
+            super().save(update_fields=["current_rank", "updated_at"])
+        return rank
+
+
+class RankAward(TenantScopedModel):
+    """A grade awarded to a student — TODO 1.2.5, 1.2.9, 1.2.10, plan §4.4.
+
+    Append-only. A rank is never edited or deleted, because "what grade did she
+    hold, and who signed it off" must stay answerable years later — for the
+    student, for the association ratifying it, and occasionally for a dispute.
+    Withdrawal is a revocation *record* (task 1.2.10), not a DELETE.
+    """
+
+    class Recognition(models.TextChoices):
+        #: Awarded by this organisation.
+        INTERNAL = "internal", _("Awarded here")
+        #: Earned elsewhere and accepted at face value (task 1.2.9).
+        RECOGNISED = "recognised", _("Recognised from another organisation")
+        #: Earned elsewhere, accepted pending assessment.
+        PROVISIONAL = "provisional", _("Provisionally recognised")
+        #: Honorary or posthumous.
+        HONORARY = "honorary", _("Honorary")
+
+    tenant_org_path = "track__student__organization_id"
+    same_organization_fields = ("track", "rank", "awarded_by", "revoked_by")
+
+    track = models.ForeignKey(
+        StudentStyleTrack, on_delete=models.CASCADE, related_name="awards"
+    )
+    rank = models.ForeignKey(Rank, on_delete=models.PROTECT, related_name="awards")
+    awarded_on = models.DateField(_("awarded on"))
+    awarded_by = models.ForeignKey(
+        "identity.Person",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ranks_awarded",
+    )
+
+    recognition = models.CharField(
+        _("recognition"),
+        max_length=16,
+        choices=Recognition.choices,
+        default=Recognition.INTERNAL,
+    )
+    #: For grades earned elsewhere — the body that issued them (task 1.2.9).
+    awarded_by_external_org = models.CharField(
+        _("awarding organisation"), max_length=200, blank=True
+    )
+    certificate_number = models.CharField(max_length=64, blank=True)
+    notes = models.CharField(max_length=500, blank=True)
+
+    #: Revocation, not deletion (task 1.2.10).
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(
+        "identity.Person",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ranks_revoked",
+    )
+    revocation_reason = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        verbose_name = _("rank award")
+        verbose_name_plural = _("rank awards")
+        ordering = ("-awarded_on",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["track", "rank"],
+                condition=models.Q(revoked_at__isnull=True),
+                name="unique_live_award_per_track_rank",
+            ),
+        ]
+        indexes = [models.Index(fields=["track", "-awarded_on"])]
+
+    def __str__(self) -> str:
+        suffix = _(" (revoked)") if self.is_revoked else ""
+        return f"{self.track.student} — {self.rank.name}{suffix}"
+
+    @property
+    def is_revoked(self) -> bool:
+        return self.revoked_at is not None
+
+    @property
+    def is_external(self) -> bool:
+        return self.recognition in {
+            self.Recognition.RECOGNISED,
+            self.Recognition.PROVISIONAL,
+        }
+
+    def clean(self):
+        super().clean()
+        self.check_rank_belongs_to_track_ladder()
+        self.check_external_source_named()
+
+    def save(self, *args, **kwargs):
+        self.check_rank_belongs_to_track_ladder()
+        self.check_external_source_named()
+        result = super().save(*args, **kwargs)
+        self.track.recompute_current_rank()
+        return result
+
+    def check_rank_belongs_to_track_ladder(self) -> None:
+        if self.rank_id is None or self.track_id is None:
+            return
+        if self.rank.ladder_id != self.track.ladder_id:
+            raise ValidationError(
+                {"rank": _("This rank is not on the ladder this track follows.")}
+            )
+
+    def check_external_source_named(self) -> None:
+        """A recognised grade must say who awarded it.
+
+        "Recognised, source unknown" is how unverifiable black belts enter a
+        federation's register and never leave.
+        """
+        if self.is_external and not self.awarded_by_external_org.strip():
+            raise ValidationError(
+                {
+                    "awarded_by_external_org": _(
+                        "Name the organisation that awarded this grade."
+                    )
+                }
+            )
+
+    def revoke(self, *, by=None, reason: str, at=None) -> None:
+        """Withdraw a grade without erasing that it was held."""
+        from django.utils import timezone as django_timezone
+
+        if self.is_revoked:
+            return
+        if not reason.strip():
+            raise ValidationError({"revocation_reason": _("A reason is required.")})
+
+        self.revoked_at = at or django_timezone.now()
+        self.revoked_by = by
+        self.revocation_reason = reason
+        super().save(
+            update_fields=["revoked_at", "revoked_by", "revocation_reason", "updated_at"]
+        )
+        self.track.recompute_current_rank()
+
