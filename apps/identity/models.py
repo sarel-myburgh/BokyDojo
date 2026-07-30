@@ -529,3 +529,174 @@ class EmergencyContact(TenantScopedModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.phone})"
+
+
+class Enrollment(TenantScopedModel):
+    """A student's membership of one dojo — TODO 1.3.1/1.3.2, plan §4.3.
+
+    A student has one primary enrolment and zero or more additional active ones
+    (plan §4.3): training at two branches is normal, and a seminar visit is not
+    an enrolment at all — it is an attendance record flagged ``visiting``.
+
+    ⚠ Enrolments are **never mutated to move a student**. Ending one and opening
+    another is what keeps attendance, invoices and time entries attached to the
+    dojo where they actually happened. See ``apps.identity.enrolment.transfer_student``.
+    """
+
+    tenant_org_path = "dojo__organization_id"
+    tenant_dojo_path = "dojo_id"
+    #: A student from one organisation must not be enrolled at another's dojo.
+    same_organization_fields = ("dojo", "student")
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", _("Active")
+        ON_HOLD = "on_hold", _("On hold")
+        ENDED = "ended", _("Ended")
+
+    student = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="enrollments"
+    )
+    dojo = models.ForeignKey(Dojo, on_delete=models.PROTECT, related_name="enrollments")
+
+    #: The student's home dojo — drives default billing, reporting attribution
+    #: and "which dojo owns this student". Denormalised onto
+    #: ``StudentProfile.home_dojo`` as well, because that field is a tenant
+    #: scoping path and cannot be replaced by a join.
+    is_primary = models.BooleanField(_("primary dojo"), default=False)
+    status = models.CharField(
+        _("status"),
+        max_length=16,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+        db_index=True,
+    )
+    started_on = models.DateField(_("started on"))
+    ended_on = models.DateField(_("ended on"), null=True, blank=True)
+    hold_reason = models.CharField(_("hold reason"), max_length=200, blank=True)
+    notes = models.CharField(_("notes"), max_length=255, blank=True)
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("enrolment")
+        verbose_name_plural = _("enrolments")
+        ordering = ("-started_on",)
+        constraints = [
+            # A student cannot hold two live enrolments at the same dojo. Ended
+            # ones are unconstrained: re-joining later is normal and each stay
+            # keeps its own dates.
+            models.UniqueConstraint(
+                fields=["student", "dojo"],
+                condition=models.Q(ended_on__isnull=True),
+                name="unique_live_enrollment_per_dojo",
+            ),
+            # Exactly one home dojo at a time.
+            models.UniqueConstraint(
+                fields=["student"],
+                condition=models.Q(is_primary=True, ended_on__isnull=True),
+                name="unique_primary_enrollment_per_student",
+            ),
+            # "Ended" and "has an end date" must not drift apart — reports filter
+            # on one and humans read the other.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(status="ended", ended_on__isnull=False)
+                    | (~models.Q(status="ended") & models.Q(ended_on__isnull=True))
+                ),
+                name="enrollment_ended_on_matches_status",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(ended_on__isnull=True)
+                    | models.Q(ended_on__gte=models.F("started_on"))
+                ),
+                name="enrollment_ended_on_gte_started_on",
+            ),
+        ]
+        indexes = [models.Index(fields=["dojo", "status"])]
+
+    def __str__(self) -> str:
+        marker = " (primary)" if self.is_primary else ""
+        return f"{self.student} @ {self.dojo}{marker}"
+
+    @property
+    def is_live(self) -> bool:
+        """Still a member — includes holds, which are members who aren't training."""
+        return self.ended_on is None
+
+    @property
+    def is_training(self) -> bool:
+        return self.status == self.Status.ACTIVE
+
+    def end(self, on, *, reason: str = "") -> None:
+        self.status = self.Status.ENDED
+        self.ended_on = on
+        self.is_primary = False
+        if reason:
+            self.notes = reason[:255]
+        self.save(
+            update_fields=["status", "ended_on", "is_primary", "notes", "updated_at"]
+        )
+
+
+class TransferRecord(TenantScopedModel):
+    """A student's move from one dojo to another — TODO 1.3.3, plan §4.3.
+
+    The audit log records that two enrolment rows changed. This records the
+    *fact* of a transfer as a first-class thing the business can report on and a
+    receiving dojo can point at.
+    """
+
+    #: Either dojo can be the one an actor is scoped to, so the org path is
+    #: taken from the origin and ``tenant_scope_q`` is widened below.
+    tenant_org_path = "from_dojo__organization_id"
+    same_organization_fields = ("student", "from_dojo", "to_dojo", "approved_by")
+
+    student = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="transfers"
+    )
+    from_dojo = models.ForeignKey(
+        Dojo, on_delete=models.PROTECT, related_name="transfers_out"
+    )
+    to_dojo = models.ForeignKey(
+        Dojo, on_delete=models.PROTECT, related_name="transfers_in"
+    )
+    effective_on = models.DateField(_("effective on"))
+    reason = models.CharField(_("reason"), max_length=255, blank=True)
+    approved_by = models.ForeignKey(
+        Person,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="approved_transfers",
+    )
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("transfer record")
+        verbose_name_plural = _("transfer records")
+        ordering = ("-effective_on",)
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(from_dojo=models.F("to_dojo")),
+                name="transfer_between_different_dojos",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.student}: {self.from_dojo} → {self.to_dojo} ({self.effective_on})"
+
+    @classmethod
+    def tenant_scope_q(cls, actor: Actor):
+        """A transfer is visible to both ends of it.
+
+        The generic single-path dojo filter cannot express that, and picking one
+        side would hide arrivals from the receiving dojo — which is precisely
+        the dojo that needs to see them.
+        """
+        q = models.Q(from_dojo__organization_id=actor.organization_id)
+        if actor.dojo_ids is not None:
+            dojo_ids = list(actor.dojo_ids)
+            q &= models.Q(from_dojo_id__in=dojo_ids) | models.Q(to_dojo_id__in=dojo_ids)
+        return q
