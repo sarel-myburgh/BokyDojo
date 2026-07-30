@@ -7,6 +7,7 @@ import datetime
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from apps.core.scoping import Actor, allow_unscoped
 from apps.identity.enrolment import enrol_student, set_primary_dojo, transfer_student
@@ -307,6 +308,45 @@ def test_transfer_between_the_same_dojo_is_refused(student, dojo_a, admin):
     enrol_student(student=student, dojo=dojo_a, started_on=JAN, actor=admin)
     with pytest.raises(ValueError, match="two different dojos"):
         transfer_student(student=student, to_dojo=dojo_a, effective_on=JUN, actor=admin)
+
+
+def test_attendance_history_survives_a_transfer(student, dojo_a, dojo_b, admin):
+    """TODO 1.3.4 — the reason a transfer is two rows and not an UPDATE.
+
+    Attendance at the old dojo must still be attendance *at the old dojo* after
+    the student has moved, or every historical report silently reattributes
+    itself to wherever the student happens to train now.
+    """
+    from apps.attendance.models import AttendanceRecord
+    from apps.attendance.services import mark_attendance
+    from apps.scheduling.models import ClassSession
+
+    enrol_student(student=student, dojo=dojo_a, started_on=JAN, actor=admin)
+
+    with allow_unscoped("test setup"):
+        session_at_a = ClassSession.objects.create(
+            dojo=dojo_a,
+            starts_at=timezone.now() - datetime.timedelta(hours=2),
+            ends_at=timezone.now() - datetime.timedelta(hours=1),
+        )
+    mark_attendance(
+        session=session_at_a,
+        student=student,
+        status=AttendanceRecord.Status.PRESENT,
+        actor=admin,
+    )
+
+    transfer_student(student=student, to_dojo=dojo_b, effective_on=JUN, actor=admin)
+
+    record = AttendanceRecord.objects.for_actor(admin).get(student=student)
+    assert record.session.dojo_id == dojo_a.pk
+    assert record.status == AttendanceRecord.Status.PRESENT
+
+    # And the ended enrolment still says where they trained, with its own dates.
+    old = Enrollment.objects.for_actor(admin).get(student=student, ended_on__isnull=False)
+    assert old.dojo_id == dojo_a.pk
+    assert old.started_on == JAN
+    assert old.ended_on == JUN
 
 
 def test_federated_org_admin_may_not_transfer_between_member_dojos(

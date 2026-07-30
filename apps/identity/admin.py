@@ -9,12 +9,14 @@ from apps.core.admin import ScopedModelAdmin, StaffModelAdmin
 from apps.identity.models import (
     Dojo,
     EmergencyContact,
+    Enrollment,
     GuardianLink,
     InstructorAssignment,
     Organization,
     Person,
     RoleAssignment,
     StudentProfile,
+    TransferRecord,
     User,
 )
 
@@ -213,4 +215,22 @@ class InstructorAssignmentAdmin(ScopedModelAdmin):
     list_filter = ("is_head_instructor", "dojo")
     search_fields = ("person__given_name", "person__family_name", "dojo__name")
     autocomplete_fields = ("person", "dojo")
+    readonly_fields = ("created_at", "updated_at", "created_by")
+
+
+@admin.register(Enrollment)
+class EnrollmentAdmin(ScopedModelAdmin):
+    list_display = ("student", "dojo", "is_primary", "status", "started_on", "ended_on")
+    list_filter = ("status", "is_primary", "dojo")
+    search_fields = ("student__given_name", "student__family_name", "dojo__name")
+    autocomplete_fields = ("student", "dojo")
+    readonly_fields = ("created_at", "updated_at", "created_by")
+
+
+@admin.register(TransferRecord)
+class TransferRecordAdmin(ScopedModelAdmin):
+    list_display = ("student", "from_dojo", "to_dojo", "effective_on", "approved_by")
+    list_filter = ("from_dojo", "to_dojo")
+    search_fields = ("student__given_name", "student__family_name", "reason")
+    autocomplete_fields = ("student", "from_dojo", "to_dojo", "approved_by")
     readonly_fields = ("created_at", "updated_at", "created_by")
