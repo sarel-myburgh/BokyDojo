@@ -17,4 +17,8 @@ htmlcov/
 .vscode/
 *.log
 
+# Local run configuration. The interpreter path differs between the primary
+# checkout and each agent's worktree, so this cannot be shared.
+.claude/launch.json
+
 dev.sqlite3

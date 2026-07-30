@@ -27,12 +27,12 @@ from __future__ import annotations
 import datetime
 import logging
 from dataclasses import dataclass, field
-from zoneinfo import ZoneInfo
 
 from dateutil.rrule import rrulestr
 from django.utils import timezone
 
 from apps.core.scoping import Actor
+from apps.core.timezones import dojo_zone
 from apps.identity.models import Dojo
 
 from .models import ClassSession, ClassTemplate, ClosurePeriod
@@ -121,7 +121,7 @@ def materialise_template(
     if window_start > window_end:
         return result
 
-    tz = ZoneInfo(template.dojo.timezone or "UTC")
+    tz = dojo_zone(template.dojo)
     closed = _closure_dates(template, window_start, window_end)
 
     # Existing rows for this template inside the window, keyed by local date and

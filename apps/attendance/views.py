@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import csv
 import datetime
-from zoneinfo import ZoneInfo
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -26,6 +25,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_http_methods
 
+from apps.core.timezones import dojo_zone
 from apps.identity.models import Dojo, Enrollment, GovernanceModel, Person
 from apps.identity.permissions import (
     ROLE_ACTIONS,
@@ -56,11 +56,11 @@ def _holds_anywhere(actor, action: str) -> bool:
 
 
 def _local_date(session: ClassSession) -> datetime.date:
-    return session.starts_at.astimezone(ZoneInfo(session.dojo.timezone or "UTC")).date()
+    return session.starts_at.astimezone(dojo_zone(session.dojo)).date()
 
 
 def _local_today(dojo: Dojo) -> datetime.date:
-    return timezone.now().astimezone(ZoneInfo(dojo.timezone or "UTC")).date()
+    return timezone.now().astimezone(dojo_zone(dojo)).date()
 
 
 def _governance_of(dojo: Dojo) -> str:

@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
-from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.utils import timezone
 
 from apps.core import audit
 from apps.core.scoping import Actor
+from apps.core.timezones import dojo_zone
 from apps.identity.models import Enrollment, GovernanceModel, Person
 from apps.identity.permissions import Action, require
 from apps.scheduling.models import ClassSession
@@ -46,7 +46,7 @@ def _governance_of(session: ClassSession) -> str:
 
 
 def _session_local_date(session: ClassSession) -> datetime.date:
-    return session.starts_at.astimezone(ZoneInfo(session.dojo.timezone or "UTC")).date()
+    return session.starts_at.astimezone(dojo_zone(session.dojo)).date()
 
 
 def _is_retroactive(session: ClassSession) -> bool:
@@ -55,7 +55,7 @@ def _is_retroactive(session: ClassSession) -> bool:
     Marking a class you have just taught is the normal path and must not need an
     elevated permission; going back to last Tuesday is a different act.
     """
-    today = timezone.now().astimezone(ZoneInfo(session.dojo.timezone or "UTC")).date()
+    today = timezone.now().astimezone(dojo_zone(session.dojo)).date()
     return _session_local_date(session) < today
 
 

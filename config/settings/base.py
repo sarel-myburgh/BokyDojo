@@ -60,6 +60,9 @@ MIDDLEWARE = [
     "apps.core.sessions.SessionTimeoutMiddleware",
     # Must follow AuthenticationMiddleware — it derives the Actor from request.user.
     "apps.core.audit.AuditContextMiddleware",
+    # Must follow the audit context — it reads request.actor to decide which
+    # timezone to render this request's dates in.
+    "apps.core.timezones.ActiveTimezoneMiddleware",
     # Turns a refused action into a 403 instead of a 500. Last, so it sees
     # exceptions from everything above it.
     "apps.core.http.PermissionDeniedMiddleware",

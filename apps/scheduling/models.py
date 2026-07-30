@@ -9,6 +9,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.managers import ScopedManager
 from apps.core.models import TenantScopedModel
+from apps.core.timezones import dojo_zone
 
 
 class ClassTemplate(TenantScopedModel):
@@ -211,7 +212,23 @@ class ClassSession(TenantScopedModel):
 
     def __str__(self) -> str:
         name = self.template.name if self.template else str(_("One-off session"))
-        return f"{name} @ {self.dojo} {self.starts_at:%Y-%m-%d %H:%M}"
+        # The dojo's wall-clock time, not UTC. This string is read by humans in
+        # the admin and in page titles, and "11:30" for a 18:30 class is worse
+        # than useless — it looks like a different class.
+        return f"{name} @ {self.dojo} {self.local_starts_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def local_zone(self):
+        """The dojo's timezone, as a tzinfo — safe to hand to ``{% timezone %}``.
+
+        Templates must not pass the raw name: the tag calls ``ZoneInfo()`` on it
+        and a bad value in the database would 500 the page rather than degrade.
+        """
+        return dojo_zone(self.dojo)
+
+    @property
+    def local_starts_at(self):
+        return self.starts_at.astimezone(self.local_zone)
 
     @staticmethod
     def _organization_of(obj):

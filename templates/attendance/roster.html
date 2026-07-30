@@ -1,5 +1,5 @@
 {% extends "app/base.html" %}
-{% load i18n %}
+{% load i18n tz %}
 
 {% block title %}{% translate "Roster" %} — {{ session }}{% endblock %}
 
@@ -13,7 +13,8 @@
     {% if session.template %}{{ session.template.name }}{% else %}{% translate "One-off session" %}{% endif %}
   </h1>
   <p class="text-sm text-gray-500">
-    {{ session.dojo.name }} · {{ session.starts_at|date:"D j M, H:i" }}
+    {{ session.dojo.name }} ·
+    {% timezone session.local_zone %}{{ session.starts_at|date:"D j M, H:i" }}{% endtimezone %}
     {% if session.status == "cancelled" %}
       · <span class="text-red-700 font-medium">{% translate "Cancelled" %}</span>
     {% endif %}
