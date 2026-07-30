@@ -406,3 +406,30 @@ def test_reports_require_authentication(client):
     response = client.get(reverse("attendance-summary"))
     assert response.status_code == 302
     assert reverse("login") in response.url
+
+
+# -- regressions found by clicking through the app ---------------------------
+
+
+def test_today_does_not_list_a_class_twice(client, world):
+    """Today's unmarked class belongs in "today", not also in the catch-up nag."""
+    client.force_login(world["instructor"])
+
+    body = client.get(reverse("today")).content.decode()
+
+    assert body.count(str(world["session"].pk)) == 1
+
+
+def test_pages_contain_no_leaked_template_comments(client, world):
+    """Django's {# #} is single-line only; a multi-line one renders as text."""
+    client.force_login(world["instructor"])
+
+    for url in (
+        reverse("today"),
+        reverse("roster", args=[world["session"].pk]),
+        reverse("attendance-summary"),
+        reverse("drop-off"),
+    ):
+        body = client.get(url).content.decode()
+        assert "{#" not in body, f"{url} leaked a template comment"
+        assert "Mobile-first" not in body, f"{url} leaked a template comment"

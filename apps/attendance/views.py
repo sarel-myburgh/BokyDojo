@@ -100,6 +100,8 @@ def today_view(request) -> HttpResponse:
 
     # Nag about classes taught but never marked — plan §12.7. The full catch-up
     # flow is 1.5.6; this is the prompt that makes it obvious it is needed.
+    # Today's own classes are excluded: they are already listed above, and a
+    # class that finished twenty minutes ago is not yet a backlog.
     unmarked = (
         ClassSession.objects.for_actor(actor)
         .select_related("dojo", "template")
@@ -108,6 +110,7 @@ def today_view(request) -> HttpResponse:
             starts_at__lt=now,
             status=ClassSession.Status.SCHEDULED,
         )
+        .exclude(pk__in=[session.pk for session in sessions])
         .annotate(marked_count=Count("attendance_records"))
         .filter(marked_count=0)
         .order_by("-starts_at")[:20]

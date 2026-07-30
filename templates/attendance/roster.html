@@ -4,8 +4,10 @@
 {% block title %}{% translate "Roster" %} — {{ session }}{% endblock %}
 
 {% block content %}
-{# Mobile-first: one column, 44px+ targets, no horizontal scrolling. The whole
-   roster posts once — twenty round trips on dojo wifi is the failure mode. #}
+{% comment %}
+  Mobile-first: one column, 44px+ targets, no horizontal scrolling. The whole
+  roster posts once — twenty round trips on dojo wifi is the failure mode.
+{% endcomment %}
 
 <div class="mb-4">
   <a href="{% url 'today' %}" class="text-sm text-gray-500">&larr; {% translate "Today" %}</a>
