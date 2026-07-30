@@ -356,6 +356,7 @@ class AuditLog(models.Model):
         VIEW = "view", _("Viewed")
         LOGIN = "login", _("Signed in")
         LOGIN_FAILED = "login_failed", _("Sign-in failed")
+        LOGOUT = "logout", _("Signed out")
         EXPORT = "export", _("Exported")
         PERMISSION_CHANGE = "permission_change", _("Permission changed")
 

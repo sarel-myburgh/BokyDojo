@@ -1,0 +1,67 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Attendance summary" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<h1 class="text-xl font-semibold mb-1">{% translate "Attendance summary" %}</h1>
+<p class="text-sm text-gray-500 mb-4">
+  <a href="{% url 'drop-off' %}" class="underline">{% translate "Drop-off alerts" %}</a>
+</p>
+
+<form method="get" class="mb-5 flex flex-wrap items-end gap-2">
+  <div>
+    <label for="from" class="block text-xs text-gray-500">{% translate "From" %}</label>
+    <input type="date" id="from" name="from" value="{{ date_from|date:'Y-m-d' }}"
+           class="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+  </div>
+  <div>
+    <label for="to" class="block text-xs text-gray-500">{% translate "To" %}</label>
+    <input type="date" id="to" name="to" value="{{ date_to|date:'Y-m-d' }}"
+           class="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+  </div>
+  <button type="submit" class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white">
+    {% translate "Apply" %}
+  </button>
+  <a href="?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}&format=csv"
+     class="rounded-lg border border-gray-300 px-4 py-2 text-sm">{% translate "CSV" %}</a>
+</form>
+
+{% if summary %}
+  <div class="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+    <p class="text-3xl font-semibold tabular-nums">{{ totals.rate }}%</p>
+    <p class="text-sm text-gray-500">
+      {% blocktranslate with attended=totals.attended total=totals.total %}{{ attended }} attended of {{ total }} records{% endblocktranslate %}
+    </p>
+  </div>
+
+  <div class="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+    <table class="w-full text-sm">
+      <thead class="border-b border-gray-200 text-left text-xs uppercase text-gray-500">
+        <tr>
+          <th class="px-3 py-2">{% translate "Dojo" %}</th>
+          <th class="px-3 py-2">{% translate "Class" %}</th>
+          <th class="px-3 py-2 text-right">{% translate "Attended" %}</th>
+          <th class="px-3 py-2 text-right">{% translate "Absent" %}</th>
+          <th class="px-3 py-2 text-right">{% translate "Rate" %}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for row in summary %}
+        <tr>
+          <td class="px-3 py-2">{{ row.dojo }}</td>
+          <td class="px-3 py-2">{{ row.class_name }}</td>
+          <td class="px-3 py-2 text-right tabular-nums">{{ row.attended }}</td>
+          <td class="px-3 py-2 text-right tabular-nums">{{ row.absent }}</td>
+          <td class="px-3 py-2 text-right tabular-nums font-medium">{{ row.rate }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="rounded-lg bg-gray-100 px-4 py-6 text-center text-sm text-gray-600">
+    {% translate "No attendance recorded in this period." %}
+  </p>
+{% endif %}
+{% endblock %}

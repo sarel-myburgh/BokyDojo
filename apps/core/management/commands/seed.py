@@ -15,22 +15,39 @@ from __future__ import annotations
 
 import random
 import string
-from datetime import date
+from datetime import date, time, timedelta
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 from django.utils.text import slugify
 
-from apps.core.scoping import allow_unscoped
+from apps.attendance.models import AttendanceRecord
+from apps.core.scoping import Actor, allow_unscoped
 from apps.identity.models import (
     Dojo,
+    EmergencyContact,
+    Enrollment,
     GovernanceModel,
+    GuardianLink,
+    InstructorAssignment,
     Organization,
     Person,
     Role,
     RoleAssignment,
     ScopeType,
+    StudentProfile,
+    TransferRecord,
     User,
 )
+from apps.ranks.models import Rank, RankAward, RankLadder, StudentStyleTrack, Style
+from apps.ranks.seeding import create_shotokan_ladders
+from apps.scheduling.materialise import materialise_sessions
+from apps.scheduling.models import ClassSession, ClassTemplate, ClosurePeriod
+
+#: How far back the demo generates classes and attendance. Long enough for the
+#: reports and the drop-off list to be interesting, short enough to seed in
+#: seconds on SQLite.
+HISTORY_DAYS = 60
 
 KHMER_GIVEN_NAMES = [
     "Sokha", "Sokhem", "Sokly", "Sophea", "Sokun", "Sovann", "Srey",
@@ -101,14 +118,22 @@ class Command(BaseCommand):
         with allow_unscoped("seed command deliberately creates cross-tenant data"):
             if options["clear"]:
                 self.stdout.write("Clearing existing data...")
-                for model in [RoleAssignment, User, Person, Dojo, Organization]:
-                    try:
-                        model.objects.all().delete()
-                    except Exception:
-                        pass  # table may not exist yet
+                self._clear()
+            elif Person.objects.exists():
+                # People are generated with random names, so a second pass would
+                # either collide on a user email or silently double the roll.
+                # Refusing is more useful than either.
+                raise CommandError(
+                    "This database already has people in it. Re-run with --clear to "
+                    "wipe and re-seed, or use `manage.py reset_demo`."
+                )
 
             self.stdout.write("Seeding organisations...")
             orgs = self._create_organizations()
+
+            self.stdout.write("Seeding rank ladders...")
+            for org in orgs:
+                create_shotokan_ladders(org)
 
             self.stdout.write("Seeding dojos...")
             dojos = self._create_dojos(orgs)
@@ -116,7 +141,84 @@ class Command(BaseCommand):
             self.stdout.write("Seeding people and roles...")
             self._create_people(dojos)
 
+            self.stdout.write("Seeding class templates...")
+            self._create_class_templates(dojos)
+
+            self.stdout.write("Materialising sessions...")
+            sessions = self._materialise()
+
+            self.stdout.write("Seeding attendance history...")
+            self._create_attendance(sessions)
+
+            self._report_logins()
+
         self.stdout.write(self.style.SUCCESS("Done! Seed data created."))
+
+    def _report_logins(self) -> None:
+        """Print one usable sign-in per role.
+
+        Instructor emails carry a random suffix, so without this the demo data is
+        unreachable without a database query — which is a silly place for a
+        five-minute demo to stall.
+        """
+        self.stdout.write("\nSign in at /login/ with:")
+        for role, password in (
+            (Role.ORG_ADMIN, "admin123!"),
+            (Role.DOJO_ADMIN, "instructor123!"),
+            (Role.INSTRUCTOR, "instructor123!"),
+            (Role.GUARDIAN, "parent123!"),
+        ):
+            assignment = (
+                RoleAssignment.objects.filter(role=role, person__user__isnull=False)
+                .select_related("person__user")
+                .first()
+            )
+            if assignment is None:
+                continue
+            self.stdout.write(
+                f"  {role:<22} {assignment.person.user.email:<48} {password}"
+            )
+
+    def _clear(self) -> None:
+        """Delete seeded data, children first.
+
+        ⚠ Soft-delete models refuse ``.delete()`` on the queryset by design, so
+        they need ``hard_delete()``. Swallowing that exception (as an earlier
+        version did) left every Person in place and quietly added another two
+        hundred on each run.
+
+        AuditLog is deliberately not cleared: it is append-only, and retention is
+        a separate, deliberate command.
+        """
+        ordered_models = [
+            AttendanceRecord,
+            ClassSession,
+            ClassTemplate,
+            ClosurePeriod,
+            TransferRecord,
+            Enrollment,
+            RankAward,
+            StudentStyleTrack,
+            StudentProfile,
+            GuardianLink,
+            EmergencyContact,
+            InstructorAssignment,
+            RoleAssignment,
+            User,
+            Person,
+            Rank,
+            RankLadder,
+            Style,
+            Dojo,
+            Organization,
+        ]
+        for model in ordered_models:
+            queryset = model.objects.all()
+            hard_delete = getattr(queryset, "hard_delete", None)
+            if hard_delete is not None:
+                hard_delete()
+            else:
+                queryset.delete()
 
     def _create_organizations(self) -> list[Organization]:
         orgs = []
@@ -234,12 +336,18 @@ class Command(BaseCommand):
                     is_khmer = random.random() > 0.3
                     given = random.choice(KHMER_GIVEN_NAMES if is_khmer else LATIN_GIVEN_NAMES)
                     family = random.choice(KHMER_FAMILY_NAMES if is_khmer else LATIN_FAMILY_NAMES)
+                    # 70% of students are minors — plan §2: this is a children's
+                    # business, so the demo should look like one.
+                    is_minor = random.random() > 0.3
                     student_person = self._create_person(
-                        org, given, family, org_slug=org.slug, is_khmer=is_khmer
+                        org,
+                        given,
+                        family,
+                        org_slug=org.slug,
+                        is_khmer=is_khmer,
+                        is_minor=is_minor,
                     )
 
-                    # 70% of students are minors — create a guardian
-                    is_minor = random.random() > 0.3
                     if is_minor:
                         guardian_given = random.choice(
                             KHMER_GIVEN_NAMES if is_khmer else LATIN_GIVEN_NAMES
@@ -260,6 +368,20 @@ class Command(BaseCommand):
                             scope_type=ScopeType.DOJO,
                             dojo=dojo,
                         )
+                        GuardianLink.objects.create(
+                            guardian=guardian,
+                            student=student_person,
+                            relationship=random.choice(
+                                [
+                                    GuardianLink.Relationship.MOTHER,
+                                    GuardianLink.Relationship.FATHER,
+                                ]
+                            ),
+                            is_primary_contact=True,
+                            is_emergency_contact=True,
+                            is_financially_responsible=True,
+                            has_custody=True,
+                        )
                         User.objects.create_user(
                             email=_random_email(
                                 guardian_given, guardian_family, dojo.slug + str(random.randint(100, 999))
@@ -276,9 +398,144 @@ class Command(BaseCommand):
                         scope_type=ScopeType.DOJO,
                         dojo=dojo,
                     )
+
+                    # A student without a profile and an enrolment is invisible to
+                    # every screen that matters, so the seed creates all three.
+                    status = random.choices(
+                        [
+                            StudentProfile.Status.ACTIVE,
+                            StudentProfile.Status.ON_HOLD,
+                            StudentProfile.Status.LAPSED,
+                            StudentProfile.Status.TRIAL,
+                        ],
+                        weights=[85, 5, 5, 5],
+                    )[0]
+                    joined = date.today() - timedelta(days=random.randint(30, 900))
+                    StudentProfile.objects.create(
+                        person=student_person,
+                        home_dojo=dojo,
+                        status=status,
+                        joined_on=joined,
+                    )
+                    Enrollment.objects.create(
+                        student=student_person,
+                        dojo=dojo,
+                        is_primary=True,
+                        status=(
+                            Enrollment.Status.ACTIVE
+                            if status != StudentProfile.Status.ON_HOLD
+                            else Enrollment.Status.ON_HOLD
+                        ),
+                        started_on=joined,
+                    )
                     student_count += 1
 
         self.stdout.write(f"  Created {student_count} students across all dojos.")
+
+    def _create_class_templates(self, dojos: dict) -> None:
+        """A believable weekly timetable per dojo — TODO 1.4.1."""
+        timetable = [
+            ("Little Dragons (4-7)", "FREQ=WEEKLY;BYDAY=TU,TH", time(16, 0), 45),
+            ("Juniors (8-13)", "FREQ=WEEKLY;BYDAY=MO,WE,FR", time(17, 0), 60),
+            ("Adults", "FREQ=WEEKLY;BYDAY=MO,WE,FR", time(18, 30), 90),
+            ("Saturday all grades", "FREQ=WEEKLY;BYDAY=SA", time(9, 0), 90),
+        ]
+        for org_dojos in dojos.values():
+            for dojo in org_dojos:
+                for name, rrule, start, duration in timetable:
+                    ClassTemplate.objects.get_or_create(
+                        dojo=dojo,
+                        name=name,
+                        defaults={
+                            "rrule": rrule,
+                            "start_time": start,
+                            "duration_minutes": duration,
+                            "room": "Main hall",
+                            "capacity": 30,
+                            # Backdated so the seed has history to report on.
+                            "active_from": date.today() - timedelta(days=HISTORY_DAYS),
+                        },
+                    )
+
+    def _materialise(self) -> list:
+        """Generate sessions across the demo window — TODO 1.4.2.
+
+        Starts ``HISTORY_DAYS`` in the past so the reports and the drop-off list
+        have something to say on a fresh database. A demo where every screen is
+        empty demonstrates nothing.
+        """
+        result = materialise_sessions(
+            actor=Actor.system(),
+            today=date.today() - timedelta(days=HISTORY_DAYS),
+            horizon_days=HISTORY_DAYS + 90,
+        )
+        self.stdout.write(f"  {result}")
+        return list(
+            ClassSession.objects.unscoped("seeding attendance across all demo tenants")
+            .select_related("dojo")
+            .order_by("starts_at")
+        )
+
+    def _create_attendance(self, sessions: list) -> None:
+        """Attendance for classes that have already happened — TODO 1.5.1.
+
+        The last two days are left unmarked on purpose, so the "not yet marked"
+        prompt on the Today screen has something in it: that nag is a real part
+        of the product (plan §12.7) and an empty version of it teaches nobody
+        anything.
+        """
+        now = timezone.now()
+        cutoff = now - timedelta(days=2)
+
+        students_by_dojo: dict = {}
+        for enrollment in Enrollment.objects.unscoped(
+            "seeding attendance across all demo tenants"
+        ).filter(ended_on__isnull=True, status=Enrollment.Status.ACTIVE):
+            students_by_dojo.setdefault(enrollment.dojo_id, []).append(enrollment.student_id)
+
+        records = []
+        completed_session_ids = []
+        for session in sessions:
+            if session.starts_at >= cutoff:
+                continue
+            roll = students_by_dojo.get(session.dojo_id, [])
+            if not roll:
+                continue
+
+            completed_session_ids.append(session.pk)
+            # Not everyone attends every class: a real roster is a subset.
+            attending = random.sample(roll, k=max(1, int(len(roll) * random.uniform(0.35, 0.7))))
+            for student_id in attending:
+                status = random.choices(
+                    [
+                        AttendanceRecord.Status.PRESENT,
+                        AttendanceRecord.Status.LATE,
+                        AttendanceRecord.Status.ABSENT,
+                        AttendanceRecord.Status.EXCUSED,
+                    ],
+                    weights=[82, 8, 6, 4],
+                )[0]
+                records.append(
+                    AttendanceRecord(
+                        session=session,
+                        student_id=student_id,
+                        status=status,
+                        method=AttendanceRecord.Method.ROSTER,
+                        marked_at=session.ends_at,
+                    )
+                )
+
+        # bulk_create rather than the service: the service applies permission and
+        # idempotency logic per row, which is right for a request and far too slow
+        # for ten thousand seed rows.
+        AttendanceRecord.objects.bulk_create(records, batch_size=500)
+        ClassSession.objects.unscoped("seeding demo data").filter(
+            pk__in=completed_session_ids
+        ).update(status=ClassSession.Status.COMPLETED)
+        self.stdout.write(
+            f"  Created {len(records)} attendance records across "
+            f"{len(completed_session_ids)} completed sessions."
+        )
 
     def _create_person(
         self,
@@ -288,8 +545,15 @@ class Command(BaseCommand):
         *,
         org_slug: str,
         is_khmer: bool = True,
+        is_minor: bool = False,
     ) -> Person:
-        dob_year = random.randint(1970, 2020)
+        # Ages have to agree with the guardian links, or the demo shows
+        # fifty-year-olds with a mother listed as their emergency contact.
+        this_year = date.today().year
+        if is_minor:
+            dob_year = random.randint(this_year - 17, this_year - 5)
+        else:
+            dob_year = random.randint(this_year - 55, this_year - 19)
         dob_month = random.randint(1, 12)
         dob_day = random.randint(1, 28)
         locale = "km" if is_khmer else "en"

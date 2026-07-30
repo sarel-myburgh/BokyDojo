@@ -55,8 +55,14 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Must follow AuthenticationMiddleware, and precede the audit context so the
+    # Actor is built from a session that has already been checked for expiry.
+    "apps.core.sessions.SessionTimeoutMiddleware",
     # Must follow AuthenticationMiddleware — it derives the Actor from request.user.
     "apps.core.audit.AuditContextMiddleware",
+    # Turns a refused action into a 403 instead of a 500. Last, so it sees
+    # exceptions from everything above it.
+    "apps.core.http.PermissionDeniedMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -154,6 +160,17 @@ SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 SESSION_COOKIE_AGE = 60 * 60 * 12
+
+# Enforced by apps.core.sessions.SessionTimeoutMiddleware. Two limits, because
+# idle timeout alone does not bound a stolen cookie that keeps being used.
+# 90 minutes covers a class plus the admin afterwards; a shared tablet left on a
+# bench does not stay signed in all evening.
+SESSION_IDLE_TIMEOUT_SECONDS = int(env("DJANGO_SESSION_IDLE_TIMEOUT", 90 * 60))
+SESSION_ABSOLUTE_TIMEOUT_SECONDS = int(env("DJANGO_SESSION_ABSOLUTE_TIMEOUT", 60 * 60 * 12))
+
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "today"
+LOGOUT_REDIRECT_URL = "login"
 
 X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True
