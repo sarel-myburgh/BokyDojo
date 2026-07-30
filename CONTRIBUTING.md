@@ -60,6 +60,23 @@ tests/         — pytest test suite
 
 Tasks marked `[DS]` in TODO.md are self-contained and mechanical. They can be run by a cheaper model. See TODO.md for the delegation prompt template and rules.
 
+## Licensing of contributions ⚠
+
+DojoMaster is AGPL-3.0-or-later, and the copyright holder additionally sells
+commercial exceptions (see the README). That second half only works while one
+party owns all the copyright: an exception cannot be granted over code somebody
+else owns.
+
+So **contributions are accepted only with a copyright assignment or a licence
+grant broad enough to cover relicensing** — a signed CLA, or a `Signed-off-by:`
+line plus explicit agreement that the copyright holder may also license the
+contribution commercially. If you are not prepared to grant that, open an issue
+describing the change rather than a pull request; do not send a patch that
+cannot be accepted.
+
+Nothing here applies to work done as commissioned or contracted development,
+where copyright is assigned by the contract.
+
 ## Commit Messages
 
 Use imperative mood. Reference the TODO task ID where applicable:

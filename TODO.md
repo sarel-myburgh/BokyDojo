@@ -902,7 +902,7 @@ Mirrors `§10`. Tick when answered, and record the answer inline.
 - [x] `D4` Recurring billing — **decided: invoice + reminder + parent pays**
 - [ ] `D5` Cash significance — if majority, cash receipting needs equal polish — affects `2.3.2`
 - [x] `D6` Chinese variant — **decided: `zh-Hans` (Simplified)**
-- [ ] `D7` Licence — AGPL + commercial exception, open-core, or proprietary? — **blocks `0.1.1`**
+- [x] `D7` Licence — **decided: AGPL-3.0-or-later + commercial exception.** `LICENSE` is the verbatim FSF text; the exception offer and reasoning are in README §Licence. ⚠ Consequence: contributions need a CLA or an equivalent relicensing grant, or the exception cannot be sold over them — recorded in CONTRIBUTING.md.
 - [x] `D8` Multi-style — **assumed: configurable ladders from day one, seeded Shotokan**
 - [ ] `D9` Federation affiliation reporting needed? — affects `4.3.7` priority
 - [ ] `D10` Pilot dojo identified and committed? — **blocks the Phase 1 exit gate**

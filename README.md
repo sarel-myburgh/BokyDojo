@@ -63,4 +63,19 @@ tests/        — pytest test suite
 
 ## Licence
 
-> **Decision pending** (D7) — see project_plan.md §10.
+Copyright © 2026 Sarel Myburgh.
+
+DojoMaster is free software under the **GNU Affero General Public License,
+version 3 or later** — see [LICENSE](LICENSE). You may run it, study it, modify
+it and self-host it. If you run a modified version as a network service, AGPL
+§13 requires you to offer that version's source to its users.
+
+**Commercial exception.** The copyright holder also grants proprietary licences
+to anyone who wants to use DojoMaster without the AGPL's source-disclosure
+obligations — embedding it in a closed product, or reselling it as a hosted
+service. Enquiries: jmsarel@gmail.com.
+
+Choosing AGPL was decision `D7` (project_plan.md §10). The reasoning: the
+business is managed hosting and support, not code secrecy, so the source can be
+open — but a competitor should not be able to take it and run a rival hosted
+DojoMaster without contributing back.

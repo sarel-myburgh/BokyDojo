@@ -386,7 +386,7 @@ From the competitive research, three structural advantages fall out of decisions
 4. ~~Recurring billing model~~ — **decided: invoice + reminder + parent pays.**
 5. **Cash handling** — how significant? If it's the majority, cash receipting needs to be as polished as the online flow, not a fallback.
 6. **Languages at launch** — English only, or English + Khmer from day one?
-7. **Licence** — AGPL + commercial exception, open-core, or fully proprietary with a self-host tier?
+7. ~~Licence~~ — **decided: AGPL-3.0-or-later plus a commercial exception.** Open-core was rejected: it would mean maintaining a core/commercial split forever and classifying every future feature against it.
 8. **Multi-style** — karate only at launch, or configurable rank ladders from day one? (Recommend: configurable from day one, seed with a Shotokan ladder.)
 9. **Federation affiliation** — do your target orgs report membership up to a national body? If yes, that's a Phase 3 feature, not a nice-to-have.
 10. **Pilot dojo** — who is it, and can you commit to their real data by end of Phase 1?
