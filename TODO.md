@@ -260,14 +260,38 @@ OUTPUT
 
 - **Where to work:** each agent has its own directory and branch — see
   *Multi-agent workflow* below. Do not work in `Code/DojoMaster`; that is `main`.
-- **Current phase:** Phase 0 — in progress
-- **Last completed task:** `1.1.1`/`1.1.3`/`1.1.5` (delegated). Before that `0.6.5` — rate limiting + progressive lockout
-  (`apps/core/throttle.py`). Policies shipped for login, kiosk PIN, password
-  reset and API, but **not yet wired into any view** — wire them when `0.6.2` /
-  `0.6.6` land, and when the kiosk PIN check is built (`1.7.8`).
+- **Current phase:** Phase 0 finishing / Phase 1 in progress
+- **Last completed:** the attendance vertical slice — `1.3.1`–`1.3.4`, `1.4.2`,
+  `1.5.1`–`1.5.5`, `1.5.2` roster UI, `1.11.1`/`1.11.3`/`1.11.4`, plus `0.6.4`
+  and the login view that finally gives `0.6.5` a call site.
+
+- 🚀 **The app is clickable end to end.** `python manage.py runserver
+  --settings config.settings.dev` after `manage.py migrate && manage.py seed
+  --clear`; the seed prints a working login per role. The path is
+  `/login/` → `/today/` → `/sessions/<id>/roster/` → `/reports/attendance/`.
+  Mark a class from a phone-width viewport — that is the product's core loop and
+  it works.
+
+- ⚠ **Two bugs found only by opening the pages, not by tests:** times rendered
+  in UTC (an 18:30 class showed as 11:30), and multi-line `{# #}` template
+  comments rendered as visible text. Both now have regression tests. **Look at
+  the screen** before ticking a UI task; a green suite proved nothing about
+  either.
 
 - ✅ **Review debt on `1.1.x` is cleared.** Reading those tests surfaced a bug
   none of them covered — see `same_organization_fields` below.
+
+- ⚠ **Timezones:** never format a datetime without deciding whose timezone it is
+  in. `apps/core/timezones.py` has the only sanctioned resolvers — `dojo_zone()`
+  in Python, `{% timezone session.local_zone %}` in templates (pass the resolved
+  tzinfo, never the raw name — the tag raises on a bad one). Middleware activates
+  the actor's own zone, which also decides where `__date` report boundaries fall.
+
+- **Attendance is written through one service.** `apps.attendance.services.
+  mark_attendance` — idempotent on `client_generated_id`, applies the visiting
+  flag, enforces the retroactive-edit permission. The kiosk (`1.7`) and the
+  offline sync endpoint (`1.6.3`) must call it rather than writing rows, or the
+  three paths will drift. Admin add is disabled for the same reason.
 
 - ⚠ **New invariant every model author must know:**
   `TenantScopedModel.same_organization_fields`. Scoping decides who may *read*
@@ -278,17 +302,21 @@ OUTPUT
   `full_clean()`. `tests/test_cross_org_integrity.py` fails if a new model
   references more than one organisation-bearing record without declaring it.
 
-- **`0.3.9` is split and half done.** `0.3.9a` (upload validation) is merged:
-  `apps/core/uploads.py` — magic-byte sniffing, SVG refused outright, EXIF
-  stripped by re-encoding, storage names generated from our own id rather than
-  the uploaded filename. **`0.3.9b` is next**: the `Document` model plus a
-  permission-checked serving view (never a direct static URL), with
-  `Content-Disposition: attachment` and retention fields.
-- **Test suite:** 324 passing, 17 skipped on `main`. From a worktree:
+- **Test suite:** 716 passing, 34 skipped on `main`. From a worktree:
   `../DojoMaster/.venv/Scripts/python.exe -m pytest`
-- **Remaining in Phase 0:** `0.3.9` ⚠, `0.6.2` ⚠, `0.6.3`, `0.6.4`, `0.6.6` ⚠,
-  `0.6.7`, `0.7.3`, `0.7.4`. (`0.1.6` and `0.4.4` are **done** — an earlier
-  version of this line listed them as outstanding and was wrong.)
+- **Remaining in Phase 0:** `0.6.2` ⚠ (TOTP), `0.6.3` (recovery codes),
+  `0.6.6` ⚠ (password reset), `0.6.7` (CSP — note `templates/base.html` loads
+  Tailwind, HTMX and Alpine from CDNs and the roster has an inline `<script>`,
+  all of which a strict CSP has to deal with), `0.7.3` (backup/restore),
+  `0.7.4` (first-run wizard).
+- **Best next tasks in Phase 1**, in dependency order:
+  - `1.5.6` catch-up flow — the Today screen already lists unmarked classes, so
+    this is the bulk-entry screen behind that list.
+  - `1.6.x` offline PWA — the sync contract already exists and is tested;
+    `1.6.3` is "expose `mark_attendance` over HTTP", not a redesign.
+  - `1.1.2` medical fields, `1.1.6`–`1.1.8` consent and waivers — unblocked, and
+    everything else in `1.1` is list/detail UI that needs a student screen first.
+  - `1.11.2` active students by rank — the only report of the four still missing.
 - ⚠ **Never edit TODO.md with PowerShell `Get-Content -Raw` / `Set-Content`.**
   PS 5.1 reads a BOM-less file as ANSI and rewrites it as UTF-8, mangling every
   em-dash and `§` in the document. Use an editor/Edit tool, or Python with
@@ -301,7 +329,16 @@ OUTPUT
   `apps.core.fields`. Task `1.1.2` (medical fields) is unblocked.
   ⚠ Encrypted columns cannot be filtered, ordered or indexed — the field
   constructor refuses `db_index` and `unique` rather than failing silently.
-- **Open questions blocking work:** `D7` (licence) blocks the LICENSE file only. Nothing else in Phase 0 is blocked.
+- **Open questions blocking work:** none in Phase 0 or Phase 1. `D7` (licence) is
+  **decided** — AGPL-3.0-or-later plus a commercial exception; `LICENSE` is in
+  place. `D10` (pilot dojo) still blocks the Phase 1 exit gate `1.12`, and only
+  that.
+- ⚠ **Uncommitted work is stranded in two worktrees** (as of this session):
+  `DojoMaster-codex` has modified `tests/permission_matrix.py` and
+  `tests/test_permission_matrix.py`; `DojoMaster-opencode` has scheduling
+  holiday work including an **untracked `apps/scheduling/migrations/0002_*`**.
+  That is exactly the migration collision rule 7 warns about — `apps.attendance`
+  was given its own app partly to avoid colliding with it. Land or discard both.
 - **Deviations from the plan so far:**
   - `Person` was made a `SoftDeleteModel` rather than a plain `TenantScopedModel`. Rationale: student records are attached to attendance, rank awards and invoices, all of which are evidence; erasure requests go through redaction, not DELETE. Consistent with plan §2 ("never hard-delete user data"). Migration `identity/0002`.
   - `0.3.6` (Money) and `0.3.1` (BaseModel) were marked `[DS]` but built in-house — everything else depends on them, so the parallel track would have blocked.
@@ -492,8 +529,8 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `0.6.1` `[DS]` Argon2id password hashing
 - [ ] `0.6.2` ⚠ TOTP 2FA, mandatory for org/dojo admin and any financial or PII-export role `SEC §2.1`
 - [ ] `0.6.3` Recovery codes (generate once, show once, hashed at rest)
-- [ ] `0.6.4` Session config: HttpOnly, Secure, SameSite=Lax, idle timeout, absolute cap, rotate on privilege change
-- [x] `0.6.5` Rate limiting + progressive lockout: login, reset, PIN, API — `apps/core/throttle.py`. ⚠ Policies exist but are **not wired into any view yet**; wire on `0.6.2`/`0.6.6`/`1.7.8`.
+- [x] `0.6.4` Session config: HttpOnly, Secure, SameSite=Lax, idle timeout, absolute cap, rotate on privilege change
+- [x] `0.6.5` Rate limiting + progressive lockout: login, reset, PIN, API — `apps/core/throttle.py`. Wired into the login view (`apps/identity/views.py`); ⚠ the reset and kiosk-PIN policies still have no call site — wire on `0.6.6` / `1.7.8`.
 - [ ] `0.6.6` ⚠ Password reset: single-use, short-lived, no user enumeration (response *and* timing)
 - [ ] `0.6.7` Security headers + strict CSP with nonces, no `unsafe-inline` `SEC §2.4`
 
@@ -540,15 +577,15 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.2.11` `[DS]` Seed a Shotokan adult ladder + a junior mon ladder as fixtures
 
 ### 1.3 Enrolment & transfers
-- [ ] `1.3.1` `Enrollment` — student ↔ dojo, primary flag, status, dates `§4.3`
-- [ ] `1.3.2` Multi-dojo enrolment (several active at once)
-- [ ] `1.3.3` ⚠ Transfer flow: end old enrolment, create new, write `TransferRecord`. Never mutate history. `§4.3`
-- [ ] `1.3.4` ⚠ Test: attendance/invoice history survives transfer intact
+- [x] `1.3.1` `Enrollment` — student ↔ dojo, primary flag, status, dates `§4.3`
+- [x] `1.3.2` Multi-dojo enrolment (several active at once)
+- [x] `1.3.3` ⚠ Transfer flow: end old enrolment, create new, write `TransferRecord`. Never mutate history. `§4.3`
+- [x] `1.3.4` ⚠ Test: attendance/invoice history survives transfer intact
 - [x] `1.3.5` `[DS]` `InstructorAssignment` — person ↔ dojo
 
 ### 1.4 Scheduling
 - [x] `1.4.1` `[DS]` `ClassTemplate` — rrule, time, duration, room, capacity, rank/age bounds `§4.5`
-- [ ] `1.4.2` ⚠ `ClassSession` materialisation job, rolling 90-day horizon (mind DST)
+- [x] `1.4.2` ⚠ `ClassSession` materialisation job, rolling 90-day horizon (mind DST)
 - [x] `1.4.3` ⚠ `ClosurePeriod` (org/dojo, date range, reason, `suppress_billing`) consulted by the generator `§12.2`
 - [x] `1.4.4` `[DS]` Seed public holidays for Cambodia; make the set per-country data
 - [ ] `1.4.5` ⚠ Template edit semantics: "this occurrence" vs "this and future" `§4.5`
@@ -559,11 +596,11 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `1.4.10` `ClassTemplate.counts_toward[]` tags — which class types count for which eligibility rules `§2 item 23`
 
 ### 1.5 Attendance — core
-- [ ] `1.5.1` ⚠ `AttendanceRecord` with `client_generated_id`, idempotent upsert `§4.5`
-- [ ] `1.5.2` `[DS]` Instructor roster UI — mobile, large targets, mark-all-present then deselect *(critical UX path: review against the 30-second target in `1.6.6` before ticking)*
-- [ ] `1.5.3` `[DS]` Status set: present / late / absent / excused / visiting
-- [ ] `1.5.4` `[DS]` Visiting-student attendance at a non-enrolled dojo
-- [ ] `1.5.5` Retroactive edit with audit trail
+- [x] `1.5.1` ⚠ `AttendanceRecord` with `client_generated_id`, idempotent upsert `§4.5`
+- [x] `1.5.2` `[DS]` Instructor roster UI — mobile, large targets, mark-all-present then deselect *(critical UX path: review against the 30-second target in `1.6.6` before ticking)*
+- [x] `1.5.3` `[DS]` Status set: present / late / absent / excused / visiting
+- [x] `1.5.4` `[DS]` Visiting-student attendance at a non-enrolled dojo
+- [x] `1.5.5` Retroactive edit with audit trail
 - [ ] `1.5.6` ⚠ **Catch-up flow** — sessions in the last 14 days with no records, fast bulk entry, nag the instructor `§12.7`
 
 ### 1.6 Attendance — offline PWA
@@ -611,10 +648,10 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `1.10.7` `[DS]` Import report: created / updated / skipped / errored, downloadable
 
 ### 1.11 Core reports
-- [ ] `1.11.1` `[DS]` Attendance summary by dojo / class / period
+- [x] `1.11.1` `[DS]` Attendance summary by dojo / class / period
 - [ ] `1.11.2` `[DS]` Active students by rank
-- [ ] `1.11.3` `[DS]` Attendance drop-off alert list (no attendance in N days)
-- [ ] `1.11.4` `[DS]` CSV export on every report
+- [x] `1.11.3` `[DS]` Attendance drop-off alert list (no attendance in N days)
+- [x] `1.11.4` `[DS]` CSV export on every report *(both reports that exist; exports are audited)*
 
 ### 1.12 Phase 1 exit
 - [ ] `1.12.1` Pilot dojo's real data imported
