@@ -258,8 +258,11 @@ OUTPUT
 
 > **Update this block whenever you stop work.**
 
-- **Where to work:** each agent has its own directory and branch — see
-  *Multi-agent workflow* below. Do not work in `Code/DojoMaster`; that is `main`.
+- 📁 **Single folder, single branch.** The parallel worktrees have been
+  consolidated: everything is merged into `main` in `Code/DojoMaster`, the five
+  `agent/*` branches are deleted, and the `DojoMaster-*` directories are gone.
+  Work directly here. The multi-agent section below is retained as a record of
+  how to set the fan-out up again, not as a description of the current state.
 - **Current phase:** Phase 0 finishing / Phase 1 in progress
 - **Last completed:** the attendance vertical slice — `1.3.1`–`1.3.4`, `1.4.2`,
   `1.5.1`–`1.5.5`, `1.5.2` roster UI, `1.11.1`/`1.11.3`/`1.11.4`, plus `0.6.4`
@@ -302,8 +305,28 @@ OUTPUT
   `full_clean()`. `tests/test_cross_org_integrity.py` fails if a new model
   references more than one organisation-bearing record without declaring it.
 
-- **Test suite:** 716 passing, 34 skipped on `main`. From a worktree:
-  `../DojoMaster/.venv/Scripts/python.exe -m pytest`
+- **Landed since the consolidation:**
+  - **Holidays reworked** (`1.4.4`). A `Holiday` is now a catalogue entry that
+    creates **no** closure; a per-dojo `HolidayObservance` decides `closed` /
+    `open` / `reduced_schedule` and manages the linked `ClosurePeriod`. Some
+    dojos deliberately teach on holidays. Import via `NagerDateProvider` (free
+    public API), `CsvProvider`, or a builtin of Cambodian **fixed-date** holidays
+    only — lunar dates are never computed. Network access is an injected
+    `fetch` callable; the suite makes no network calls.
+  - **Per-organisation exchange rates** (`apps/core/exchange.py`). Every
+    business in Cambodia quotes its own USD/KHR rate — 4000:1 here, 4100:1 down
+    the road, both correct. Rates are org-scoped, effective-dated, and **there
+    is no default**: `convert()` raises `NoExchangeRate` rather than guessing.
+    Changing a rate adds a row so historic invoices keep converting at the rate
+    that applied. An explicit reverse rate beats the derived inverse.
+  - **Any ISO currency accepted.** Unlisted codes default to two decimals; only
+    exceptions are named (KHR/VND/JPY zero, KWD/BHD three).
+  - **Permission matrix is now independent** of `ROLE_ACTIONS`, fixing Codex's
+    own finding. Expectations are literal, written from the plan. It agrees with
+    the implementation everywhere.
+
+- **Test suite:** 745 passing, 35 skipped, ruff clean, `makemigrations --check`
+  clean. From `Code/DojoMaster`: `.venv\Scripts\python.exe -m pytest`
 - **Remaining in Phase 0:** `0.6.2` ⚠ (TOTP), `0.6.3` (recovery codes),
   `0.6.6` ⚠ (password reset), `0.6.7` (CSP — note `templates/base.html` loads
   Tailwind, HTMX and Alpine from CDNs and the roster has an inline `<script>`,
@@ -343,7 +366,16 @@ OUTPUT
   - `Person` was made a `SoftDeleteModel` rather than a plain `TenantScopedModel`. Rationale: student records are attached to attendance, rank awards and invoices, all of which are evidence; erasure requests go through redaction, not DELETE. Consistent with plan §2 ("never hard-delete user data"). Migration `identity/0002`.
   - `0.3.6` (Money) and `0.3.1` (BaseModel) were marked `[DS]` but built in-house — everything else depends on them, so the parallel track would have blocked.
 
-### ⚠ Multi-agent workflow — read before writing any code
+### Multi-agent workflow — *not currently active*
+
+> ⚠ **This section is history, not instructions.** The worktrees and `agent/*`
+> branches described below were removed on 2026-07-26 when everything was
+> consolidated into a single `main` in `Code/DojoMaster`. Keep it as the recipe
+> for setting the fan-out up again; do not follow it as a description of how the
+> repository is laid out today.
+>
+> To restore it: recreate the branches, `git worktree add ../DojoMaster-<name>
+> agent/<name>` per agent, and pre-create any shared scaffolding first.
 
 Several agents work this repo. Running them in one shared working tree caused a
 duplicate implementation (`0.3.4` written twice), two tasks ticked before they
