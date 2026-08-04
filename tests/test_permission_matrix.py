@@ -118,8 +118,6 @@ def test_federated_denials_do_not_apply_to_org_level_objects():
 
 def test_every_action_appears_in_at_least_one_role():
     """Catches an Action added to the enum but never granted to anyone."""
-    from apps.identity.permissions import ROLE_ACTIONS
-
-    granted = set().union(*ROLE_ACTIONS.values())
+    granted = set().union(*MATRIX.values())
     ungranted = set(Action.all()) - granted
     assert not ungranted, f"Actions defined but granted to no role: {sorted(ungranted)}"
