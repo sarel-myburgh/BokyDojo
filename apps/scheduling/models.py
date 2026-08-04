@@ -154,6 +154,134 @@ class ClosurePeriod(TenantScopedModel):
         return self.starts_on <= date <= self.ends_on
 
 
+class Holiday(TenantScopedModel):
+    """A date someone might care about. Creates no closure.
+
+    The actual decision to close a dojo is stored in ``HolidayObservance``.
+    """
+
+    tenant_org_path = "organization_id"
+
+    class Source(models.TextChoices):
+        MANUAL = "manual", _("manual")
+        IMPORTED = "imported", _("imported")
+        BUILTIN = "builtin", _("builtin")
+
+    organization = models.ForeignKey(
+        "identity.Organization",
+        on_delete=models.CASCADE,
+        related_name="holidays",
+    )
+    name = models.CharField(_("name"), max_length=200)
+    date = models.DateField(_("date"))
+    country = models.CharField(_("country"), max_length=2, blank=True)
+    source = models.CharField(
+        _("source"),
+        max_length=16,
+        choices=Source.choices,
+        default=Source.MANUAL,
+    )
+    external_id = models.CharField(_("external id"), max_length=100, blank=True)
+    is_recurring_annually = models.BooleanField(
+        _("recurring annually"),
+        default=False,
+        help_text=_("Fixed-date holidays such as 1 January. Lunar holidays are False."),
+    )
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("holiday")
+        verbose_name_plural = _("holidays")
+        ordering = ("organization", "date", "name")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "date", "name"],
+                name="unique_holiday_per_org_date_name",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.date:%Y-%m-%d})"
+
+
+class HolidayObservance(TenantScopedModel):
+    """A dojo's decision about one holiday: closed, open, or reduced schedule."""
+
+    tenant_org_path = "holiday__organization_id"
+    tenant_dojo_path = "dojo_id"
+    same_organization_fields = ("holiday", "dojo", "closure")
+
+    class Observance(models.TextChoices):
+        CLOSED = "closed", _("closed")
+        OPEN = "open", _("open")
+        REDUCED_SCHEDULE = "reduced_schedule", _("reduced schedule")
+
+    holiday = models.ForeignKey(
+        Holiday,
+        on_delete=models.CASCADE,
+        related_name="observances",
+    )
+    dojo = models.ForeignKey(
+        "identity.Dojo",
+        on_delete=models.CASCADE,
+        related_name="holiday_observances",
+    )
+    observance = models.CharField(
+        _("observance"),
+        max_length=16,
+        choices=Observance.choices,
+        default=Observance.OPEN,
+    )
+    closure = models.ForeignKey(
+        ClosurePeriod,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="holiday_observance",
+    )
+    note = models.CharField(_("note"), max_length=200, blank=True)
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("holiday observance")
+        verbose_name_plural = _("holiday observances")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["holiday", "dojo"],
+                name="unique_holiday_observance_per_dojo",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.holiday} @ {self.dojo}: {self.observance}"
+
+    def apply(self) -> None:
+        """Create or remove the linked closure to match the chosen observance.
+
+        Idempotent: repeated calls with the same observance do not duplicate
+        closures.
+        """
+        if self.observance == self.Observance.CLOSED:
+            if self.closure_id is None:
+                closure = ClosurePeriod.objects.for_organization(
+                    self.holiday.organization_id
+                ).create(
+                    organization_id=self.holiday.organization_id,
+                    dojo=self.dojo,
+                    starts_on=self.holiday.date,
+                    ends_on=self.holiday.date,
+                    reason=f"Closed for {self.holiday.name}",
+                )
+                self.closure = closure
+                self.save(update_fields=["closure"])
+        elif self.closure_id is not None:
+            self.closure.delete()
+            self.closure = None
+            self.save(update_fields=["closure"])
+
+
 class ClassSession(TenantScopedModel):
     """A single class occurrence — plan §4.5.
 

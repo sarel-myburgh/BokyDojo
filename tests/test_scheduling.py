@@ -11,8 +11,14 @@ from django.db import IntegrityError
 from apps.core.scoping import Actor, allow_unscoped
 from apps.identity.models import Dojo, Organization
 from apps.ranks.models import Rank, RankLadder, Style
-from apps.scheduling.holidays import seed_public_holidays
-from apps.scheduling.models import ClassSession, ClassTemplate, ClosurePeriod
+from apps.scheduling.holidays import import_holidays, set_holiday_observance
+from apps.scheduling.models import (
+    ClassSession,
+    ClassTemplate,
+    ClosurePeriod,
+    Holiday,
+    HolidayObservance,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -339,42 +345,91 @@ def test_class_session_accepts_same_org_template(class_session):
     assert class_session.dojo.organization_id == class_session.template.dojo.organization_id
 
 
-# ---- Public holiday seeding -------------------------------------------------
+# ---- Public holiday import --------------------------------------------------
 
 
-def test_seed_public_holidays_creates_fixed_and_variable(org):
-    closures = seed_public_holidays(org, 2025)
-    reasons = {c.reason for c in closures}
-    assert "International New Year" in reasons
-    assert "Khmer New Year" in reasons
-    assert "Pchum Ben" in reasons
-    assert "Water Festival" in reasons
-    assert "Royal Ploughing Ceremony" in reasons
+def test_import_holidays_creates_fixed_holidays_only(org):
+    holidays = import_holidays(org, "KH", 2025)
+    names = {h.name for h in holidays}
+    assert "International New Year" in names
+    assert "Independence Day" in names
+    assert not ClosurePeriod.objects.for_organization(org.pk).exists()
 
 
-def test_seed_public_holidays_is_idempotent(org):
-    first = seed_public_holidays(org, 2025)
-    second = seed_public_holidays(org, 2025)
+def test_import_holidays_is_idempotent(org):
+    first = import_holidays(org, "KH", 2025)
+    second = import_holidays(org, "KH", 2025)
     assert len(first) == len(second)
     assert (
-        ClosurePeriod.objects.for_organization(org.pk)
-        .filter(reason="International New Year", starts_on=datetime.date(2025, 1, 1))
+        Holiday.objects.for_organization(org.pk)
+        .filter(name="International New Year", date=datetime.date(2025, 1, 1))
         .count()
         == 1
     )
 
 
-def test_seed_public_holidays_skips_variable_for_unknown_year(org):
-    closures = seed_public_holidays(org, 2099)
-    reasons = {c.reason for c in closures}
-    assert "International New Year" in reasons
-    assert "Khmer New Year" not in reasons
+def test_import_holidays_returns_empty_for_unknown_country(org):
+    assert import_holidays(org, "ZZ", 2025) == []
 
 
-def test_seed_public_holidays_returns_empty_for_unknown_country(org):
-    org.country = "ZZ"
-    org.save(update_fields=["country"])
-    assert seed_public_holidays(org, 2025) == []
+# ---- Holiday observance -----------------------------------------------------
+
+
+def test_holiday_observance_closed_creates_closure(org, dojo):
+    with allow_unscoped("test setup"):
+        holiday = Holiday.objects.create(
+            organization=org,
+            name="Test Holiday",
+            date=datetime.date(2025, 1, 1),
+        )
+    observance = set_holiday_observance(
+        holiday,
+        dojo,
+        HolidayObservance.Observance.CLOSED,
+    )
+    assert observance.closure is not None
+    assert observance.closure.covers(datetime.date(2025, 1, 1))
+
+
+def test_holiday_observance_open_removes_closure(org, dojo):
+    with allow_unscoped("test setup"):
+        holiday = Holiday.objects.create(
+            organization=org,
+            name="Test Holiday",
+            date=datetime.date(2025, 1, 1),
+        )
+    observance = set_holiday_observance(
+        holiday,
+        dojo,
+        HolidayObservance.Observance.CLOSED,
+    )
+    observance.refresh_from_db()
+    closure_id = observance.closure_id
+
+    set_holiday_observance(
+        holiday,
+        dojo,
+        HolidayObservance.Observance.OPEN,
+    )
+
+    observance.refresh_from_db()
+    assert observance.closure_id is None
+    assert not ClosurePeriod.objects.for_organization(org.pk).filter(pk=closure_id).exists()
+
+
+def test_holiday_observance_cross_organisation_guard(org, dojo, other_dojo):
+    with allow_unscoped("test setup"):
+        holiday = Holiday.objects.create(
+            organization=org,
+            name="Test Holiday",
+            date=datetime.date(2025, 1, 1),
+        )
+    with allow_unscoped("test setup"), pytest.raises(ValidationError):
+        HolidayObservance.objects.create(
+            holiday=holiday,
+            dojo=other_dojo,
+            observance=HolidayObservance.Observance.CLOSED,
+        )
 
 
 # ---- Tenant isolation -------------------------------------------------------
