@@ -45,9 +45,7 @@ def two_orgs():
             "person_a": Person.objects.create(
                 organization=a, given_name="Ana", family_name="Alpha"
             ),
-            "person_b": Person.objects.create(
-                organization=b, given_name="Ben", family_name="Beta"
-            ),
+            "person_b": Person.objects.create(organization=b, given_name="Ben", family_name="Beta"),
             "student_a": Person.objects.create(
                 organization=a, given_name="Sam", family_name="Alpha"
             ),

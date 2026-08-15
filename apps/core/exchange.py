@@ -87,11 +87,15 @@ class ExchangeRate(models.Model):
             models.CheckConstraint(condition=models.Q(rate__gt=0), name="rate_is_positive"),
         ]
         indexes = [
-            models.Index(fields=["organization", "base_currency", "quote_currency", "-effective_from"])
+            models.Index(
+                fields=["organization", "base_currency", "quote_currency", "-effective_from"]
+            )
         ]
 
     def __str__(self) -> str:
-        return f"1 {self.base_currency} = {self.rate} {self.quote_currency} from {self.effective_from}"
+        return (
+            f"1 {self.base_currency} = {self.rate} {self.quote_currency} from {self.effective_from}"
+        )
 
     def save(self, *args, **kwargs):
         self.base_currency = (self.base_currency or "").upper()
@@ -174,9 +178,7 @@ def convert(
     if amount.currency == to_currency:
         return amount
 
-    rate = rate_for(
-        organization_id, amount.currency, to_currency, on_date=on_date
-    )
+    rate = rate_for(organization_id, amount.currency, to_currency, on_date=on_date)
 
     source_exponent = exponent_for(amount.currency)
     target_exponent = exponent_for(to_currency)

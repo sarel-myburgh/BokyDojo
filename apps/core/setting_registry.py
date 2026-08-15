@@ -79,17 +79,13 @@ class SettingDefinition:
                 f"(allowed: {', '.join(self.scopes)})"
             )
         if self.choices is not None and value not in self.choices:
-            raise InvalidSettingValue(
-                f"{self.key}: {value!r} is not one of {self.choices}"
-            )
+            raise InvalidSettingValue(f"{self.key}: {value!r} is not one of {self.choices}")
 
     def strictness_of(self, value: Any) -> int:
         try:
             return self.strictness.index(value)
         except (AttributeError, ValueError) as exc:
-            raise InvalidSettingValue(
-                f"{self.key}: {value!r} has no defined strictness"
-            ) from exc
+            raise InvalidSettingValue(f"{self.key}: {value!r} has no defined strictness") from exc
 
 
 REGISTRY: dict[str, SettingDefinition] = {}
@@ -178,5 +174,18 @@ SESSION_GENERATION_HORIZON_DAYS = register(
         default=90,
         scopes=(Scope.ORG, Scope.DOJO),
         description="How far ahead recurring class sessions are materialised.",
+    )
+)
+
+CONSENT_SELF_AGE = register(
+    SettingDefinition(
+        key="consent.minimum_self_consent_age",
+        default=18,
+        choices=tuple(range(13, 19)),
+        scopes=(Scope.ORG,),
+        description=(
+            "Minimum age at which a student may sign consent for themselves. "
+            "The legal threshold varies by jurisdiction, so deployments must set it explicitly."
+        ),
     )
 )

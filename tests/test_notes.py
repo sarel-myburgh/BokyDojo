@@ -39,9 +39,7 @@ def dojo(org):
 @pytest.fixture
 def person(org):
     with allow_unscoped("test setup"):
-        return Person.objects.create(
-            organization=org, given_name="Kenji", family_name="Sato"
-        )
+        return Person.objects.create(organization=org, given_name="Kenji", family_name="Sato")
 
 
 @pytest.fixture
@@ -170,9 +168,7 @@ def test_pinned_for_returns_only_pinned_for_subject():
             pinned=True,
         )
 
-    result = Note.objects.for_organization(org.pk).pinned_for(
-        Note.SubjectType.STUDENT, subject
-    )
+    result = Note.objects.for_organization(org.pk).pinned_for(Note.SubjectType.STUDENT, subject)
     assert result.count() == 1
     assert result.first().body == "Pinned"
 
@@ -196,9 +192,7 @@ def test_pinned_for_filters_by_subject_type():
             pinned=True,
         )
 
-    result = Note.objects.for_organization(org.pk).pinned_for(
-        Note.SubjectType.STUDENT, subject
-    )
+    result = Note.objects.for_organization(org.pk).pinned_for(Note.SubjectType.STUDENT, subject)
     assert result.count() == 1
     assert result.first().body == "Student pinned"
 

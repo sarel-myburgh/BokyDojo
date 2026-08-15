@@ -70,6 +70,14 @@ RESET_POLICY = LockoutPolicy(
     escalation=(5 * 60, 30 * 60, 2 * 60 * 60),
 )
 
+#: Six-digit TOTP values have a small search space. Treat repeated second-factor
+#: failures independently from password failures so neither counter masks the other.
+MFA_POLICY = LockoutPolicy(
+    max_attempts=5,
+    window_seconds=15 * 60,
+    escalation=(60, 5 * 60, 30 * 60, 60 * 60),
+)
+
 API_POLICY = LockoutPolicy(
     max_attempts=10,
     window_seconds=60,

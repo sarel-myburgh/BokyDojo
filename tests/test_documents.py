@@ -176,7 +176,10 @@ def test_front_desk_cannot_read_a_medical_document(world, admin_actor):
     permission matrix already says so; this proves documents honour it."""
     medical = _store(world, admin_actor, kind=Document.Kind.MEDICAL)
     desk_actor = _actor(
-        world["desk"], world["org"], role=Role.FRONT_DESK, scope=ScopeType.DOJO,
+        world["desk"],
+        world["org"],
+        role=Role.FRONT_DESK,
+        scope=ScopeType.DOJO,
         dojo=world["dojo"],
     )
     assert may_read(desk_actor, medical, governance_model=CENTRAL) is False
@@ -187,8 +190,11 @@ def test_instructor_may_read_a_medical_document(world, admin_actor):
     medical.view for exactly that reason."""
     medical = _store(world, admin_actor, kind=Document.Kind.MEDICAL)
     instructor_actor = _actor(
-        world["instructor"], world["org"], role=Role.INSTRUCTOR,
-        scope=ScopeType.DOJO, dojo=world["dojo"],
+        world["instructor"],
+        world["org"],
+        role=Role.INSTRUCTOR,
+        scope=ScopeType.DOJO,
+        dojo=world["dojo"],
     )
     # The student has no home dojo set, so the object carries no dojo and a
     # dojo-scoped role cannot reach it. That is the deny-by-default behaviour.
@@ -204,9 +210,7 @@ def test_denied_reads_are_audited(world, admin_actor):
     with pytest.raises(PermissionDenied):
         open_document(outsider, document, governance_model=CENTRAL)
 
-    denied = AuditLog.objects.filter(
-        subject_id=str(document.pk), note__contains="DENIED"
-    )
+    denied = AuditLog.objects.filter(subject_id=str(document.pk), note__contains="DENIED")
     assert denied.exists()
 
 

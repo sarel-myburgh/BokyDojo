@@ -119,7 +119,9 @@ def test_identifiers_are_independent():
 def test_identifier_is_not_stored_in_plain_cache_keys():
     """Cache dumps and log lines should not leak the email being attacked."""
     _fail(1, who="secret@example.com")
-    assert all("secret@example.com" not in key for key in throttle._keys("login", "secret@example.com"))
+    assert all(
+        "secret@example.com" not in key for key in throttle._keys("login", "secret@example.com")
+    )
 
 
 # -- shipped policies ---------------------------------------------------------

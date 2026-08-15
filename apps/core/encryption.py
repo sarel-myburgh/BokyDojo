@@ -201,9 +201,7 @@ def encrypt(organization_id: UUID, plaintext: str) -> str:
     dek = data_key_for(org)
     nonce = os.urandom(NONCE_BYTES)
     ciphertext = AESGCM(dek).encrypt(nonce, plaintext.encode("utf-8"), org.bytes)
-    return base64.urlsafe_b64encode(
-        VERSION_PREFIX + org.bytes + nonce + ciphertext
-    ).decode("ascii")
+    return base64.urlsafe_b64encode(VERSION_PREFIX + org.bytes + nonce + ciphertext).decode("ascii")
 
 
 def decrypt(token: str) -> str:

@@ -73,9 +73,7 @@ class ScopedQuerySet(models.QuerySet):
         is a tenant bypass.
         """
         if organization_id is None:
-            raise UnscopedAccessError(
-                f"{self.model.__name__}.for_organization() called with None"
-            )
+            raise UnscopedAccessError(f"{self.model.__name__}.for_organization() called with None")
         clone = self.filter(**{self.model.tenant_org_path: organization_id})
         clone._scope_applied = True
         clone._scope_actor = None

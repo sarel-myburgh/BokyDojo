@@ -78,9 +78,7 @@ def exponent_for(currency: str) -> int:
     """
     code = (currency or "").upper()
     if len(code) != 3 or not code.isalpha():
-        raise ValueError(
-            f"Invalid currency {currency!r}: expected a three-letter ISO 4217 code"
-        )
+        raise ValueError(f"Invalid currency {currency!r}: expected a three-letter ISO 4217 code")
     return CURRENCY_EXPONENTS.get(code, DEFAULT_EXPONENT)
 
 

@@ -85,16 +85,57 @@ def may_read(actor: Actor, document: Document, *, governance_model: str) -> bool
     Deliberately conservative: sensitive documents require the medical-view
     permission, everything else requires being able to view the subject.
     """
-    from apps.identity.permissions import Action, can
+    from apps.identity.models import StudentProfile
+    from apps.identity.permissions import ROLE_ACTIONS, Action, can
 
     if actor is None or actor.is_anonymous:
         return False
     if document.organization_id != actor.organization_id:
         return False
+    if document.kind == Document.Kind.PHOTO:
+        from apps.identity.models import (
+            ConsentPolicy,
+            ConsentRecord,
+            GovernanceModel,
+        )
+        from apps.identity.visibility import is_org_scoped_only
+
+        if governance_model == GovernanceModel.FEDERATED and is_org_scoped_only(actor):
+            return False
+        if document.subject_person_id is None:
+            return False
+        policy = (
+            ConsentPolicy.objects.for_organization(document.organization_id)
+            .filter(consent_type=ConsentRecord.Type.PHOTO, is_active=True)
+            .first()
+        )
+        if policy is None:
+            return False
+        decision = (
+            ConsentRecord.objects.for_organization(document.organization_id)
+            .filter(
+                person_id=document.subject_person_id,
+                consent_type=ConsentRecord.Type.PHOTO,
+                version=policy.version,
+            )
+            .order_by("-granted_at", "-created_at")
+            .first()
+        )
+        if decision is None or not decision.granted:
+            return False
 
     subject = document.subject_person
     required = Action.MEDICAL_VIEW if document.is_sensitive else Action.PERSON_VIEW
-    return can(actor, required, subject, governance_model=governance_model)
+    if subject is None:
+        # Organisation-authored documents such as the current waiver have no
+        # student subject. A same-tenant scoped role holding the permission may
+        # read them; the document contains no individual PII.
+        return any(required in ROLE_ACTIONS.get(role, set()) for role, _scope, _dojo in actor.roles)
+    try:
+        target = subject.student_profile
+    except StudentProfile.DoesNotExist:
+        target = subject
+    return can(actor, required, target, governance_model=governance_model)
 
 
 def open_document(actor: Actor, document: Document, *, governance_model: str) -> bytes:

@@ -33,18 +33,14 @@ def test_there_are_tenant_models_to_check():
     assert _concrete_tenant_models(), "No TenantScopedModel subclasses discovered"
 
 
-@pytest.mark.parametrize(
-    "model", _concrete_tenant_models(), ids=lambda m: m.__name__
-)
+@pytest.mark.parametrize("model", _concrete_tenant_models(), ids=lambda m: m.__name__)
 def test_tenant_model_declares_org_path(model):
     """Every tenant model must state how to reach its owning organisation."""
     path = getattr(model, "tenant_org_path", None)
     assert path, f"{model.__name__} does not declare tenant_org_path"
 
 
-@pytest.mark.parametrize(
-    "model", _concrete_tenant_models(), ids=lambda m: m.__name__
-)
+@pytest.mark.parametrize("model", _concrete_tenant_models(), ids=lambda m: m.__name__)
 def test_tenant_scope_q_is_usable(model):
     """tenant_scope_q() must build a filter the ORM accepts for this model."""
     actor = Actor(
@@ -57,9 +53,7 @@ def test_tenant_scope_q_is_usable(model):
     str(model.objects.unscoped("contract test").filter(q).query)
 
 
-@pytest.mark.parametrize(
-    "model", _concrete_tenant_models(), ids=lambda m: m.__name__
-)
+@pytest.mark.parametrize("model", _concrete_tenant_models(), ids=lambda m: m.__name__)
 def test_tenant_model_default_manager_is_scoped(model):
     """A tenant model whose default manager is not scoped is a leak waiting to happen."""
     manager = model._default_manager
@@ -81,15 +75,10 @@ def test_unscoped_allowlist_has_no_stale_entries():
             stale.append(f"{relative} (file no longer exists)")
             continue
         source = path.read_text(encoding="utf-8")
-        code_lines = [
-            line
-            for line in source.splitlines()
-            if not line.lstrip().startswith("#")
-        ]
+        code_lines = [line for line in source.splitlines() if not line.lstrip().startswith("#")]
         if not PATTERN.search("\n".join(code_lines)):
             stale.append(f"{relative} (no longer uses unscoped access)")
 
-    assert not stale, (
-        "Stale entries in ALLOWED_FILES (tests/test_unscoped_guard.py): "
-        + ", ".join(stale)
+    assert not stale, "Stale entries in ALLOWED_FILES (tests/test_unscoped_guard.py): " + ", ".join(
+        stale
     )

@@ -89,9 +89,7 @@ def test_federated_dojo_role_still_sees_full_record(federation):
 
 
 def test_cross_organisation_sees_nothing(federation):
-    outsider = Actor(
-        user_id=None, person_id=uuid.uuid4(), organization_id=uuid.uuid4()
-    )
+    outsider = Actor(user_id=None, person_id=uuid.uuid4(), organization_id=uuid.uuid4())
     assert (
         visible_person_fields(
             outsider, federation["student"], governance_model=GovernanceModel.FEDERATED
@@ -112,9 +110,7 @@ def test_redact_person_omits_withheld_fields(federation):
 
 def test_redact_person_full_under_central(federation):
     actor = _actor(federation["org"].pk, scope=ScopeType.ORG)
-    payload = redact_person(
-        actor, federation["student"], governance_model=GovernanceModel.CENTRAL
-    )
+    payload = redact_person(actor, federation["student"], governance_model=GovernanceModel.CENTRAL)
     assert payload["email"] == "parent@example.com"
 
 

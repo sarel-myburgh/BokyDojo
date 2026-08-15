@@ -34,9 +34,7 @@ def two_orgs():
             "a": a,
             "b": b,
             "dojo_b": Dojo.objects.create(organization=b, name="B Dojo", slug="rf-b-dojo"),
-            "person_a": Person.objects.create(
-                organization=a, given_name="Ana", family_name="A"
-            ),
+            "person_a": Person.objects.create(organization=a, given_name="Ana", family_name="A"),
         }
 
 
@@ -58,9 +56,7 @@ def test_bulk_create_cannot_bypass_the_cross_organisation_guard(two_orgs):
 
 def test_bulk_create_still_works_for_valid_rows(two_orgs):
     with allow_unscoped("test setup"):
-        created = StudentProfile.objects.bulk_create(
-            [StudentProfile(person=two_orgs["person_a"])]
-        )
+        created = StudentProfile.objects.bulk_create([StudentProfile(person=two_orgs["person_a"])])
     assert len(created) == 1
 
 
@@ -106,7 +102,9 @@ def test_a_soft_deleted_person_gets_no_scope(two_orgs):
 def test_a_deactivated_person_gets_no_scope(two_orgs):
     with allow_unscoped("test setup"):
         person = Person.objects.create(
-            organization=two_orgs["a"], given_name="Sus", family_name="Pended",
+            organization=two_orgs["a"],
+            given_name="Sus",
+            family_name="Pended",
             is_active=False,
         )
         user = User.objects.create_user("sus@example.com", "pw", person=person)
@@ -117,9 +115,7 @@ def test_a_deactivated_person_gets_no_scope(two_orgs):
 
 def test_an_active_person_still_gets_their_scope(two_orgs):
     with allow_unscoped("test setup"):
-        user = User.objects.create_user(
-            "fine@example.com", "pw", person=two_orgs["person_a"]
-        )
+        user = User.objects.create_user("fine@example.com", "pw", person=two_orgs["person_a"])
     actor = actor_for_user(user)
     assert actor.organization_id == two_orgs["a"].pk
 
@@ -166,9 +162,7 @@ def test_distributed_failures_still_lock_the_account(two_orgs):
     """Per-source counting must not let a botnet grind an account down for
     free — the account-wide counter still exists, just at a higher threshold."""
     for index in range(LOGIN_POLICY.max_attempts * 4):
-        register_failure(
-            "login", "spread@example.com", LOGIN_POLICY, source=f"203.0.113.{index}"
-        )
+        register_failure("login", "spread@example.com", LOGIN_POLICY, source=f"203.0.113.{index}")
     assert peek("login", "spread@example.com", LOGIN_POLICY, source="198.51.100.1").locked
 
 

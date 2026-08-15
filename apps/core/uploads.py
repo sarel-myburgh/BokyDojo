@@ -48,9 +48,7 @@ class FileKind:
 
 PDF = FileKind("PDF", (".pdf",), "application/pdf", (b"%PDF-",))
 JPEG = FileKind("JPEG", (".jpg", ".jpeg"), "image/jpeg", (b"\xff\xd8\xff",), is_image=True)
-PNG = FileKind(
-    "PNG", (".png",), "image/png", (b"\x89PNG\r\n\x1a\n",), is_image=True
-)
+PNG = FileKind("PNG", (".png",), "image/png", (b"\x89PNG\r\n\x1a\n",), is_image=True)
 GIF = FileKind("GIF", (".gif",), "image/gif", (b"GIF87a", b"GIF89a"), is_image=True)
 WEBP = FileKind("WebP", (".webp",), "image/webp", (b"WEBP",), is_image=True, offset=8)
 
@@ -120,9 +118,7 @@ def validate_upload(uploaded_file, *, max_bytes: int = MAX_UPLOAD_BYTES) -> File
 
     kind = sniff(header)
     if kind is None:
-        raise UploadRejected(
-            _("Unrecognised file type. Accepted: PDF, JPEG, PNG, GIF, WebP.")
-        )
+        raise UploadRejected(_("Unrecognised file type. Accepted: PDF, JPEG, PNG, GIF, WebP."))
 
     # A .pdf whose bytes are a JPEG is not necessarily an attack, but it is
     # always a mistake worth surfacing — and it is how extension-confusion
@@ -168,9 +164,7 @@ def strip_image_metadata(uploaded_file, kind: FileKind):
             buffer.seek(0)
             return buffer
     except Exception as exc:  # Pillow raises a wide variety here
-        raise UploadRejected(
-            _("The image could not be processed and was not accepted.")
-        ) from exc
+        raise UploadRejected(_("The image could not be processed and was not accepted.")) from exc
     finally:
         uploaded_file.seek(0)
 

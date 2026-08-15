@@ -34,6 +34,17 @@ SENSITIVE_FIELDS = frozenset(
         "secret",
         "token",
         "recovery_codes",
+        "recovery_code_hashes",
+        "totp_secret",
+        "medical_notes",
+        "allergies",
+        "conditions",
+        "medications",
+        "doctor_contact",
+        "do_not_spar",
+        "signature_name",
+        "filters",
+        "hold_reason",
     }
 )
 

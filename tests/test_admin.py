@@ -34,6 +34,7 @@ REGISTERED_CHANGE_LISTS = [
     ("identity", "instructorassignment"),
     ("identity", "enrollment"),
     ("identity", "transferrecord"),
+    ("identity", "consentpolicy"),
     ("scheduling", "classtemplate"),
     ("scheduling", "closureperiod"),
     ("scheduling", "classsession"),
@@ -63,18 +64,10 @@ def two_org_staff():
     with allow_unscoped("test setup"):
         org_a = Organization.objects.create(name="Alpha Karate", slug="alpha-admin")
         org_b = Organization.objects.create(name="Beta Kai", slug="beta-admin")
-        alice = Person.objects.create(
-            organization=org_a, given_name="Alice", family_name="Admin"
-        )
-        bob = Person.objects.create(
-            organization=org_b, given_name="Bob", family_name="Other"
-        )
-        Person.objects.create(
-            organization=org_a, given_name="Sam", family_name="StudentA"
-        )
-        Person.objects.create(
-            organization=org_b, given_name="Pat", family_name="StudentB"
-        )
+        alice = Person.objects.create(organization=org_a, given_name="Alice", family_name="Admin")
+        bob = Person.objects.create(organization=org_b, given_name="Bob", family_name="Other")
+        Person.objects.create(organization=org_a, given_name="Sam", family_name="StudentA")
+        Person.objects.create(organization=org_b, given_name="Pat", family_name="StudentB")
         RoleAssignment.objects.create(
             organization=org_a,
             person=alice,
@@ -165,6 +158,7 @@ def test_all_task_models_are_registered():
         ("identity", "guardianlink"),
         ("identity", "emergencycontact"),
         ("identity", "instructorassignment"),
+        ("identity", "consentpolicy"),
         ("ranks", "style"),
         ("ranks", "rankladder"),
         ("ranks", "rank"),
@@ -174,8 +168,6 @@ def test_all_task_models_are_registered():
         ("core", "setting"),
         ("core", "auditlog"),
     }
-    registered = {
-        (model._meta.app_label, model._meta.model_name) for model in admin.site._registry
-    }
+    registered = {(model._meta.app_label, model._meta.model_name) for model in admin.site._registry}
     missing = expected - registered
     assert not missing, f"Models not registered in admin: {missing}"

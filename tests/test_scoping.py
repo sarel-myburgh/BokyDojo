@@ -31,12 +31,8 @@ def two_orgs():
         dojo_a2 = Dojo.objects.create(organization=org_a, name="Alpha North", slug="a2")
         dojo_b1 = Dojo.objects.create(organization=org_b, name="Beta Riverside", slug="b1")
 
-        alice = Person.objects.create(
-            organization=org_a, given_name="Alice", family_name="Admin"
-        )
-        ian = Person.objects.create(
-            organization=org_a, given_name="Ian", family_name="Instructor"
-        )
+        alice = Person.objects.create(organization=org_a, given_name="Alice", family_name="Admin")
+        ian = Person.objects.create(organization=org_a, given_name="Ian", family_name="Instructor")
         bob = Person.objects.create(organization=org_b, given_name="Bob", family_name="Beta")
 
         RoleAssignment.objects.create(

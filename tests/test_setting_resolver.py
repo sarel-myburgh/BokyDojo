@@ -68,9 +68,7 @@ def test_org_value_is_inherited_by_everything_below(org_and_dojo, chain):
 def test_more_specific_scope_overrides_less_specific(org_and_dojo, chain):
     org, dojo = org_and_dojo
     set_value(KIOSK, "name_list", organization_id=org.pk, scope_type=Scope.ORG)
-    set_value(
-        KIOSK, "photo_grid", organization_id=org.pk, scope_type=Scope.DOJO, scope_id=dojo.pk
-    )
+    set_value(KIOSK, "photo_grid", organization_id=org.pk, scope_type=Scope.DOJO, scope_id=dojo.pk)
     assert resolve(KIOSK, chain) == "photo_grid"
 
 
@@ -167,7 +165,10 @@ def test_setting_at_a_disallowed_scope_is_rejected(org_and_dojo):
     org, _dojo = org_and_dojo
     with pytest.raises(InvalidSettingValue):
         set_value(
-            KIOSK, "name_list", organization_id=org.pk, scope_type=Scope.STUDENT,
+            KIOSK,
+            "name_list",
+            organization_id=org.pk,
+            scope_type=Scope.STUDENT,
             scope_id=STUDENT_ID,
         )
 
@@ -175,9 +176,7 @@ def test_setting_at_a_disallowed_scope_is_rejected(org_and_dojo):
 def test_org_scope_rejects_a_scope_id(org_and_dojo):
     org, _dojo = org_and_dojo
     with pytest.raises(ValueError):
-        set_value(
-            KIOSK, "name_list", organization_id=org.pk, scope_type=Scope.ORG, scope_id=org.pk
-        )
+        set_value(KIOSK, "name_list", organization_id=org.pk, scope_type=Scope.ORG, scope_id=org.pk)
 
 
 def test_non_org_scope_requires_a_scope_id(org_and_dojo):
