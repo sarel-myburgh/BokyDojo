@@ -92,7 +92,11 @@ def test_default_visibility_is_instructors(note):
 
 
 def test_all_visibility_choices_exist():
-    assert len(Note.Visibility) == 4
+    """Counting them proves nothing about enforcement — see test_note_visibility.py
+    for private/instructors/admins/parent_visible and test_safeguarding_notes.py
+    for the fifth. This only pins that a level is not silently dropped."""
+    assert len(Note.Visibility) == 5
+    assert Note.Visibility.SAFEGUARDING in Note.Visibility
 
 
 # -- subject types -------------------------------------------------------------

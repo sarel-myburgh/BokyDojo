@@ -45,6 +45,11 @@ SENSITIVE_FIELDS = frozenset(
         "signature_name",
         "filters",
         "hold_reason",
+        # Note bodies are encrypted at rest (SEC §4). Copying one into a
+        # before/after snapshot would write it back out in plaintext, so the
+        # audit trail would become the easiest place to read the safeguarding
+        # note you are not allowed to see.
+        "body",
     }
 )
 

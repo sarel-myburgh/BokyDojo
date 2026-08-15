@@ -1,10 +1,14 @@
-"""Note model — TODO 1.8.1, 1.8.2 and 1.8.3, plan §4.7.
+"""Note model — TODO 1.8.1, 1.8.2, 1.8.3 and 1.8.4, plan §4.7.
 
 Polymorphic note attachable to a student, a session, an enrolment or an invoice.
 Pinned notes surface on the student header via the custom queryset helper.
 
 ⚠ Read notes through ``Note.objects...visible_to(actor, subject=...)``. Tenant
 scoping alone will hand back every visibility level, private notes included.
+
+⚠ ``visible_to`` never returns a ``safeguarding`` note. Those are read only
+through ``apps.core.safeguarding.view_safeguarding_notes``, which checks the
+named role and writes the access log SEC §4 requires.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
+from apps.core.fields import EncryptedTextField
 from apps.core.ids import uuid7
 from apps.core.managers import ScopedManager, ScopedQuerySet
 from apps.core.models import TenantScopedModel
@@ -106,7 +111,15 @@ class NoteQuerySet(ScopedQuerySet):
 
         if not clauses:
             return self.none()
-        return self.filter(reduce(operator.or_, clauses))
+        # ⚠ Excluded last and unconditionally, so no clause above can grant it —
+        # not the author's own, not an admin's. A safeguarding note is reached
+        # only through view_safeguarding_notes(), which checks the named role and
+        # writes the access log. Authorship is not a standing entitlement here:
+        # whoever wrote it may since have left the safeguarding role, and SEC §4
+        # says "restricted to a named role", not "to a role or whoever typed it".
+        return self.filter(reduce(operator.or_, clauses)).exclude(
+            visibility=Note.Visibility.SAFEGUARDING
+        )
 
 
 class NoteManager(ScopedManager.from_queryset(NoteQuerySet)):
@@ -133,6 +146,13 @@ class Note(TenantScopedModel):
         INSTRUCTORS = "instructors", _("Instructors at this dojo")
         ADMINS = "admins", _("Dojo and org administrators")
         PARENT_VISIBLE = "parent_visible", _("Student's guardians can read it")
+        #: ⚠ Task 1.8.4 / SEC §4. "Father not authorised for pickup" is the
+        #: canonical example: it must reach the safeguarding officer and nobody
+        #: else — not every assistant instructor, and not the dojo admin. Never
+        #: returned by ``visible_to``; read it through
+        #: ``apps.core.safeguarding.view_safeguarding_notes``, which is the only
+        #: path that checks the role and writes the access log.
+        SAFEGUARDING = "safeguarding", _("Safeguarding — named role only")
 
     id = models.UUIDField(primary_key=True, default=uuid7, editable=False)
     organization = models.ForeignKey(
@@ -154,7 +174,13 @@ class Note(TenantScopedModel):
         on_delete=models.SET_NULL,
         related_name="authored_notes",
     )
-    body = models.TextField(_("body"))
+    #: ⚠ Encrypted at rest — SEC §4 requires it for safeguarding notes, and the
+    #: column is shared, so *every* note body is encrypted rather than only
+    #: some. That is the stricter reading and the only one this field type can
+    #: express: encryption is a property of the column, not of a row.
+    #: Consequence: note bodies can never be searched. If a note search is ever
+    #: wanted it must exclude safeguarding notes by construction, not by filter.
+    body = EncryptedTextField(_("body"))
     visibility = models.CharField(
         _("visibility"),
         max_length=16,
@@ -179,8 +205,14 @@ class Note(TenantScopedModel):
         ]
 
     def __str__(self) -> str:
+        subject = f"{self.subject_type}:{self.subject_id}"
+        # ⚠ A safeguarding note never previews its body. __str__ is what the
+        # admin changelist, `repr` in a traceback and a stray log line all end up
+        # printing, and "father not authorised for pickup" must not leak through
+        # any of them to somebody without the role.
+        if self.visibility == self.Visibility.SAFEGUARDING:
+            return f"Safeguarding note on {subject}"
         preview = self.body[:60].replace("\n", " ")
         if len(self.body) > 60:
             preview += "…"
-        subject = f"{self.subject_type}:{self.subject_id}"
         return f"Note on {subject}: {preview}"

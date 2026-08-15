@@ -232,6 +232,18 @@ def _random_email(given: str, family: str, org_slug: str) -> str:
 # cannot mail a real person. It is exactly as short to type as a real domain.
 DEMO_EMAIL_DOMAIN = "karate.test"
 
+#: Demo safeguarding notes — TODO 1.8.4, SEC §4. ⚠ Invented, about invented
+#: children, and to be replaced before this is shown to a real dojo. The first is
+#: the example §4 itself gives, because it is the one that explains the control:
+#: it must reach the safeguarding officer and stop there.
+SAFEGUARDING_BODIES = [
+    "Father is not authorised for collection. Mother or the named aunt only.",
+    "Court order on file restricting contact. Speak to the safeguarding lead "
+    "before discussing attendance with either parent.",
+    "Bruising noted and recorded on 3 separate occasions. Logged with the "
+    "designated officer; no action pending at this time.",
+]
+
 
 class _DemoLogins:
     """Hands out short, predictable demo addresses and remembers the first of each."""
@@ -321,6 +333,7 @@ class Command(BaseCommand):
             (Role.ORG_ADMIN, "admin", "admin123!"),
             (Role.DOJO_ADMIN, "dojoadmin", "instructor123!"),
             (Role.INSTRUCTOR, "instructor", "instructor123!"),
+            (Role.SAFEGUARDING, "safeguarding", "safeguarding123!"),
             (Role.GUARDIAN, "parent", "parent123!"),
         ):
             email = self.logins.canonical.get(label)
@@ -521,6 +534,31 @@ class Command(BaseCommand):
                         scope_type=ScopeType.DOJO,
                         dojo=dojo,
                     )
+
+                # One safeguarding officer per dojo — TODO 1.8.4, SEC §4.
+                # ⚠ A named role, held by one person, deliberately separate from
+                # the dojo admin. The demo needs a holder or the safeguarding
+                # notes below are unreadable by anybody and the restriction looks
+                # like a feature that does nothing.
+                sg_person = self._create_person(
+                    org,
+                    random.choice(JAPANESE_GIVEN_NAMES),
+                    random.choice(JAPANESE_FAMILY_NAMES),
+                    org_slug=org.slug,
+                    is_khmer=random.random() > 0.5,
+                )
+                User.objects.create_user(
+                    email=self.logins.allocate("safeguarding"),
+                    password="safeguarding123!",
+                    person=sg_person,
+                )
+                RoleAssignment.objects.create(
+                    organization=org,
+                    person=sg_person,
+                    role=Role.SAFEGUARDING,
+                    scope_type=ScopeType.DOJO,
+                    dojo=dojo,
+                )
 
                 # Create students
                 num_students = 60 if len(org_dojos) > 1 else 80
@@ -723,7 +761,10 @@ class Command(BaseCommand):
         one instructor and then another shows a *different* set of notes on the
         same student. That difference is the feature.
         """
-        # Demo wording. ⚠ Replace before showing this to a real dojo.
+        # Demo wording. ⚠ Replace before showing this to a real dojo. The
+        # safeguarding lines are invented, and about invented children — but they
+        # are the shape of the real thing, which is why they are marked here and
+        # why the seed refuses to run outside dev and test.
         by_level = {
             Note.Visibility.INSTRUCTORS: [
                 "Struggling with the turn in heian nidan — worth five minutes at the start.",
@@ -756,9 +797,34 @@ class Command(BaseCommand):
                         role_assignments__role__in=[Role.INSTRUCTOR, Role.DOJO_ADMIN],
                     ).distinct()
                 )
+                officers = list(
+                    Person.objects.filter(
+                        organization=org,
+                        role_assignments__dojo=dojo,
+                        role_assignments__role=Role.SAFEGUARDING,
+                    ).distinct()
+                )
                 students = list(StudentProfile.objects.filter(home_dojo=dojo))
                 if not instructors or not students:
                     continue
+
+                # ⚠ Safeguarding notes are authored only by the officer, and only
+                # for a couple of students per dojo — TODO 1.8.4, SEC §4. They are
+                # seeded at all so the demo can show the control working: sign in
+                # as the org admin and these are absent, sign in as the officer
+                # and they appear, and the access is logged either way.
+                for profile in random.sample(students, min(2, len(students))):
+                    if not officers:
+                        break
+                    Note.objects.create(
+                        organization=org,
+                        author=random.choice(officers),
+                        subject_type=Note.SubjectType.STUDENT,
+                        subject_id=profile.person_id,
+                        body=random.choice(SAFEGUARDING_BODIES),
+                        visibility=Note.Visibility.SAFEGUARDING,
+                    )
+                    note_count += 1
 
                 for profile in students:
                     # Not every student has been written about. A file that is

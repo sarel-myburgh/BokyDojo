@@ -434,7 +434,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1010 passing, 44 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1048 passing, 45 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -548,12 +548,50 @@ OUTPUT
   dojo admin sees `admins` + `instructors` and not that private note.
   **Lesson, twice over now: when a feature is ticked, check the seed exercises
   it.** A demo that renders an empty tab teaches the reader it is missing.
+- **`1.8.4` is done.** SEC §4 asks for three things and each is enforced in a
+  different place, deliberately:
+  - **Encrypted.** `Note.body` is now an `EncryptedTextField`. ⚠ Encryption is a
+    property of the *column*, not of a row, so **every** note body is encrypted,
+    not only safeguarding ones — the stricter reading, and the only one the
+    field type can express. Consequence: note bodies can never be searched. A
+    note search, if ever wanted, must exclude safeguarding notes by construction
+    rather than by filter. Migration `core/0008` encrypts existing rows in place
+    and is reversible.
+  - **Restricted to a named role.** `Note.Visibility.SAFEGUARDING`, reachable
+    only through `apps.core.safeguarding.view_safeguarding_notes`.
+    ⚠ `visible_to` excludes it **unconditionally, last** — so no clause can
+    grant it, not an admin's and *not the author's own*. Whoever wrote it may
+    since have left the role; §4 says "restricted to a named role", not "to a
+    role or whoever typed it". A new screen therefore cannot leak one by
+    forgetting a filter; it has to go and ask deliberately.
+  - **Access-logged.** The service is eager, not a queryset, precisely so "log
+    every access" is implementable — a lazy queryset may be evaluated never,
+    once or repeatedly. Logged even when the result is empty, because someone
+    going looking is the event. The log is `strict` and inside the transaction,
+    so a failed write rolls back rather than serving an unlogged read.
+    `actor_label` is written explicitly: `actor_person` is `SET_NULL`, and this
+    is the log read years later about staff who have left.
+  - `body` joins `audit.SENSITIVE_FIELDS`, and `Note.__str__` refuses to preview
+    a safeguarding body — it is what admin changelists and tracebacks print.
+  - The student detail page shows the section to the officer only, and fetches
+    it **only when the notes tab is actually open**, or every page view would
+    log an access and bury the signal.
+  - 30 tests, checked against six broken variants (encryption dropped,
+    `visible_to` exclusion removed, access log removed, `body` back in audit
+    snapshots, and the backfill no-opped in each direction).
+  - ⚠ Verified on seeded data, not just in tests: the officer sees the note, the
+    org admin and the instructor see neither it nor the section's heading, and
+    those three page visits produced exactly **one** access-log entry.
+- ⚠ **Third seed gap in a row** — the seed had no `Role.SAFEGUARDING` holder and
+  no safeguarding notes, so the control would have looked like a feature that
+  does nothing. There is now one officer per dojo (`safeguarding@karate.test` /
+  `safeguarding123!`) and a couple of notes per dojo. **When a task is ticked,
+  check the seed exercises it**; that is now three features found dark this way.
 - **Best next tasks in Phase 1**, in dependency order:
-  - `1.8.4` safeguarding notes — now unblocked. Needs a safeguarding level added
-    to `Note.Visibility` (restricted to `Role.SAFEGUARDING`), an encrypted
-    `body`, and access logging. ⚠ `body` is a plain `TextField` today, so this
-    needs a migration that encrypts in place, and encrypted columns cannot be
-    filtered, ordered or indexed.
+  - There is still **no UI for writing a note at all** — every note in the app
+    arrives from the seed or the admin. `1.8.x` is complete as specified, but a
+    safeguarding officer cannot yet record the thing the feature exists for.
+    Worth a task of its own before the kiosk.
   - `1.4.5` / `1.4.8` / `1.4.9` scheduling gaps, then the `1.7.x` kiosk (12
     tasks, none started) and `1.10.x` import (7 tasks, none started).
 - ⚠ **Never edit TODO.md with PowerShell `Get-Content -Raw` / `Set-Content`.**
@@ -888,7 +926,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.8.1` `[DS]` `Note` — polymorphic subject, visibility levels, pinned `§4.7`
 - [x] `1.8.2` ⚠ Visibility enforcement: `private` / `instructors` / `admins` / `parent_visible`
 - [x] `1.8.3` `[DS]` Pinned notes surface on the student header
-- [ ] `1.8.4` ⚠ Safeguarding notes restricted to a named role, encrypted, access-logged `SEC §4`
+- [x] `1.8.4` ⚠ Safeguarding notes restricted to a named role, encrypted, access-logged `SEC §4`
 
 ### 1.9 Instructor time (basic)
 - [x] `1.9.1` `[DS]` `InstructorProfile` — pay type, rate, currency `§4.2`

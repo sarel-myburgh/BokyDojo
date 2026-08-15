@@ -18,7 +18,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.attendance.models import AttendanceRecord
-from apps.core import audit
+from apps.core import audit, safeguarding
 from apps.core.documents import may_read
 from apps.core.models import Document
 from apps.core.notes import Note
@@ -423,6 +423,17 @@ def student_detail_view(request, person_id):
         )
 
     notes = list(_visible_student_notes(actor, profile, governance))
+
+    # ⚠ Safeguarding notes are fetched only when the tab is actually open, and
+    # only through the service that writes the access log — TODO 1.8.4, SEC §4.
+    # Loading them alongside the ordinary notes would log an access every time
+    # anybody opened any tab of this page, which makes "who read this child's
+    # safeguarding file" unanswerable by burying it in noise.
+    may_view_safeguarding = safeguarding.may_view_safeguarding(actor, profile)
+    safeguarding_notes = []
+    if may_view_safeguarding and tab == "notes":
+        safeguarding_notes = safeguarding.view_safeguarding_notes(subject=profile, actor=actor)
+
     documents = []
     if show_private and tab == "documents":
         documents = [
@@ -523,6 +534,8 @@ def student_detail_view(request, person_id):
             "attendance": attendance,
             "tracks": tracks,
             "notes": notes,
+            "safeguarding_notes": safeguarding_notes,
+            "may_view_safeguarding": may_view_safeguarding,
             "documents": documents,
             "guardians": guardians,
             "emergency_contacts": emergency_contacts,
