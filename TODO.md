@@ -506,17 +506,20 @@ OUTPUT
   **decided** — AGPL-3.0-or-later plus a commercial exception; `LICENSE` is in
   place. `D10` (pilot dojo) still blocks the Phase 1 exit gate `1.12`, and only
   that.
-- ⚠⚠ **Almost none of Phase 1 is committed.** `git status` shows ~70 untracked
-  paths covering work that is *ticked as done*: all of MFA / password reset / CSP
-  (`0.6.2`, `0.6.3`, `0.6.6`, `0.6.7`), backups (`0.7.3`), the first-run wizard
-  (`0.7.4`), medical fields (`1.1.2`), guardians (`1.1.4`), every consent flow
-  (`1.1.6`–`1.1.8`), the student directory, segments, detail hub, lifecycle and
-  photos (`1.1.9`–`1.1.14`), promotions (`1.2.6`–`1.2.8`), **the entire PWA in
-  `static/js/`** (`1.6.1`–`1.6.5`), 11 migrations, and ~20 test files. It exists
-  only in this working tree. Rule 1 of the workflow section — never leave work
-  uncommitted — has been broken at scale, and a single `git clean` would delete
-  most of Phase 1. **Commit this before starting anything new.**
-  `/node_modules/` has been added to `.gitignore` so `git add -A` is safe;
+- ✅ **The Phase 1 backlog is committed.** For eleven days ~70 untracked paths
+  held work that was *ticked as done* — all of MFA / password reset / CSP, the
+  backups, the first-run wizard, medical fields, guardians, every consent flow,
+  the whole student directory / detail / lifecycle / photos group, promotions,
+  **the entire PWA in `static/js/`**, 11 migrations and ~20 test files. One
+  `git clean` would have deleted most of Phase 1. It is now in `main` as twelve
+  themed commits, `dcd7236`..`54573a1`, working tree clean.
+  ⚠ Those commits are grouped for *readability*, not bisectability: shared files
+  (`identity/models.py`, `config/urls.py`, the settings module) landed early and
+  whole, so an individual commit in that range is not independently green. The
+  tree as a whole is — do not `git bisect` across them expecting a build.
+  **Do not let it drift again**: rule 1 of the workflow section is never leave
+  work uncommitted.
+  `/node_modules/` is in `.gitignore` so `git add -A` is safe;
   `static/css/tailwind.css` is intentionally *not* ignored, because the CSP
   forbids a CDN and a Node-less checkout still has to render.
 - **Deviations from the plan so far:**
