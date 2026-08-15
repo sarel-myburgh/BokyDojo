@@ -23,6 +23,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from apps.attendance.models import AttendanceRecord
+from apps.core.notes import Note
 from apps.core.scoping import Actor, allow_unscoped
 from apps.identity.models import (
     ConsentPolicy,
@@ -293,6 +294,9 @@ class Command(BaseCommand):
             self.stdout.write("Seeding rank tracks and grading history...")
             self._create_rank_tracks(ladders)
 
+            self.stdout.write("Seeding notes...")
+            self._create_notes(dojos)
+
             self.stdout.write("Seeding class templates...")
             self._create_class_templates(dojos)
 
@@ -336,6 +340,7 @@ class Command(BaseCommand):
         a separate, deliberate command.
         """
         ordered_models = [
+            Note,
             AttendanceRecord,
             ClassSession,
             ClassTemplate,
@@ -705,6 +710,87 @@ class Command(BaseCommand):
                     award_count += 1
 
         self.stdout.write(f"  Created {track_count} rank tracks and {award_count} awards.")
+
+    def _create_notes(self, dojos: dict) -> None:
+        """Notes across all four visibility levels — TODO 1.8.1/1.8.2/1.8.3.
+
+        ⚠ The same gap the rank tracks had: the levels were implemented and the
+        demo used none of them, so the notes tab, the pinned header alerts and
+        the whole visibility filter were invisible to anyone clicking through.
+        An empty tab teaches the reader that the feature is missing.
+
+        Every level appears, including `private`, precisely so that signing in as
+        one instructor and then another shows a *different* set of notes on the
+        same student. That difference is the feature.
+        """
+        # Demo wording. ⚠ Replace before showing this to a real dojo.
+        by_level = {
+            Note.Visibility.INSTRUCTORS: [
+                "Struggling with the turn in heian nidan — worth five minutes at the start.",
+                "Grading-ready on kata, still hesitant in kumite.",
+                "Left knee strapped this month; keep an eye on the stances.",
+            ],
+            Note.Visibility.PARENT_VISIBLE: [
+                "Excellent focus this term. Ready to be pushed a little harder.",
+                "Has grown out of the current gi — a size up before the next grading.",
+            ],
+            Note.Visibility.ADMINS: [
+                "Fees discussed with the family; office to follow up next month.",
+                "Sibling discount to be applied from the next billing run.",
+            ],
+            Note.Visibility.PRIVATE: [
+                "My own reminder: pair with a calmer partner next session.",
+            ],
+        }
+        levels = list(by_level)
+        weights = [60, 20, 15, 5]
+
+        note_count = 0
+        pinned_count = 0
+        for org, org_dojos in dojos.items():
+            for dojo in org_dojos:
+                instructors = list(
+                    Person.objects.filter(
+                        organization=org,
+                        role_assignments__dojo=dojo,
+                        role_assignments__role__in=[Role.INSTRUCTOR, Role.DOJO_ADMIN],
+                    ).distinct()
+                )
+                students = list(StudentProfile.objects.filter(home_dojo=dojo))
+                if not instructors or not students:
+                    continue
+
+                for profile in students:
+                    # Not every student has been written about. A file that is
+                    # empty for most people is the honest shape of this feature.
+                    if random.random() > 0.45:
+                        continue
+
+                    # ⚠ Several notes at *different* levels on the same student,
+                    # written by *different* instructors. One note per student
+                    # cannot show the visibility rules working: the demo has to
+                    # be able to sign in as two people and get two answers about
+                    # the same child.
+                    chosen = set()
+                    for _ in range(random.randint(1, 3)):
+                        chosen.add(random.choices(levels, weights=weights)[0])
+                    for level in chosen:
+                        # One note in eight is pinned, so the student header's
+                        # alert strip (1.8.3) has something to surface.
+                        pinned = random.randint(1, 8) == 1
+                        Note.objects.create(
+                            organization=org,
+                            author=random.choice(instructors),
+                            subject_type=Note.SubjectType.STUDENT,
+                            subject_id=profile.person_id,
+                            body=random.choice(by_level[level]),
+                            visibility=level,
+                            pinned=pinned,
+                        )
+                        note_count += 1
+                        pinned_count += 1 if pinned else 0
+
+        self.stdout.write(f"  Created {note_count} notes ({pinned_count} pinned).")
 
     def _create_class_templates(self, dojos: dict) -> None:
         """A believable weekly timetable per dojo — TODO 1.4.1."""

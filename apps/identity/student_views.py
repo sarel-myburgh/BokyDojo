@@ -364,15 +364,16 @@ DETAIL_TABS = ("attendance", "rank", "notes", "billing", "documents", "family")
 
 
 def _visible_student_notes(actor, profile, governance):
-    allowed = Q(author_id=actor.person_id)
-    if can(actor, Action.NOTE_VIEW_INSTRUCTOR, profile, governance_model=governance):
-        allowed |= Q(visibility__in=[Note.Visibility.INSTRUCTORS, Note.Visibility.PARENT_VISIBLE])
-    if can(actor, Action.NOTE_VIEW_ADMIN, profile, governance_model=governance):
-        allowed |= Q(visibility=Note.Visibility.ADMINS)
+    """This student's notes, filtered to what this actor may read.
+
+    The visibility rules themselves live on the queryset (TODO 1.8.2) rather
+    than here — they used to be inline, which meant the next screen to read a
+    note would have had to reimplement them or quietly go without.
+    """
     return (
         Note.objects.for_actor(actor)
         .filter(subject_type=Note.SubjectType.STUDENT, subject_id=profile.person_id)
-        .filter(allowed)
+        .visible_to(actor, subject=profile, governance_model=governance)
         .select_related("author")
     )
 

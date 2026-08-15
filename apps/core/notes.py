@@ -1,12 +1,19 @@
-"""Note model — TODO 1.8.1 and 1.8.3, plan §4.7.
+"""Note model — TODO 1.8.1, 1.8.2 and 1.8.3, plan §4.7.
 
 Polymorphic note attachable to a student, a session, an enrolment or an invoice.
 Pinned notes surface on the student header via the custom queryset helper.
+
+⚠ Read notes through ``Note.objects...visible_to(actor, subject=...)``. Tenant
+scoping alone will hand back every visibility level, private notes included.
 """
 
 from __future__ import annotations
 
+import operator
+from functools import reduce
+
 from django.db import models
+from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.ids import uuid7
@@ -24,6 +31,82 @@ class NoteQuerySet(ScopedQuerySet):
             subject_id=subject_id,
             pinned=True,
         ).order_by("-created_at")
+
+    def visible_to(self, actor, *, subject=None, governance_model=None) -> NoteQuerySet:
+        """Apply the visibility levels — TODO 1.8.2, plan §4.7.
+
+        ⚠ **This is the only sanctioned way to read notes as somebody.**
+        Tenant scoping (``for_actor``) answers "which organisation's notes", which
+        is a different question from "which of them may this person read". A note
+        marked ``private`` belongs to its author alone, and an instructor and a
+        dojo admin standing in the same room are entitled to different subsets of
+        the same student's file. Reach for ``Note.objects`` without this and you
+        get every level, including somebody else's private note.
+
+        ``subject`` is the record the notes hang off — usually a
+        ``StudentProfile``. It is what carries the dojo, so it decides whether a
+        dojo-scoped instructor's permission actually reaches these notes; a Note
+        itself has an organisation but no dojo, so passing one to ``can()`` would
+        deny every dojo-scoped role.
+
+        The levels:
+
+        - ``private`` — the author, and nobody else. Not admins, not the owner.
+        - ``instructors`` — anyone holding ``NOTE_VIEW_INSTRUCTOR`` over the
+          subject.
+        - ``admins`` — anyone holding ``NOTE_VIEW_ADMIN`` over the subject.
+          Deliberately *not* implied by the instructor permission: "escalate this
+          to the office" is the whole point of the level.
+        - ``parent_visible`` — as ``instructors``, plus a guardian of that
+          student, established through ``GuardianLink``. A guardian of a
+          different child gets nothing.
+
+        Unknown or anonymous actors get nothing. Failing closed here matters more
+        than anywhere else in the app: these are the notes about children.
+        """
+        from apps.identity.models import GovernanceModel, GuardianLink
+        from apps.identity.permissions import Action, can
+
+        if actor is None or getattr(actor, "is_anonymous", False):
+            return self.none()
+        if getattr(actor, "is_system", False):
+            return self
+
+        if governance_model is None:
+            governance_model = GovernanceModel.CENTRAL
+
+        clauses = []
+        person_id = getattr(actor, "person_id", None)
+
+        # ⚠ Guard the None. `Q(author_id=None)` is not "no author clause", it is
+        # `author_id IS NULL` — which matches every system-written, authorless
+        # note and hands them to any actor that happens to have no Person.
+        if person_id is not None:
+            clauses.append(Q(author_id=person_id))
+
+        if can(actor, Action.NOTE_VIEW_INSTRUCTOR, subject, governance_model=governance_model):
+            clauses.append(
+                Q(visibility__in=[Note.Visibility.INSTRUCTORS, Note.Visibility.PARENT_VISIBLE])
+            )
+
+        if can(actor, Action.NOTE_VIEW_ADMIN, subject, governance_model=governance_model):
+            clauses.append(Q(visibility=Note.Visibility.ADMINS))
+
+        if person_id is not None:
+            guarded = (
+                GuardianLink.objects.for_organization(actor.organization_id)
+                .filter(guardian_id=person_id)
+                .values_list("student_id", flat=True)
+            )
+            clauses.append(
+                Q(visibility=Note.Visibility.PARENT_VISIBLE)
+                & Q(subject_type=Note.SubjectType.STUDENT)
+                & Q(subject_id__in=guarded)
+            )
+
+        if not clauses:
+            return self.none()
+        return self.filter(reduce(operator.or_, clauses))
 
 
 class NoteManager(ScopedManager.from_queryset(NoteQuerySet)):

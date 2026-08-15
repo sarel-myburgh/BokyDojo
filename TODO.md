@@ -434,7 +434,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 994 passing, 44 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1010 passing, 44 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -480,14 +480,39 @@ OUTPUT
      *both* sorts, because the adult grades I picked happened to sort the same
      either way; it only bites now because it uses the mon ladder. **Check that
      an ordering test fails against the old ordering before trusting it.**
+- **`1.8.2` is done.** Visibility used to be honoured in exactly one place — an
+  inline `Q` in `_visible_student_notes` — so the next screen to read a note
+  would have had to reimplement the rules or quietly go without. It now lives on
+  the queryset as `Note.objects...visible_to(actor, subject=..., governance_model=...)`
+  and that helper delegates to it. ⚠ **Read notes through `visible_to`.**
+  `for_actor` answers "which organisation's notes", which is a different
+  question from "which of them may this person read"; scoping alone hands back
+  every level, private notes included. `subject` is the record that carries the
+  dojo (usually the `StudentProfile`) — a Note has an organisation but no dojo,
+  so passing a Note to `can()` denies every dojo-scoped role.
+  `parent_visible` now genuinely reaches a guardian of *that* child through
+  `GuardianLink`; a guardian of another child gets nothing. There is still no
+  parent-facing surface — `3.2` has to build one before a parent can use it.
+  16 tests in `tests/test_note_visibility.py`, mutation-checked against three
+  broken variants (no enforcement, guardian branch ignoring which child, admin
+  folded into the instructor grant).
+- ⚠ **The seed had the same hole for notes that it had for ranks:** zero `Note`
+  rows, so the notes tab, the pinned header alerts (`1.8.3`) and the whole
+  visibility filter were invisible to anyone clicking through. `_create_notes`
+  now writes across all four levels, several notes per student **by different
+  instructors**, because one note per student cannot demonstrate the rules —
+  the demo has to let you sign in as two people and get two answers about the
+  same child. Verified on seeded data: the private note's author (a plain
+  instructor) sees `instructors` + their own `private` and not `admins`; the
+  dojo admin sees `admins` + `instructors` and not that private note.
+  **Lesson, twice over now: when a feature is ticked, check the seed exercises
+  it.** A demo that renders an empty tab teaches the reader it is missing.
 - **Best next tasks in Phase 1**, in dependency order:
-  - `1.8.2` note visibility enforcement. `Note.visibility` is stored and
-    honoured in exactly one place — `_visible_student_notes` in
-    `apps/identity/student_views.py`, a view-local helper. There is no canonical
-    queryset-level enforcement and no note-writing UI, so the next reader of
-    `Note.objects` gets no protection. `1.8.4` (safeguarding) is not startable
-    until this is: the `Visibility` choices have no safeguarding level and
-    `body` is a plain `TextField`, not encrypted.
+  - `1.8.4` safeguarding notes — now unblocked. Needs a safeguarding level added
+    to `Note.Visibility` (restricted to `Role.SAFEGUARDING`), an encrypted
+    `body`, and access logging. ⚠ `body` is a plain `TextField` today, so this
+    needs a migration that encrypts in place, and encrypted columns cannot be
+    filtered, ordered or indexed.
   - `1.4.5` / `1.4.8` / `1.4.9` scheduling gaps, then the `1.7.x` kiosk (12
     tasks, none started) and `1.10.x` import (7 tasks, none started).
 - ⚠ **Never edit TODO.md with PowerShell `Get-Content -Raw` / `Set-Content`.**
@@ -820,7 +845,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 
 ### 1.8 Notes
 - [x] `1.8.1` `[DS]` `Note` — polymorphic subject, visibility levels, pinned `§4.7`
-- [ ] `1.8.2` ⚠ Visibility enforcement: `private` / `instructors` / `admins` / `parent_visible`
+- [x] `1.8.2` ⚠ Visibility enforcement: `private` / `instructors` / `admins` / `parent_visible`
 - [x] `1.8.3` `[DS]` Pinned notes surface on the student header
 - [ ] `1.8.4` ⚠ Safeguarding notes restricted to a named role, encrypted, access-logged `SEC §4`
 
