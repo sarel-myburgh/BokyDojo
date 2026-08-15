@@ -20,28 +20,86 @@ These apply to every task, including delegated ones. Violating these is the most
 
 ## Development Setup
 
+The short version — this creates the virtual environment, installs everything,
+migrates, seeds a demo and serves it:
+
 ```bash
-# 1. Clone and set up environment
 cp .env.example .env
-# Edit .env with your settings
+bash start.sh
+```
 
-# 2. Install dependencies
-pip install -e ".[dev]"
+The long version, if you would rather do it by hand:
 
-# 3. Run migrations
+```bash
+cp .env.example .env
+
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[dev]"
+
 make migrate
-
-# 4. Start development server
+make seed
 make dev
 ```
+
+Requires Python 3.12+ and, only if you intend to change a template, Node 18+.
+
+⚠ **Do not use a bare `pip`, `python`, `pytest` or `ruff`.** They resolve only
+inside an *activated* environment, and on many Linux distributions `python` does
+not exist at all — only `python3`. Every `make` target runs tools as
+`$(PYTHON) -m <tool>` for exactly this reason. If a target dies with
+`pytest: not found`, run `make venv` first: it prints which interpreter is being
+used and whether Django is importable, and the answer is almost always a wrong
+Python rather than a missing tool.
+
+⚠ **`python3 -m venv` fails on Debian and Ubuntu without `python3-venv`**, which
+packages `ensurepip` separately. `start.sh` handles this by building the
+environment with `--without-pip` and bootstrapping pip into it; by hand, either
+install the distribution package or do the same.
+
+⚠ **A `.venv` created on Windows cannot run on Linux.** Its layout is
+`Scripts/python.exe`, and on an NTFS or DrvFs mount every file reads as
+executable — so naive `-x` checks select a Windows binary and everything
+afterwards fails confusingly. `start.sh` and the `Makefile` both *execute* a
+candidate interpreter to prove it runs before trusting it, and fall back to an
+environment outside the tree (`$HOME/.cache/dojomaster-venv`, overridable with
+`DOJOMASTER_VENV`). The same applies under WSL, where the environment must live
+outside `/mnt/c`.
+
+### Front end
+
+There is no JavaScript build step, but the stylesheet is compiled:
+
+```bash
+npm install
+npm run build:css   # after ANY template change
+npm run test:js
+```
+
+⚠ **Run `npm run build:css` after touching any template**, or newly used utility
+classes are simply absent from the compiled stylesheet and the page renders
+unstyled in places. `static/css/tailwind.css` is committed on purpose: the CSP
+forbids a runtime CDN, so a checkout with no Node installed still has to render.
+
+⚠ On a checkout made on Windows, `node_modules/.bin/tailwindcss` may arrive
+without its executable bit and the build fails with `Permission denied`. Fix
+with `chmod +x node_modules/.bin/tailwindcss`.
 
 ## Running Checks
 
 ```bash
-make check    # lint + test
+make check    # lint + test — run this before committing
 make lint     # ruff check + format check
 make test     # pytest
 make format   # auto-fix linting and formatting
+make venv     # report the interpreter these targets will use
+```
+
+The full gate, matching what the suite is expected to pass:
+
+```bash
+make check
+python manage.py makemigrations --check --dry-run --settings config.settings.test
+npm run test:js
 ```
 
 ## Project Structure

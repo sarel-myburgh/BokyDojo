@@ -439,17 +439,36 @@ OUTPUT
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
   `.venv/Scripts/python.exe -m pytest`.
-- 🐧 **Running on native Linux now, not WSL/Windows.** The checked-in `.venv/` is
-  a *Windows* venv (`Scripts/`, `Lib/`) and is useless here. This box has only
-  Python 3.14, no `pip`, no `ensurepip` and no sudo, so the venv was rebuilt with
-  `python3 -m venv --without-pip` plus a downloaded `get-pip.py`, then
-  `pip install -e ".[dev]"`. Django resolves to **5.2.17 on Python 3.14** — one
-  version and one interpreter ahead of what the rest of this file assumes, and
-  the whole suite passes on it. Same path as before:
-  `$HOME/.cache/dojomaster-venv/bin/pytest`.
+- 🐧 **Running on native Linux now, not WSL/Windows — and the tooling assumed
+  otherwise.** Every documented command was broken on a plain Linux box:
+  `make test` died with `pytest: not found`, `make lint` with `ruff: No such
+  file`, and `bash start.sh` selected the **Windows** `.venv/Scripts/python.exe`
+  and then advised running a `.exe` to fix it. The suite was green the whole
+  time, which is why nobody noticed. All fixed:
+  - `start.sh` creates the environment on *any* platform, not only under WSL,
+    and proves a candidate interpreter by **executing** it. ⚠ A Windows checkout
+    marks every file executable on an NTFS/DrvFs mount, so `[[ -x ]]` cheerfully
+    accepts a Windows binary on Linux.
+  - It recovers when `python3 -m venv` fails for want of `ensurepip` (Debian and
+    Ubuntu package it separately, and it bites hardest on a box with no sudo to
+    fix it) by building `--without-pip` and bootstrapping pip.
+  - The `Makefile` resolves an interpreter the same way and runs every tool as
+    `$(PYTHON) -m <tool>`. **`make venv` prints which Python the targets use** —
+    start there when one fails, it is almost always the wrong interpreter rather
+    than a missing tool.
+  - `README.md` and `CONTRIBUTING.md` now describe this instead of a bare
+    `pip install`.
+  Django resolves to **5.2.17 on Python 3.14** — one version and one interpreter
+  ahead of what the rest of this file assumes, and the whole suite passes on it.
   ⚠ `node_modules/.bin/tailwindcss` arrived from the Windows checkout without an
   exec bit, so `npm run build:css` failed with "Permission denied" until
   `chmod +x`. If the CSS build dies on a fresh clone, check the mode bits first.
+- ⚠ **`0.4.4` is a known false tick** (pre-existing, not yet fixed). Its `lang`
+  attributes and Khmer line-break CSS are real; the *bundled font* half is not —
+  nothing is bundled, and `dojo.css` once claimed a Google Fonts load that the
+  CSP's `font-src 'self'` forbids. The stack relies on OS faces, which covers
+  Android/iOS/Windows and is unverified elsewhere. Either bundle a subset woff2
+  or split the task and untick the font half; do not leave it as it is.
 - **Human dry-run debt:** install the PWA on the intended phone/tablet, mark a
   real 20-person roster with networking disabled, reconnect, and time the full
   instructor interaction. The automated 20-mark queue/reconnect and endpoint

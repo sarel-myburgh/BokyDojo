@@ -14,17 +14,25 @@ cp .env.example .env
 # Start with Docker Compose (Postgres + Redis + app + worker + Caddy)
 docker compose up -d
 
-# Or run locally without Docker
-pip install -e ".[dev]"
-make migrate
-make dev
+# Or run locally without Docker — creates the virtual environment, installs,
+# migrates, seeds a demo, and serves it. Needs only Python 3.12+.
+bash start.sh
 ```
 
 Open [http://localhost:8000](http://localhost:8000) (or [https://localhost](https://localhost) with Docker Compose).
+`start.sh` prints a working login for each role; the demo path is
+`/login/` → `/today/` → mark a class → `/reports/attendance/`.
+
+⚠ Use `bash start.sh` or the `make` targets rather than a bare `pip`/`python`.
+Those names resolve only inside an activated virtual environment, and many Linux
+distributions ship no `python` at all — only `python3`. See
+[CONTRIBUTING.md](CONTRIBUTING.md#development-setup) for the by-hand setup and
+the Windows/WSL caveats.
 
 ## Development
 
 ```bash
+make venv      # Report which interpreter the targets use — start here if one fails
 make dev       # Start dev server
 make test      # Run tests
 make lint      # Check linting
