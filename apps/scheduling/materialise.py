@@ -29,6 +29,7 @@ import logging
 from dataclasses import dataclass, field
 
 from dateutil.rrule import rrulestr
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.core.scoping import Actor
@@ -125,14 +126,24 @@ def materialise_template(
     # Existing rows for this template inside the window, keyed by local date and
     # time so a session that moved by an hour under DST is still recognised as
     # the same occurrence.
-    existing = {
-        session.starts_at.astimezone(tz).replace(tzinfo=None)
-        for session in ClassSession.objects.for_organization(template.dojo.organization_id).filter(
-            template=template,
-            starts_at__gte=datetime.datetime.combine(window_start, datetime.time.min, tzinfo=tz),
-            starts_at__lte=datetime.datetime.combine(window_end, datetime.time.max, tzinfo=tz),
-        )
-    }
+    #
+    # ⚠ A slot counts as occupied if a session *starts* there **or was moved from
+    # there** (TODO 1.4.5). Without the second half, moving one occurrence to a
+    # different time leaves its original slot looking empty, and the next run
+    # recreates the class at its old time — turning a move into a duplicate.
+    # The query has to match on either column too: an occurrence moved out of
+    # this window still vacates a slot inside it.
+    window_from = datetime.datetime.combine(window_start, datetime.time.min, tzinfo=tz)
+    window_to = datetime.datetime.combine(window_end, datetime.time.max, tzinfo=tz)
+    existing = set()
+    for session in ClassSession.objects.for_organization(template.dojo.organization_id).filter(
+        Q(starts_at__gte=window_from, starts_at__lte=window_to)
+        | Q(moved_from__gte=window_from, moved_from__lte=window_to),
+        template=template,
+    ):
+        existing.add(session.starts_at.astimezone(tz).replace(tzinfo=None))
+        if session.moved_from is not None:
+            existing.add(session.moved_from.astimezone(tz).replace(tzinfo=None))
 
     dtstart = datetime.datetime.combine(template.active_from, template.start_time)
     try:

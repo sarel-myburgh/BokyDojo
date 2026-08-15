@@ -434,7 +434,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1077 passing, 45 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1101 passing, 46 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -616,6 +616,46 @@ OUTPUT
   ciphertext. It is not a bug to work around: decrypt in Python, or do not
   encrypt. Any future note search must exclude safeguarding notes by
   construction.
+- **`1.4.5` is done** — the "classic calendar-app trap" the plan warns about.
+  `apps/scheduling/edits.py`, service-level only: scheduling still has no UI at
+  all, and gets one with `1.4.9`.
+  - **This occurrence** moves one session and records the slot it vacated in the
+    new `ClassSession.moved_from`. ⚠ Without that the move silently becomes a
+    *duplicate*: materialisation keys on `(template, starts_at)` and never
+    deletes, so the next nightly run finds 18:30 standing empty and helpfully
+    recreates the class. The generator now treats a slot as occupied if a session
+    starts there **or was moved from there**. Recorded once and never
+    overwritten, so moving twice still protects the generator's original slot.
+  - **This and future** splits the template: the original is closed the day
+    before, a successor starts on the day of, and past sessions keep pointing at
+    the rule that actually produced them. Refuses a split from today or earlier —
+    today may already have been taught, so that is a per-occurrence edit.
+  - ⚠ **Only untouched future sessions are regenerated.** Cancelled, attended or
+    individually-moved sessions are records of something somebody did: they keep
+    their own time, are handed to the successor, and claim their date's new slot.
+    Visible consequence: a date you had already cancelled keeps the cancelled
+    class at its *old* time. The cancellation surviving matters more.
+  - ⚠ **The bug I shipped and then caught.** The first version deleted the
+    successor's duplicate *after* materialising. That looks correct and is not —
+    the slot is empty again by the next nightly run, which refills it. Preserved
+    rows must be re-pointed at the successor *before* it materialises, because
+    `existing` is computed per template. Found only because the duplicate test
+    was strengthened to re-run the generator; the same test passed happily
+    against the broken version when it checked only the state right after the
+    split. **A scheduling test that does not re-run materialisation proves very
+    little.**
+  - ⚠ Re-materialising a **stale in-memory template** regenerates the old rule —
+    its `active_to` is still `None` in Python after the split. The real job loads
+    templates fresh. This cost me a false failure; if a test sees ghost sessions,
+    re-read the template first.
+  - 23 tests, checked against five broken variants.
+- ⚠ **`full_clean()` on a tenant-scoped model raises `UnscopedAccessError`.**
+  `validate_unique` and `validate_constraints` issue their own queries through
+  the scoped manager, which refuses to run without an actor. Pass
+  `validate_unique=False, validate_constraints=False` for field validation only;
+  the cross-tenant check that matters runs in `save()`. Same trap for reverse
+  relations — `session.attendance_records` is scoped, so it cannot be read in a
+  loop; gather the ids in one `for_actor` query instead.
 - **Best next tasks in Phase 1**, in dependency order:
   - `1.4.5` / `1.4.8` / `1.4.9` scheduling gaps, then the `1.7.x` kiosk (12
     tasks, none started) and `1.10.x` import (7 tasks, none started).
@@ -913,7 +953,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.4.2` ⚠ `ClassSession` materialisation job, rolling 90-day horizon (mind DST)
 - [x] `1.4.3` ⚠ `ClosurePeriod` (org/dojo, date range, reason, `suppress_billing`) consulted by the generator `§12.2`
 - [x] `1.4.4` `[DS]` Seed public holidays for Cambodia; make the set per-country data
-- [ ] `1.4.5` ⚠ Template edit semantics: "this occurrence" vs "this and future" `§4.5`
+- [x] `1.4.5` ⚠ Template edit semantics: "this occurrence" vs "this and future" `§4.5` *(service; no UI until `1.4.9`)*
 - [x] `1.4.6` `[DS]` Ad-hoc one-off sessions (no template)
 - [x] `1.4.7` `[DS]` Cancel session + reason + notification hook
 - [ ] `1.4.8` `[DS]` Substitute instructor assignment

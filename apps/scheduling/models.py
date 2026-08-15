@@ -325,6 +325,16 @@ class ClassSession(TenantScopedModel):
     )
     room = models.CharField(_("room"), max_length=100, blank=True)
 
+    #: ⚠ The wall-clock slot this occurrence was originally materialised into,
+    #: set only when somebody moved this single session — TODO 1.4.5.
+    #:
+    #: Without it the move silently becomes a duplicate: materialisation keys on
+    #: (template, starts_at) and never deletes, so the next run sees the vacated
+    #: slot standing empty and helpfully recreates the class at its old time.
+    #: The generator therefore treats a slot as occupied if any session *starts*
+    #: there or was *moved from* there.
+    moved_from = models.DateTimeField(_("moved from"), null=True, blank=True)
+
     objects = ScopedManager()
 
     class Meta:
