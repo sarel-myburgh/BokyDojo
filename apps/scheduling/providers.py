@@ -43,9 +43,7 @@ class HolidayProvider(Protocol):
 
     source: str
 
-    def fetch(
-        self, organization: Organization, country: str, year: int
-    ) -> list[HolidaySpec]: ...
+    def fetch(self, organization: Organization, country: str, year: int) -> list[HolidaySpec]: ...
 
 
 class BaseProvider:
@@ -53,9 +51,7 @@ class BaseProvider:
 
     source: str = ""
 
-    def fetch(
-        self, organization: Organization, country: str, year: int
-    ) -> list[HolidaySpec]:
+    def fetch(self, organization: Organization, country: str, year: int) -> list[HolidaySpec]:
         raise NotImplementedError
 
 
@@ -74,13 +70,21 @@ class NagerDateProvider(BaseProvider):
     @staticmethod
     def _default_fetch(url: str):
         import urllib.request
+        from urllib.parse import urlsplit
 
-        with urllib.request.urlopen(url, timeout=30) as response:
+        target = urlsplit(url)
+        if target.scheme != "https" or target.hostname != "date.nager.at":
+            raise HolidayImportError("Holiday provider refused an untrusted URL")
+        request = urllib.request.Request(
+            url,
+            headers={"Accept": "application/json", "User-Agent": "DojoMaster/0.1"},
+        )
+        # The HTTPS scheme and exact host are checked above; redirects remain
+        # subject to urllib's HTTP(S)-only redirect handler.
+        with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310
             return json.loads(response.read())
 
-    def fetch(
-        self, organization: Organization, country: str, year: int
-    ) -> list[HolidaySpec]:
+    def fetch(self, organization: Organization, country: str, year: int) -> list[HolidaySpec]:
         url = f"https://date.nager.at/api/v3/PublicHolidays/{year}/{country}"
         try:
             data = self._fetch(url)
@@ -97,21 +101,15 @@ class NagerDateProvider(BaseProvider):
         specs: list[HolidaySpec] = []
         for item in data:
             if not isinstance(item, dict):
-                raise HolidayImportError(
-                    f"Unexpected holiday item format for {country}/{year}"
-                )
+                raise HolidayImportError(f"Unexpected holiday item format for {country}/{year}")
             name = item.get("name")
             date_str = item.get("date")
             if not name or not date_str:
-                raise HolidayImportError(
-                    f"Holiday missing name or date for {country}/{year}"
-                )
+                raise HolidayImportError(f"Holiday missing name or date for {country}/{year}")
             try:
                 holiday_date = datetime.date.fromisoformat(date_str)
             except ValueError as exc:
-                raise HolidayImportError(
-                    f"Invalid date {date_str!r} for {country}/{year}"
-                ) from exc
+                raise HolidayImportError(f"Invalid date {date_str!r} for {country}/{year}") from exc
             specs.append(
                 HolidaySpec(
                     name=name,
@@ -132,9 +130,7 @@ class CsvProvider(BaseProvider):
     def __init__(self, file):
         self.file = file
 
-    def fetch(
-        self, organization: Organization, country: str, year: int
-    ) -> list[HolidaySpec]:
+    def fetch(self, organization: Organization, country: str, year: int) -> list[HolidaySpec]:
         specs: list[HolidaySpec] = []
         reader = csv.DictReader(self.file)
         if reader.fieldnames is None:
@@ -149,9 +145,7 @@ class CsvProvider(BaseProvider):
             try:
                 holiday_date = datetime.date.fromisoformat(date_str)
             except ValueError as exc:
-                raise HolidayImportError(
-                    f"Invalid date {date_str!r} in CSV"
-                ) from exc
+                raise HolidayImportError(f"Invalid date {date_str!r} in CSV") from exc
             specs.append(
                 HolidaySpec(
                     name=name,
@@ -183,9 +177,7 @@ class BuiltinProvider(BaseProvider):
         (11, 9, "Independence Day"),
     ]
 
-    def fetch(
-        self, organization: Organization, country: str, year: int
-    ) -> list[HolidaySpec]:
+    def fetch(self, organization: Organization, country: str, year: int) -> list[HolidaySpec]:
         if country != "KH":
             return []
         return [

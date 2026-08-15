@@ -52,9 +52,7 @@ def other_org():
 @pytest.fixture
 def other_dojo(other_org):
     with allow_unscoped("test setup"):
-        return Dojo.objects.create(
-            organization=other_org, name="Other Dojo", slug="other-dojo"
-        )
+        return Dojo.objects.create(organization=other_org, name="Other Dojo", slug="other-dojo")
 
 
 @pytest.fixture
@@ -66,9 +64,7 @@ def style(dojo):
 @pytest.fixture
 def ladder(style):
     with allow_unscoped("test setup"):
-        return RankLadder.objects.create(
-            style=style, name="Adult", applies_to="adult"
-        )
+        return RankLadder.objects.create(style=style, name="Adult", applies_to="adult")
 
 
 @pytest.fixture
@@ -81,9 +77,7 @@ def rank(ladder):
 def other_rank(other_org):
     with allow_unscoped("test setup"):
         style = Style.objects.create(organization=other_org, name="Other Style")
-        ladder = RankLadder.objects.create(
-            style=style, name="Other Ladder", applies_to="adult"
-        )
+        ladder = RankLadder.objects.create(style=style, name="Other Ladder", applies_to="adult")
         return Rank.objects.create(ladder=ladder, order=1, name="Other Rank")
 
 
@@ -168,9 +162,7 @@ def test_class_template_accepts_same_org_style(dojo, style):
 
 def test_class_template_rejects_other_org_style(dojo, other_org):
     with allow_unscoped("test setup"):
-        other_style = Style.objects.create(
-            organization=other_org, name="Other Style"
-        )
+        other_style = Style.objects.create(organization=other_org, name="Other Style")
     with allow_unscoped("test setup"), pytest.raises(ValidationError):
         ClassTemplate.objects.create(
             dojo=dojo,
@@ -437,9 +429,7 @@ def test_holiday_observance_cross_organisation_guard(org, dojo, other_dojo):
 
 def test_class_template_tenant_isolation(org, other_org, class_template):
     actor = Actor(user_id=None, person_id=None, organization_id=org.pk)
-    other_actor = Actor(
-        user_id=None, person_id=None, organization_id=other_org.pk
-    )
+    other_actor = Actor(user_id=None, person_id=None, organization_id=other_org.pk)
     assert ClassTemplate.objects.for_actor(actor).count() == 1
     assert ClassTemplate.objects.for_actor(other_actor).count() == 0
 
@@ -456,19 +446,13 @@ def test_class_template_dojo_scoped_isolation(org, dojo, dojo_b, class_template)
 
 def test_class_session_tenant_isolation(org, other_org, class_session):
     actor = Actor(user_id=None, person_id=None, organization_id=org.pk)
-    other_actor = Actor(
-        user_id=None, person_id=None, organization_id=other_org.pk
-    )
+    other_actor = Actor(user_id=None, person_id=None, organization_id=other_org.pk)
     assert ClassSession.objects.for_actor(actor).count() == 1
     assert ClassSession.objects.for_actor(other_actor).count() == 0
 
 
 def test_closure_period_tenant_isolation(org, other_org, closure):
     actor = Actor(user_id=None, person_id=None, organization_id=org.pk)
-    other_actor = Actor(
-        user_id=None, person_id=None, organization_id=other_org.pk
-    )
+    other_actor = Actor(user_id=None, person_id=None, organization_id=other_org.pk)
     assert ClosurePeriod.objects.for_actor(actor).count() == 1
     assert ClosurePeriod.objects.for_actor(other_actor).count() == 0
-
-

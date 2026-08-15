@@ -87,9 +87,7 @@ def _local_rrule_text(rule_text: str) -> str:
 
 def _closure_dates(template: ClassTemplate, start: datetime.date, end: datetime.date) -> set:
     """Dates in range closed for this template's dojo — plan §12.2, TODO 1.4.3."""
-    periods = ClosurePeriod.objects.for_organization(
-        template.dojo.organization_id
-    ).filter(
+    periods = ClosurePeriod.objects.for_organization(template.dojo.organization_id).filter(
         starts_on__lte=end,
         ends_on__gte=start,
     )
@@ -129,16 +127,10 @@ def materialise_template(
     # the same occurrence.
     existing = {
         session.starts_at.astimezone(tz).replace(tzinfo=None)
-        for session in ClassSession.objects.for_organization(
-            template.dojo.organization_id
-        ).filter(
+        for session in ClassSession.objects.for_organization(template.dojo.organization_id).filter(
             template=template,
-            starts_at__gte=datetime.datetime.combine(
-                window_start, datetime.time.min, tzinfo=tz
-            ),
-            starts_at__lte=datetime.datetime.combine(
-                window_end, datetime.time.max, tzinfo=tz
-            ),
+            starts_at__gte=datetime.datetime.combine(window_start, datetime.time.min, tzinfo=tz),
+            starts_at__lte=datetime.datetime.combine(window_end, datetime.time.max, tzinfo=tz),
         )
     }
 
@@ -211,9 +203,12 @@ def materialise_sessions(
     today = today or timezone.localdate()
     to_date = today + datetime.timedelta(days=horizon_days)
 
-    templates = ClassTemplate.objects.for_actor(actor).select_related("dojo").filter(
-        active_from__lte=to_date
-    ).exclude(active_to__lt=today)
+    templates = (
+        ClassTemplate.objects.for_actor(actor)
+        .select_related("dojo")
+        .filter(active_from__lte=to_date)
+        .exclude(active_to__lt=today)
+    )
     if dojo is not None:
         templates = templates.filter(dojo=dojo)
 

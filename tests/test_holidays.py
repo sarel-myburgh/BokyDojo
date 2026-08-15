@@ -49,9 +49,7 @@ def other_org():
 @pytest.fixture
 def other_dojo(other_org):
     with allow_unscoped("test setup"):
-        return Dojo.objects.create(
-            organization=other_org, name="Other Dojo", slug="other-dojo"
-        )
+        return Dojo.objects.create(organization=other_org, name="Other Dojo", slug="other-dojo")
 
 
 def test_importing_creates_holidays_and_no_closures(org):
@@ -217,9 +215,7 @@ def test_nager_provider_missing_fields_raises(org):
 
 
 def test_nager_provider_invalid_date_raises(org):
-    provider = NagerDateProvider(
-        fetch=lambda _url: [{"name": "Bad Date", "date": "not-a-date"}]
-    )
+    provider = NagerDateProvider(fetch=lambda _url: [{"name": "Bad Date", "date": "not-a-date"}])
 
     with pytest.raises(HolidayImportError):
         import_holidays(org, "KH", 2025, provider=provider)
@@ -352,3 +348,10 @@ def test_holiday_observance_dojo_isolation(org, dojo, dojo_b):
         dojo_ids=frozenset({dojo.pk}),
     )
     assert HolidayObservance.objects.for_actor(scoped_a).count() == 1
+
+
+def test_nager_default_fetch_rejects_non_https_and_other_hosts():
+    with pytest.raises(HolidayImportError):
+        NagerDateProvider._default_fetch("file:///etc/passwd")
+    with pytest.raises(HolidayImportError):
+        NagerDateProvider._default_fetch("https://evil.example/api")
