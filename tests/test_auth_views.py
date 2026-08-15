@@ -35,13 +35,11 @@ def clear_throttle_cache():
 def instructor_user():
     with allow_unscoped("test setup"):
         org = Organization.objects.create(name="Test Org", slug="test-org")
-        person = Person.objects.create(
-            organization=org, given_name="Takeshi", family_name="Yamada"
-        )
+        person = Person.objects.create(organization=org, given_name="Takeshi", family_name="Yamada")
         RoleAssignment.objects.create(
             organization=org,
             person=person,
-            role=Role.ORG_ADMIN,
+            role=Role.INSTRUCTOR,
             scope_type=ScopeType.ORG,
         )
         return User.objects.create_user(
@@ -59,9 +57,7 @@ def test_login_page_renders(client):
 
 
 def test_correct_credentials_sign_in(client, instructor_user):
-    response = client.post(
-        reverse("login"), {"email": "takeshi@example.com", "password": PASSWORD}
-    )
+    response = client.post(reverse("login"), {"email": "takeshi@example.com", "password": PASSWORD})
 
     assert response.status_code == 302
     assert response.url == reverse("today")
@@ -69,9 +65,7 @@ def test_correct_credentials_sign_in(client, instructor_user):
 
 
 def test_email_is_case_insensitive(client, instructor_user):
-    response = client.post(
-        reverse("login"), {"email": "Takeshi@Example.COM", "password": PASSWORD}
-    )
+    response = client.post(reverse("login"), {"email": "Takeshi@Example.COM", "password": PASSWORD})
     assert response.status_code == 302
 
 
@@ -120,9 +114,7 @@ def test_inactive_user_cannot_sign_in(client, instructor_user):
     instructor_user.is_active = False
     instructor_user.save(update_fields=["is_active"])
 
-    response = client.post(
-        reverse("login"), {"email": "takeshi@example.com", "password": PASSWORD}
-    )
+    response = client.post(reverse("login"), {"email": "takeshi@example.com", "password": PASSWORD})
 
     assert response.status_code == 401
     assert "_auth_user_id" not in client.session
@@ -143,9 +135,7 @@ def test_repeated_failures_lock_the_account_out(client, instructor_user):
         )
         assert response.status_code == 401
 
-    locked = client.post(
-        reverse("login"), {"email": "takeshi@example.com", "password": "nope"}
-    )
+    locked = client.post(reverse("login"), {"email": "takeshi@example.com", "password": "nope"})
     assert locked.status_code == 429
 
 
@@ -154,9 +144,7 @@ def test_lockout_applies_even_to_the_correct_password(client, instructor_user):
     for _ in range(5):
         client.post(reverse("login"), {"email": "takeshi@example.com", "password": "nope"})
 
-    response = client.post(
-        reverse("login"), {"email": "takeshi@example.com", "password": PASSWORD}
-    )
+    response = client.post(reverse("login"), {"email": "takeshi@example.com", "password": PASSWORD})
 
     assert response.status_code == 429
     assert "_auth_user_id" not in client.session

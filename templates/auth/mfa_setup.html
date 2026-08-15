@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Two-step verification" %} — DojoMaster{% endblock %}
+
+{% block body %}
+<main class="min-h-screen flex items-center justify-center px-4 py-10">
+  <div class="w-full max-w-lg">
+    <h1 class="text-2xl font-semibold mb-2">{% translate "Two-step verification" %}</h1>
+
+    {% if is_confirmed %}
+      <p class="text-gray-600 mb-5">{% translate "Two-step verification is active on this account." %}</p>
+      <a href="{% url 'today' %}" class="inline-block rounded-lg bg-gray-900 px-4 py-3 text-white">{% translate "Return to DojoMaster" %}</a>
+    {% elif can_start %}
+      <p class="text-gray-600 mb-5">{% translate "Add an authenticator app to protect this account." %}</p>
+      {% if error %}<div role="alert" class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">{{ error }}</div>{% endif %}
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="start">
+        <div>
+          <label for="password" class="block text-sm font-medium mb-1">{% translate "Current password" %}</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required
+                 class="w-full rounded-lg border border-gray-300 px-4 py-3">
+        </div>
+        <button class="rounded-lg bg-gray-900 px-4 py-3 text-white" type="submit">{% translate "Set up authenticator" %}</button>
+      </form>
+    {% else %}
+      <p class="text-gray-600 mb-4">{% translate "In your authenticator app, add an account using this setup key, then enter the six-digit code." %}</p>
+
+      <div class="rounded-lg border bg-gray-50 p-4 mb-5">
+        <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">{% translate "Setup key" %}</p>
+        <code class="break-all select-all">{{ secret }}</code>
+        <details class="mt-3 text-sm">
+          <summary class="cursor-pointer">{% translate "Advanced provisioning URI" %}</summary>
+          <code class="mt-2 block break-all select-all">{{ provisioning_uri }}</code>
+        </details>
+      </div>
+
+      {% if error %}<div role="alert" class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">{{ error }}</div>{% endif %}
+
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <div>
+          <label for="code" class="block text-sm font-medium mb-1">{% translate "Verification code" %}</label>
+          <input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required
+                 pattern="[0-9]{6}" maxlength="6"
+                 class="w-full rounded-lg border border-gray-300 px-4 py-3 text-lg tracking-widest">
+        </div>
+        <button class="w-full rounded-lg bg-gray-900 px-4 py-3 text-white" type="submit">{% translate "Verify and enable" %}</button>
+      </form>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}

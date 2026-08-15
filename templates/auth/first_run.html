@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Set up DojoMaster" %}{% endblock %}
+
+{% block body %}
+<main class="mx-auto max-w-2xl px-4 py-10">
+  <h1 class="text-2xl font-semibold mb-2">{% translate "Set up DojoMaster" %}</h1>
+  <p class="text-gray-600 mb-6">{% translate "Create the organisation, first dojo, and owner account." %}</p>
+
+  {% if setup_error %}<div role="alert" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">{{ setup_error }}</div>{% endif %}
+  {% if form.non_field_errors %}<div role="alert" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">{{ form.non_field_errors }}</div>{% endif %}
+
+  <form method="post" class="space-y-7">
+    {% csrf_token %}
+
+    <fieldset class="space-y-4">
+      <legend class="text-lg font-medium">{% translate "Organisation" %}</legend>
+      {% include "auth/_setup_field.html" with field=form.organization_name %}
+      {% include "auth/_setup_field.html" with field=form.organization_slug %}
+      {% include "auth/_setup_field.html" with field=form.governance_model %}
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {% include "auth/_setup_field.html" with field=form.country %}
+        {% include "auth/_setup_field.html" with field=form.timezone %}
+        {% include "auth/_setup_field.html" with field=form.currency %}
+      </div>
+    </fieldset>
+
+    <fieldset class="space-y-4">
+      <legend class="text-lg font-medium">{% translate "First dojo" %}</legend>
+      {% include "auth/_setup_field.html" with field=form.dojo_name %}
+      {% include "auth/_setup_field.html" with field=form.dojo_city %}
+    </fieldset>
+
+    <fieldset class="space-y-4">
+      <legend class="text-lg font-medium">{% translate "Owner account" %}</legend>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {% include "auth/_setup_field.html" with field=form.admin_given_name %}
+        {% include "auth/_setup_field.html" with field=form.admin_family_name %}
+      </div>
+      {% include "auth/_setup_field.html" with field=form.admin_email %}
+      {% include "auth/_setup_field.html" with field=form.admin_password %}
+      {% include "auth/_setup_field.html" with field=form.admin_password_confirm %}
+    </fieldset>
+
+    {% if token_required %}
+      <fieldset>
+        <legend class="text-lg font-medium mb-4">{% translate "Deployment verification" %}</legend>
+        {% include "auth/_setup_field.html" with field=form.setup_token %}
+      </fieldset>
+    {% endif %}
+
+    <button type="submit" class="w-full rounded-lg bg-gray-900 px-4 py-3 text-white">{% translate "Create installation" %}</button>
+  </form>
+</main>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Recovery codes" %} — DojoMaster{% endblock %}
+
+{% block body %}
+<main class="min-h-screen flex items-center justify-center px-4 py-10">
+  <div class="w-full max-w-lg">
+    <h1 class="text-2xl font-semibold mb-2">{% translate "Save your recovery codes" %}</h1>
+    <div role="alert" class="mb-5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      {% translate "These codes are shown once. Store them somewhere secure; each code can be used only once." %}
+    </div>
+    <ul class="grid grid-cols-2 gap-2 rounded-lg border bg-gray-50 p-4 mb-5 font-mono">
+      {% for code in codes %}<li class="select-all">{{ code }}</li>{% endfor %}
+    </ul>
+    <a href="{% url 'today' %}" class="inline-block rounded-lg bg-gray-900 px-4 py-3 text-white">{% translate "I have saved them" %}</a>
+  </div>
+</main>
+{% endblock %}
