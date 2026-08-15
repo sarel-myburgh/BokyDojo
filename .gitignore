@@ -21,4 +21,15 @@ htmlcov/
 # checkout and each agent's worktree, so this cannot be shared.
 .claude/launch.json
 
+# Per-developer tool permissions, not a project decision.
+.claude/settings.local.json
+
 dev.sqlite3
+
+/backups/
+
+# Tailwind's toolchain. ⚠ static/css/tailwind.css is the *compiled* output but is
+# deliberately NOT ignored — it is the stylesheet the app serves, and the CSP
+# forbids a runtime CDN, so a checkout with no Node installed still has to be
+# able to render. Rebuild it with `npm run build:css` after editing any template.
+/node_modules/

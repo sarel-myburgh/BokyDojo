@@ -22,6 +22,15 @@ dependencies = [
     "gunicorn>=22.0",
 ]
 
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# The repository also contains templates, static assets, media and locale
+# directories. Only Django's Python packages belong in the distribution.
+include = ["apps*", "config*"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
@@ -37,6 +46,7 @@ target-version = ["py312"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["**/migrations/*.py", "**/*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "DJ"]
