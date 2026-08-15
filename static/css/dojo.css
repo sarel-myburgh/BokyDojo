@@ -7,16 +7,45 @@
  *
  * Test in tables and buttons early — Khmer breaks naive CSS there first.
  *
- * ⚠ NO KHMER WEBFONT IS BUNDLED, despite what 0.4.4 claims. An earlier version
- * of this file said the face was "loaded via Google Fonts in base.html"; it was
- * not, and it could not be — the CSP sets `font-src 'self'`, so an external
- * font host is blocked by design. The font stack in tailwind.config.cjs
- * therefore relies on faces the host OS provides (Android and iOS ship Noto
- * Sans Khmer; Windows ships Leelawadee UI). That covers the phones instructors
- * actually use, but it is not the same promise as bundling, and Khmer rendering
- * on an arbitrary desktop is unverified. Bundling a subset woff2 into
- * static/fonts/ and declaring @font-face here is the real fix.
+ * The Khmer face is now bundled and self-hosted (see @font-face below), so
+ * Khmer no longer depends on the host OS happening to ship a Khmer font.
  */
+
+/* -- Bundled Khmer face — TODO 0.4.4 -------------------------------------------
+ * ⚠ Self-hosted on purpose. The CSP sets `font-src 'self'`, so a font CDN is
+ * blocked by design — an earlier version of this file claimed the face loaded
+ * "via Google Fonts in base.html", which it did not and could not. Anything
+ * pointing at an external host here will simply fail to load.
+ *
+ * Only the *Khmer* subset is bundled, not the Latin one. The family sits after
+ * the Latin faces in the tailwind.config.cjs stack, so it is never asked to
+ * render Latin text; shipping its Latin glyphs would be ~30KB nobody downloads
+ * for a reason.
+ *
+ * `unicode-range` is what keeps this cheap: a browser fetches the file only
+ * when the page actually contains Khmer, so English-only pages pay nothing.
+ * The range is Google's own khmer subset definition — the Khmer block, Khmer
+ * symbols, the ZWNJ/ZWJ pair Khmer needs for cluster control, and U+25CC, the
+ * dotted circle a renderer shows for an isolated combining mark.
+ *
+ * One variable file covers every weight, so `font-weight: 100 900` is a range
+ * rather than a separate file per weight.
+ *
+ * `font-display: swap` renders in a fallback immediately and swaps when the
+ * face arrives, rather than blanking the text. An instructor marking a register
+ * on a bad connection must never be shown an empty roster.
+ *
+ * Noto Sans Khmer, SIL Open Font License 1.1 — see static/fonts/OFL.txt, which
+ * must stay alongside the font: the OFL requires the licence to travel with it.
+ */
+@font-face {
+    font-family: "Noto Sans Khmer";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("../fonts/noto-sans-khmer-khmer.woff2") format("woff2");
+    unicode-range: U+1780-17FF, U+19E0-19FF, U+200C-200D, U+25CC;
+}
 
 /* -- Khmer line-breaking -------------------------------------------------------
  * word-break: break-word is the safest for Khmer: it allows breaks at any

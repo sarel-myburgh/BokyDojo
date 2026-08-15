@@ -116,8 +116,12 @@ module.exports = {
          * a Khmer font first makes English text render in it too, which looks
          * subtly wrong everywhere.
          *
-         * No webfont is bundled — see the note in static/css/dojo.css. These
-         * are faces the host OS is expected to provide.
+         * "Noto Sans Khmer" is bundled and self-hosted — the @font-face lives in
+         * static/css/dojo.css. Because the declared family name matches the one
+         * already listed here, this stack needs no special casing: Latin resolves
+         * to a system face before ever reaching it, and Khmer falls through to
+         * the bundled file. The two names after it stay as fallbacks for a
+         * browser that somehow fails to fetch the woff2.
          */
         sans: [
           "system-ui",

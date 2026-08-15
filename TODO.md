@@ -463,12 +463,34 @@ OUTPUT
   ⚠ `node_modules/.bin/tailwindcss` arrived from the Windows checkout without an
   exec bit, so `npm run build:css` failed with "Permission denied" until
   `chmod +x`. If the CSS build dies on a fresh clone, check the mode bits first.
-- ⚠ **`0.4.4` is a known false tick** (pre-existing, not yet fixed). Its `lang`
-  attributes and Khmer line-break CSS are real; the *bundled font* half is not —
-  nothing is bundled, and `dojo.css` once claimed a Google Fonts load that the
-  CSP's `font-src 'self'` forbids. The stack relies on OS faces, which covers
-  Android/iOS/Windows and is unverified elsewhere. Either bundle a subset woff2
-  or split the task and untick the font half; do not leave it as it is.
+- ✅ **`0.4.4` is now true.** Its font half had been ticked while nothing was
+  bundled. Noto Sans Khmer (OFL 1.1) is self-hosted at
+  `static/fonts/noto-sans-khmer-khmer.woff2` with the `@font-face` in
+  `dojo.css`. Decisions worth keeping:
+  - **Khmer subset only, not Latin.** The family sits *after* the Latin faces in
+    the `tailwind.config.cjs` stack, so it is never asked to render Latin; its
+    Latin glyphs would be ~30KB nobody downloads for a reason. The declared
+    family name matches the one already in that stack, so no config change was
+    needed — the `@font-face` simply makes the existing entry real.
+  - **`unicode-range` keeps it free for English.** The browser fetches the file
+    only when a page actually contains Khmer. That is also why the font is
+    deliberately **not** in the service worker's `SHELL` precache: adding it
+    would force all 59KB onto every install. `/static/` is stale-while-
+    revalidate, so it caches for offline use the first time a Khmer page is
+    opened — which is exactly when it is wanted.
+  - **One variable file** covers 100–900, so `font-weight` is a range.
+  - `font-display: swap`, so an instructor on a bad connection sees the roster
+    in a fallback face rather than blank space.
+  - `static/fonts/OFL.txt` must stay next to the font; the OFL requires the
+    licence to travel with it.
+  Verified served: `200 font/woff2`, 58792 bytes, and the CSP's `font-src
+  'self'` accepts it. `tests/test_fonts.py` (7 tests) parses the real
+  `@font-face` rather than trusting the comment above it, and is checked against
+  four broken variants — including a `src` pointing at a CDN, which is precisely
+  the bug `0.4.4` originally shipped.
+  ⚠ Still unverified by a human: what Khmer actually *looks* like in tables and
+  buttons at narrow widths. The face now loads; nobody has eyeballed the
+  wrapping.
 - **Human dry-run debt:** install the PWA on the intended phone/tablet, mark a
   real 20-person roster with networking disabled, reconnect, and time the full
   instructor interaction. The automated 20-mark queue/reconnect and endpoint
@@ -745,7 +767,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `0.4.1` `[DS]` `LocaleMiddleware`, locale paths, `USE_I18N`
 - [x] `0.4.2` `[DS]` Locale stubs: `en`, `km`, **`zh-Hans`** `§13.4`
 - [x] `0.4.3` `[DS]` `Person.locale` field + per-request locale resolution from the logged-in person
-- [x] `0.4.4` `[DS]` Khmer font bundled + `lang` attributes + line-break CSS; verify wrapping in tables and buttons `§13.4`
+- [x] `0.4.4` `[DS]` Khmer font bundled + `lang` attributes + line-break CSS; verify wrapping in tables and buttons `§13.4` *(font bundled and served; human check of wrapping still outstanding)*
 - [x] `0.4.5` `[DS]` `make messages` / `make compilemessages` targets
 - [x] `0.4.6` `[DS]` CI check: fail on untranslated user-facing strings in templates
 
