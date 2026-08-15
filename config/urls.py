@@ -96,6 +96,11 @@ urlpatterns = [
         name="student-status-transition",
     ),
     path(
+        "students/<uuid:person_id>/notes/",
+        student_views.student_note_create_view,
+        name="student-note-create",
+    ),
+    path(
         "students/<uuid:person_id>/ranks/<uuid:track_id>/promote/",
         rank_views.manual_promotion_view,
         name="student-promote",

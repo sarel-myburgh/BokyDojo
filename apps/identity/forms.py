@@ -11,6 +11,8 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.money import exponent_for
+from apps.core.note_authoring import MAX_BODY_LENGTH, writable_visibilities
+from apps.core.notes import Note
 from apps.identity.guardians import guardian_candidates
 from apps.identity.lifecycle import BULK_TRANSITION_LIMIT, allowed_student_transitions
 from apps.identity.models import Dojo, GovernanceModel, GuardianLink, Person, StudentProfile, User
@@ -392,3 +394,40 @@ class GuardianForm(forms.Form):
                 "notes",
             )
         }
+
+
+class StudentNoteForm(forms.Form):
+    """Write a note about a student — TODO 1.8.x.
+
+    ⚠ The visibility choices are built from what this actor may actually author,
+    so the field cannot offer a level they do not hold. That is a convenience for
+    the browser, not the control: ``create_note`` re-checks the level, because a
+    posted form field is client-supplied data.
+    """
+
+    body = forms.CharField(
+        label=_("Note"),
+        max_length=MAX_BODY_LENGTH,
+        widget=forms.Textarea(attrs={"rows": 4}),
+    )
+    visibility = forms.ChoiceField(label=_("Who can read this"))
+    pinned = forms.BooleanField(
+        label=_("Pin to the top of this student's record"),
+        required=False,
+        help_text=_("Pinned notes also appear as an alert on the student's header."),
+    )
+
+    def __init__(self, *args, actor, subject, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["visibility"].choices = [
+            (level, Note.Visibility(level).label) for level in writable_visibilities(actor, subject)
+        ]
+        control = "mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+        self.fields["body"].widget.attrs["class"] = control
+        self.fields["visibility"].widget.attrs["class"] = control
+
+    def clean_body(self):
+        body = self.cleaned_data["body"].strip()
+        if not body:
+            raise ValidationError(_("A note cannot be empty."))
+        return body

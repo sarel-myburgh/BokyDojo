@@ -12,6 +12,7 @@ from django.core.paginator import Paginator
 from django.db.models import BooleanField, DateTimeField, OuterRef, Prefetch, Q, Subquery, Value
 from django.http import Http404, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 from django.views.decorators.cache import never_cache
@@ -21,6 +22,7 @@ from apps.attendance.models import AttendanceRecord
 from apps.core import audit, safeguarding
 from apps.core.documents import may_read
 from apps.core.models import Document
+from apps.core.note_authoring import create_note, writable_visibilities
 from apps.core.notes import Note
 from apps.ranks.models import RankAward, StudentStyleTrack
 
@@ -28,6 +30,7 @@ from .consent import current_consent
 from .forms import (
     StudentBulkStatusForm,
     StudentListFilterForm,
+    StudentNoteForm,
     StudentSegmentCreateForm,
     StudentStatusTransitionForm,
 )
@@ -360,6 +363,45 @@ def student_status_transition_view(request, person_id):
     return redirect("student-detail", person_id=person_id)
 
 
+@login_required
+@require_POST
+def student_note_create_view(request, person_id):
+    """Write a note about one student — TODO 1.8.x.
+
+    The permission and the visibility level are both decided by ``create_note``.
+    This view's only jobs are finding the tenant-scoped student, handing the form
+    the actor so it offers the right levels, and reporting the outcome.
+    """
+    actor = request.actor
+    profile = get_object_or_404(
+        StudentProfile.objects.for_actor(actor).select_related(
+            "person", "person__organization", "home_dojo"
+        ),
+        person_id=person_id,
+    )
+
+    form = StudentNoteForm(request.POST, actor=actor, subject=profile)
+    if form.is_valid():
+        try:
+            note = create_note(
+                subject=profile,
+                body=form.cleaned_data["body"],
+                visibility=form.cleaned_data["visibility"],
+                pinned=form.cleaned_data["pinned"],
+                actor=actor,
+            )
+        except ValidationError as exc:
+            messages.error(request, _validation_message(exc))
+        else:
+            messages.success(
+                request,
+                _("Note saved: %(visibility)s.") % {"visibility": note.get_visibility_display()},
+            )
+    else:
+        messages.error(request, _validation_message(ValidationError(form.errors)))
+    return redirect(f"{reverse('student-detail', args=[person_id])}?tab=notes")
+
+
 DETAIL_TABS = ("attendance", "rank", "notes", "billing", "documents", "family")
 
 
@@ -433,6 +475,15 @@ def student_detail_view(request, person_id):
     safeguarding_notes = []
     if may_view_safeguarding and tab == "notes":
         safeguarding_notes = safeguarding.view_safeguarding_notes(subject=profile, actor=actor)
+
+    # The form is built per actor, so the level dropdown only ever offers what
+    # this person may author. `note_form` is None when they may write nothing,
+    # which is how the template decides whether to render the composer at all.
+    note_form = (
+        StudentNoteForm(actor=actor, subject=profile)
+        if writable_visibilities(actor, profile, governance_model=governance)
+        else None
+    )
 
     documents = []
     if show_private and tab == "documents":
@@ -535,6 +586,7 @@ def student_detail_view(request, person_id):
             "tracks": tracks,
             "notes": notes,
             "safeguarding_notes": safeguarding_notes,
+            "note_form": note_form,
             "may_view_safeguarding": may_view_safeguarding,
             "documents": documents,
             "guardians": guardians,

@@ -434,7 +434,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1048 passing, 45 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1077 passing, 45 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -587,13 +587,42 @@ OUTPUT
   does nothing. There is now one officer per dojo (`safeguarding@karate.test` /
   `safeguarding123!`) and a couple of notes per dojo. **When a task is ticked,
   check the seed exercises it**; that is now three features found dark this way.
+- **Notes can now be written** (not on the plan; added because `1.8.x` shipped
+  four visibility levels and no way to author one — every note came from the
+  seed or the admin). Composer on the student notes tab, service in
+  `apps/core/note_authoring.py`.
+  ⚠ **The rule: you may only write at a level you could read back**, plus
+  `private`, plus `safeguarding` if you hold the named role. The alternative —
+  an instructor writing a note only admins can read — was rejected deliberately:
+  a note you cannot read is one you cannot check or correct, and a write-only
+  channel into a child's file is the shape of thing this system exists to
+  prevent. **The cost is that an instructor cannot privately escalate to the
+  office**; they write at `instructors`, which every admin can already read. If
+  that trade is revisited, `writable_visibilities` and its docstring are what
+  change. Per role: instructor gets 3 levels, dojo/org admin 4, the safeguarding
+  officer all 5.
+  The form builds its choices per actor, and `create_note` re-checks the level,
+  because a posted field is client-supplied data. Audited as `create` recording
+  the *level*, never the text.
+  28 tests, checked against three broken variants. ⚠ One test name overclaimed:
+  posting a level the form never offered is caught by the `ChoiceField` *before*
+  the service, so that test stays green if the service re-check is deleted. It
+  is renamed to say so, and the re-check is covered directly elsewhere.
+  Verified in the running app: instructor offered 3 levels, officer 5, and an
+  instructor posting `safeguarding` saved nothing.
+- ⚠ **Encrypted bodies are not searchable, and this bit immediately.** A check
+  script used `Note.objects.filter(body=...)` and silently matched nothing —
+  every row has its own nonce, so identical plaintext gives different
+  ciphertext. It is not a bug to work around: decrypt in Python, or do not
+  encrypt. Any future note search must exclude safeguarding notes by
+  construction.
 - **Best next tasks in Phase 1**, in dependency order:
-  - There is still **no UI for writing a note at all** — every note in the app
-    arrives from the seed or the admin. `1.8.x` is complete as specified, but a
-    safeguarding officer cannot yet record the thing the feature exists for.
-    Worth a task of its own before the kiosk.
   - `1.4.5` / `1.4.8` / `1.4.9` scheduling gaps, then the `1.7.x` kiosk (12
     tasks, none started) and `1.10.x` import (7 tasks, none started).
+  - Notes are **create-only** — no edit, no delete, no soft-delete. That was a
+    scope decision, not an oversight, but a typo in a pinned note currently
+    cannot be fixed from the UI. Decide whether notes are append-only evidence
+    (like rank awards) or ordinary editable records before someone assumes.
 - ⚠ **Never edit TODO.md with PowerShell `Get-Content -Raw` / `Set-Content`.**
   PS 5.1 reads a BOM-less file as ANSI and rewrites it as UTF-8, mangling every
   em-dash and `§` in the document. Use an editor/Edit tool, or Python with
