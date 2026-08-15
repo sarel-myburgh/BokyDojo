@@ -48,17 +48,13 @@ def dojo_b(org):
 @pytest.fixture
 def person(org):
     with allow_unscoped("test setup"):
-        return Person.objects.create(
-            organization=org, given_name="Takeshi", family_name="Yamada"
-        )
+        return Person.objects.create(organization=org, given_name="Takeshi", family_name="Yamada")
 
 
 @pytest.fixture
 def person_b(org):
     with allow_unscoped("test setup"):
-        return Person.objects.create(
-            organization=org, given_name="Sokha", family_name="Chan"
-        )
+        return Person.objects.create(organization=org, given_name="Sokha", family_name="Chan")
 
 
 @pytest.fixture
@@ -340,9 +336,7 @@ class TestTenantIsolation:
         actor = Actor(user_id=None, person_id=None, organization_id=org.pk)
         assert TimeEntry.objects.for_actor(actor).count() == 1
 
-    def test_dojo_scoped_actor_sees_only_own_dojo(
-        self, person, person_b, dojo, dojo_b, org
-    ):
+    def test_dojo_scoped_actor_sees_only_own_dojo(self, person, person_b, dojo, dojo_b, org):
         with allow_unscoped("test setup"):
             TimeEntry.objects.create(
                 instructor=person,

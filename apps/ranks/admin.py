@@ -81,5 +81,25 @@ class RankAwardAdmin(ScopedModelAdmin):
         "certificate_number",
         "awarded_by_external_org",
     )
-    autocomplete_fields = ("track", "rank", "awarded_by", "revoked_by")
-    readonly_fields = ("created_at", "updated_at", "created_by")
+    readonly_fields = (
+        "track",
+        "rank",
+        "awarded_on",
+        "awarded_by",
+        "recognition",
+        "awarded_by_external_org",
+        "certificate_number",
+        "notes",
+        "revoked_at",
+        "revoked_by",
+        "revocation_reason",
+        "created_at",
+        "updated_at",
+        "created_by",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

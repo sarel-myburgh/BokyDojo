@@ -38,17 +38,13 @@ def dojo(org):
 @pytest.fixture
 def guardian_person(org):
     with allow_unscoped("test setup"):
-        return Person.objects.create(
-            organization=org, given_name="Yuki", family_name="Tanaka"
-        )
+        return Person.objects.create(organization=org, given_name="Yuki", family_name="Tanaka")
 
 
 @pytest.fixture
 def student_person(org):
     with allow_unscoped("test setup"):
-        return Person.objects.create(
-            organization=org, given_name="Hiro", family_name="Tanaka"
-        )
+        return Person.objects.create(organization=org, given_name="Hiro", family_name="Tanaka")
 
 
 @pytest.fixture
@@ -79,9 +75,7 @@ class TestSelfGuardianConstraint:
 
 
 class TestUniqueConstraint:
-    def test_duplicate_guardian_student_pair_rejected(
-        self, guardian_person, student_person
-    ):
+    def test_duplicate_guardian_student_pair_rejected(self, guardian_person, student_person):
         with allow_unscoped("test setup"):
             GuardianLink.objects.create(
                 guardian=guardian_person,
@@ -97,12 +91,8 @@ class TestUniqueConstraint:
 
     def test_same_guardian_can_link_to_different_students(self, org, guardian_person):
         with allow_unscoped("test setup"):
-            s1 = Person.objects.create(
-                organization=org, given_name="Child1", family_name="Tanaka"
-            )
-            s2 = Person.objects.create(
-                organization=org, given_name="Child2", family_name="Tanaka"
-            )
+            s1 = Person.objects.create(organization=org, given_name="Child1", family_name="Tanaka")
+            s2 = Person.objects.create(organization=org, given_name="Child2", family_name="Tanaka")
             GuardianLink.objects.create(
                 guardian=guardian_person,
                 student=s1,
@@ -113,20 +103,17 @@ class TestUniqueConstraint:
                 student=s2,
                 relationship=GuardianLink.Relationship.MOTHER,
             )
-        assert GuardianLink.objects.for_actor(
-            Actor(user_id=None, person_id=None, organization_id=org.pk)
-        ).count() == 2
+        assert (
+            GuardianLink.objects.for_actor(
+                Actor(user_id=None, person_id=None, organization_id=org.pk)
+            ).count()
+            == 2
+        )
 
-    def test_different_guardians_can_link_to_same_student(
-        self, org, student_person
-    ):
+    def test_different_guardians_can_link_to_same_student(self, org, student_person):
         with allow_unscoped("test setup"):
-            g1 = Person.objects.create(
-                organization=org, given_name="Mom", family_name="Tanaka"
-            )
-            g2 = Person.objects.create(
-                organization=org, given_name="Dad", family_name="Tanaka"
-            )
+            g1 = Person.objects.create(organization=org, given_name="Mom", family_name="Tanaka")
+            g2 = Person.objects.create(organization=org, given_name="Dad", family_name="Tanaka")
             GuardianLink.objects.create(
                 guardian=g1,
                 student=student_person,
@@ -137,9 +124,12 @@ class TestUniqueConstraint:
                 student=student_person,
                 relationship=GuardianLink.Relationship.FATHER,
             )
-        assert GuardianLink.objects.for_actor(
-            Actor(user_id=None, person_id=None, organization_id=org.pk)
-        ).count() == 2
+        assert (
+            GuardianLink.objects.for_actor(
+                Actor(user_id=None, person_id=None, organization_id=org.pk)
+            ).count()
+            == 2
+        )
 
 
 # -- four booleans are independent -------------------------------------------
@@ -191,12 +181,8 @@ class TestBooleanIndependence:
     def test_divorced_parent_scenario(self, org, student_person):
         """The paying parent is not the emergency contact and does not have custody."""
         with allow_unscoped("test setup"):
-            mom = Person.objects.create(
-                organization=org, given_name="Mom", family_name="Tanaka"
-            )
-            dad = Person.objects.create(
-                organization=org, given_name="Dad", family_name="Tanaka"
-            )
+            mom = Person.objects.create(organization=org, given_name="Mom", family_name="Tanaka")
+            dad = Person.objects.create(organization=org, given_name="Dad", family_name="Tanaka")
             mom_link = GuardianLink.objects.create(
                 guardian=mom,
                 student=student_person,
@@ -252,9 +238,7 @@ class TestEmergencyContact:
     @pytest.fixture
     def person(self, org):
         with allow_unscoped("test setup"):
-            return Person.objects.create(
-                organization=org, given_name="Kenji", family_name="Sato"
-            )
+            return Person.objects.create(organization=org, given_name="Kenji", family_name="Sato")
 
     @pytest.fixture
     def contact(self, person):
@@ -279,15 +263,9 @@ class TestEmergencyContact:
 
     def test_ordering_by_priority(self, org, person):
         with allow_unscoped("test setup"):
-            EmergencyContact.objects.create(
-                person=person, name="Low", phone="111", priority=3
-            )
-            EmergencyContact.objects.create(
-                person=person, name="High", phone="222", priority=1
-            )
-            EmergencyContact.objects.create(
-                person=person, name="Mid", phone="333", priority=2
-            )
+            EmergencyContact.objects.create(person=person, name="Low", phone="111", priority=3)
+            EmergencyContact.objects.create(person=person, name="High", phone="222", priority=1)
+            EmergencyContact.objects.create(person=person, name="Mid", phone="333", priority=2)
         contacts = list(
             EmergencyContact.objects.for_actor(
                 Actor(user_id=None, person_id=None, organization_id=org.pk)
@@ -297,16 +275,12 @@ class TestEmergencyContact:
 
     def test_default_priority_is_one(self, person):
         with allow_unscoped("test setup"):
-            contact = EmergencyContact.objects.create(
-                person=person, name="Default", phone="999"
-            )
+            contact = EmergencyContact.objects.create(person=person, name="Default", phone="999")
         assert contact.priority == 1
 
     def test_relationship_is_optional(self, person):
         with allow_unscoped("test setup"):
-            contact = EmergencyContact.objects.create(
-                person=person, name="No Rel", phone="888"
-            )
+            contact = EmergencyContact.objects.create(person=person, name="No Rel", phone="888")
         assert contact.relationship == ""
 
     def test_tenant_isolation(self, contact, other_org):

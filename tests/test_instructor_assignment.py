@@ -38,17 +38,13 @@ def dojo_b(org):
 @pytest.fixture
 def person(org):
     with allow_unscoped("test setup"):
-        return Person.objects.create(
-            organization=org, given_name="Takeshi", family_name="Yamada"
-        )
+        return Person.objects.create(organization=org, given_name="Takeshi", family_name="Yamada")
 
 
 @pytest.fixture
 def assignment(dojo, person):
     with allow_unscoped("test setup"):
-        return InstructorAssignment.objects.create(
-            dojo=dojo, person=person, started_on=JAN
-        )
+        return InstructorAssignment.objects.create(dojo=dojo, person=person, started_on=JAN)
 
 
 # -- basics -------------------------------------------------------------------
@@ -99,9 +95,7 @@ def test_reassignment_allowed_once_the_first_has_ended(dojo, person):
         first = InstructorAssignment.objects.create(
             dojo=dojo, person=person, started_on=JAN, ended_on=MAY_END
         )
-        second = InstructorAssignment.objects.create(
-            dojo=dojo, person=person, started_on=JUN
-        )
+        second = InstructorAssignment.objects.create(dojo=dojo, person=person, started_on=JUN)
 
     assert first.pk != second.pk
     with allow_unscoped("verifying history survives"):
@@ -140,9 +134,7 @@ def test_dojo_scoped_actor_sees_only_their_own_dojo(org, dojo, dojo_b, person):
             organization=org, given_name="Sokha", family_name="Chan"
         )
         InstructorAssignment.objects.create(dojo=dojo, person=person, started_on=JAN)
-        InstructorAssignment.objects.create(
-            dojo=dojo_b, person=other_person, started_on=JAN
-        )
+        InstructorAssignment.objects.create(dojo=dojo_b, person=other_person, started_on=JAN)
 
     scoped_to_a = Actor(
         user_id=None,

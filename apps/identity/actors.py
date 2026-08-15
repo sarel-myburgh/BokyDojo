@@ -30,8 +30,7 @@ def actor_for_user(user) -> Actor:
     # session and full scope until it happens to expire. Found in adversarial
     # review — see tests/test_review_findings.py.
     if person is not None and (
-        getattr(person, "deleted_at", None) is not None
-        or not getattr(person, "is_active", True)
+        getattr(person, "deleted_at", None) is not None or not getattr(person, "is_active", True)
     ):
         return Actor(user_id=user.pk, person_id=None, organization_id=None)
 
@@ -50,13 +49,9 @@ def actor_for_user(user) -> Actor:
             .values_list("role", "scope_type", "dojo_id")
         )
 
-    roles = frozenset(
-        (role, scope_type, dojo_id) for role, scope_type, dojo_id in assignments
-    )
+    roles = frozenset((role, scope_type, dojo_id) for role, scope_type, dojo_id in assignments)
 
-    org_wide = any(
-        scope_type == ScopeType.ORG for _role, scope_type, _dojo in assignments
-    )
+    org_wide = any(scope_type == ScopeType.ORG for _role, scope_type, _dojo in assignments)
     if org_wide:
         dojo_ids = None
     else:

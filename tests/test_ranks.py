@@ -1,4 +1,4 @@
-﻿"""Ranking models — TODO 1.2.1-1.2.3, 1.2.11."""
+"""Ranking models — TODO 1.2.1-1.2.3, 1.2.11."""
 
 from __future__ import annotations
 
@@ -39,17 +39,21 @@ def junior_ladder(style):
 
 # ---- Style tests ----
 
+
 def test_style_creation(style):
     assert Style.objects.for_actor(Actor.system()).count() == 1
 
+
 def test_style_str(style):
     assert str(style) == "Shotokan Karate"
+
 
 def test_style_unique_per_org(org):
     with allow_unscoped("test setup"):
         Style.objects.create(organization=org, name="BJJ")
         with pytest.raises(IntegrityError):
             Style.objects.create(organization=org, name="BJJ")
+
 
 def test_style_different_orgs_same_name():
     with allow_unscoped("test setup"):
@@ -62,12 +66,15 @@ def test_style_different_orgs_same_name():
 
 # ---- RankLadder tests ----
 
+
 def test_ladder_creation(adult_ladder, junior_ladder):
     assert adult_ladder.applies_to == "adult"
     assert junior_ladder.applies_to == "junior"
 
+
 def test_ladder_str(adult_ladder):
     assert "Adult" in str(adult_ladder)
+
 
 def test_ladder_unique_name_per_style(style):
     with allow_unscoped("test setup"):
@@ -75,24 +82,33 @@ def test_ladder_unique_name_per_style(style):
         with pytest.raises(IntegrityError):
             RankLadder.objects.create(style=style, name="Ladder A", applies_to="junior")
 
+
 def test_ladder_unique_applies_to_per_style(style):
     with allow_unscoped("test setup"):
         RankLadder.objects.create(style=style, name="Adult Ladder", applies_to="adult")
         with pytest.raises(IntegrityError):
             RankLadder.objects.create(style=style, name="Adult Ladder 2", applies_to="adult")
 
+
 def test_ladder_tenant_org_path(style, adult_ladder):
     assert RankLadder.tenant_org_path == "style__organization_id"
 
+
 # ---- Rank tests ----
+
 
 @pytest.fixture
 def white_rank(adult_ladder):
     with allow_unscoped("test setup"):
         return Rank.objects.create(
-            ladder=adult_ladder, order=1, name="9th Kyu", belt_colour="white",
-            stripe_count=0, min_months_at_previous=0,
-            min_classes_since_previous=0, min_age=0,
+            ladder=adult_ladder,
+            order=1,
+            name="9th Kyu",
+            belt_colour="white",
+            stripe_count=0,
+            min_months_at_previous=0,
+            min_classes_since_previous=0,
+            min_age=0,
         )
 
 
@@ -102,45 +118,97 @@ def test_rank_creation(white_rank):
     assert white_rank.order == 1
     assert white_rank.stripe_count == 0
 
+
 def test_rank_str(white_rank):
     s = str(white_rank)
     assert "9th Kyu" in s
     assert "Adult" in s
 
+
 def test_rank_unique_order_per_ladder(adult_ladder, white_rank):
     with allow_unscoped("test setup"):
         with pytest.raises(IntegrityError):
             Rank.objects.create(
-                ladder=adult_ladder, order=1, name="Dup", belt_colour="white",
-                stripe_count=0, min_months_at_previous=0,
-                min_classes_since_previous=0, min_age=0,
+                ladder=adult_ladder,
+                order=1,
+                name="Dup",
+                belt_colour="white",
+                stripe_count=0,
+                min_months_at_previous=0,
+                min_classes_since_previous=0,
+                min_age=0,
             )
+
 
 def test_same_order_allowed_in_different_ladders(adult_ladder, junior_ladder):
     with allow_unscoped("test setup"):
-        Rank.objects.create(ladder=adult_ladder, order=1, name="9th Kyu", belt_colour="white", stripe_count=0, min_months_at_previous=0, min_classes_since_previous=0, min_age=0)
-        Rank.objects.create(ladder=junior_ladder, order=1, name="White", belt_colour="white", stripe_count=0, min_months_at_previous=0, min_classes_since_previous=0, min_age=0)
+        Rank.objects.create(
+            ladder=adult_ladder,
+            order=1,
+            name="9th Kyu",
+            belt_colour="white",
+            stripe_count=0,
+            min_months_at_previous=0,
+            min_classes_since_previous=0,
+            min_age=0,
+        )
+        Rank.objects.create(
+            ladder=junior_ladder,
+            order=1,
+            name="White",
+            belt_colour="white",
+            stripe_count=0,
+            min_months_at_previous=0,
+            min_classes_since_previous=0,
+            min_age=0,
+        )
         assert Rank.objects.for_actor(Actor.system()).count() == 2
+
 
 def test_rank_progression_fields(adult_ladder):
     with allow_unscoped("test setup"):
         rank = Rank.objects.create(
-            ladder=adult_ladder, order=10, name="1st Dan", belt_colour="black",
-            stripe_count=0, min_months_at_previous=12,
-            min_classes_since_previous=100, min_age=16,
+            ladder=adult_ladder,
+            order=10,
+            name="1st Dan",
+            belt_colour="black",
+            stripe_count=0,
+            min_months_at_previous=12,
+            min_classes_since_previous=100,
+            min_age=16,
         )
         assert rank.min_months_at_previous == 12
         assert rank.min_classes_since_previous == 100
         assert rank.min_age == 16
         assert rank.belt_colour == "black"
 
+
 def test_rank_tenant_org_path(adult_ladder):
     assert Rank.tenant_org_path == "ladder__style__organization_id"
 
+
 def test_rank_ordering(adult_ladder):
     with allow_unscoped("test setup"):
-        Rank.objects.create(ladder=adult_ladder, order=10, name="1st Dan", belt_colour="black", stripe_count=0, min_months_at_previous=0, min_classes_since_previous=0, min_age=0)
-        Rank.objects.create(ladder=adult_ladder, order=1, name="9th Kyu", belt_colour="white", stripe_count=0, min_months_at_previous=0, min_classes_since_previous=0, min_age=0)
+        Rank.objects.create(
+            ladder=adult_ladder,
+            order=10,
+            name="1st Dan",
+            belt_colour="black",
+            stripe_count=0,
+            min_months_at_previous=0,
+            min_classes_since_previous=0,
+            min_age=0,
+        )
+        Rank.objects.create(
+            ladder=adult_ladder,
+            order=1,
+            name="9th Kyu",
+            belt_colour="white",
+            stripe_count=0,
+            min_months_at_previous=0,
+            min_classes_since_previous=0,
+            min_age=0,
+        )
         ranks = list(Rank.objects.for_actor(Actor.system()))
         assert ranks[0].order == 1
         assert ranks[1].order == 10
@@ -192,12 +260,8 @@ def test_seeding_idempotent(seed_org):
         adult2, junior2 = create_shotokan_ladders(seed_org)
     assert adult1.pk == adult2.pk
     assert junior1.pk == junior2.pk
-    assert (
-        Rank.objects.for_actor(Actor.system()).filter(ladder=adult1).count() == 10
-    )
-    assert (
-        Rank.objects.for_actor(Actor.system()).filter(ladder=junior1).count() == 20
-    )
+    assert Rank.objects.for_actor(Actor.system()).filter(ladder=adult1).count() == 10
+    assert Rank.objects.for_actor(Actor.system()).filter(ladder=junior1).count() == 20
 
 
 def test_ladders_belong_to_org(seed_org):

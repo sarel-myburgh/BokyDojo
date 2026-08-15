@@ -35,9 +35,7 @@ def ladders(org):
 @pytest.fixture
 def student(org):
     with allow_unscoped("test setup"):
-        return Person.objects.create(
-            organization=org, given_name="Mealea", family_name="Kim"
-        )
+        return Person.objects.create(organization=org, given_name="Mealea", family_name="Kim")
 
 
 @pytest.fixture

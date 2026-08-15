@@ -1,4 +1,4 @@
-﻿"""Ranking models — TODO 1.2.1-1.2.3.
+"""Ranking models — TODO 1.2.1-1.2.3.
 
 Style, RankLadder, and Rank define the belt/grade progression system.
 Every model is org-scoped via TenantScopedModel (plan S7.2).
@@ -12,6 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from apps.core.managers import ScopedManager, ScopedQuerySet
 from apps.core.models import TenantScopedModel
 
 
@@ -43,7 +44,6 @@ class Style(TenantScopedModel):
 
     def __str__(self) -> str:
         return self.name
-
 
 
 class RankLadder(TenantScopedModel):
@@ -88,7 +88,6 @@ class RankLadder(TenantScopedModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_applies_to_display()})"
-
 
 
 class Rank(TenantScopedModel):
@@ -176,9 +175,7 @@ class StudentStyleTrack(TenantScopedModel):
         related_name="style_tracks",
     )
     style = models.ForeignKey(Style, on_delete=models.PROTECT, related_name="tracks")
-    ladder = models.ForeignKey(
-        RankLadder, on_delete=models.PROTECT, related_name="tracks"
-    )
+    ladder = models.ForeignKey(RankLadder, on_delete=models.PROTECT, related_name="tracks")
     #: Denormalised from the latest RankAward for query speed (task 1.2.5
     #: recomputes it on write). Null means "enrolled but not yet graded" —
     #: a white belt who has not had their first grading.
@@ -215,8 +212,7 @@ class StudentStyleTrack(TenantScopedModel):
             ),
             models.CheckConstraint(
                 condition=(
-                    models.Q(status="active", ended_on__isnull=True)
-                    | ~models.Q(status="active")
+                    models.Q(status="active", ended_on__isnull=True) | ~models.Q(status="active")
                 ),
                 name="active_track_has_no_end_date",
             ),
@@ -250,11 +246,7 @@ class StudentStyleTrack(TenantScopedModel):
             return
         if self.current_rank.ladder_id != self.ladder_id:
             raise ValidationError(
-                {
-                    "current_rank": _(
-                        "This rank belongs to a different ladder than the track."
-                    )
-                }
+                {"current_rank": _("This rank belongs to a different ladder than the track.")}
             )
 
     def close(self, *, status: str, on_date) -> None:
@@ -272,9 +264,7 @@ class StudentStyleTrack(TenantScopedModel):
         student's history at twelve remains answerable.
         """
         if new_ladder.style_id != self.style_id:
-            raise ValidationError(
-                {"ladder": _("A transfer must stay within the same style.")}
-            )
+            raise ValidationError({"ladder": _("A transfer must stay within the same style.")})
 
         self.close(status=self.Status.TRANSFERRED, on_date=on_date)
         return StudentStyleTrack.objects.create(
@@ -306,6 +296,26 @@ class StudentStyleTrack(TenantScopedModel):
         return rank
 
 
+class AppendOnlyRankAwardQuerySet(ScopedQuerySet):
+    """Rank history changes only through new awards or explicit revocation."""
+
+    def update(self, **kwargs):
+        raise NotImplementedError("Rank awards are append-only; use the promotion service.")
+
+    def delete(self):
+        raise NotImplementedError("Rank awards are append-only and cannot be deleted.")
+
+    def bulk_create(self, objs, **kwargs):
+        raise NotImplementedError("Rank awards must be created through the promotion service.")
+
+    def bulk_update(self, objs, fields, **kwargs):
+        raise NotImplementedError("Rank awards are append-only and cannot be bulk-updated.")
+
+
+class RankAwardManager(ScopedManager.from_queryset(AppendOnlyRankAwardQuerySet)):
+    use_in_migrations = False
+
+
 class RankAward(TenantScopedModel):
     """A grade awarded to a student — TODO 1.2.5, 1.2.9, 1.2.10, plan §4.4.
 
@@ -328,9 +338,7 @@ class RankAward(TenantScopedModel):
     tenant_org_path = "track__student__organization_id"
     same_organization_fields = ("track", "rank", "awarded_by", "revoked_by")
 
-    track = models.ForeignKey(
-        StudentStyleTrack, on_delete=models.CASCADE, related_name="awards"
-    )
+    track = models.ForeignKey(StudentStyleTrack, on_delete=models.CASCADE, related_name="awards")
     rank = models.ForeignKey(Rank, on_delete=models.PROTECT, related_name="awards")
     awarded_on = models.DateField(_("awarded on"))
     awarded_by = models.ForeignKey(
@@ -364,6 +372,8 @@ class RankAward(TenantScopedModel):
         related_name="ranks_revoked",
     )
     revocation_reason = models.CharField(max_length=500, blank=True)
+
+    objects = RankAwardManager()
 
     class Meta:
         verbose_name = _("rank award")
@@ -399,19 +409,22 @@ class RankAward(TenantScopedModel):
         self.check_external_source_named()
 
     def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise NotImplementedError("Rank awards are append-only; create or revoke a record.")
         self.check_rank_belongs_to_track_ladder()
         self.check_external_source_named()
         result = super().save(*args, **kwargs)
         self.track.recompute_current_rank()
         return result
 
+    def delete(self, *args, **kwargs):
+        raise NotImplementedError("Rank awards are append-only and cannot be deleted.")
+
     def check_rank_belongs_to_track_ladder(self) -> None:
         if self.rank_id is None or self.track_id is None:
             return
         if self.rank.ladder_id != self.track.ladder_id:
-            raise ValidationError(
-                {"rank": _("This rank is not on the ladder this track follows.")}
-            )
+            raise ValidationError({"rank": _("This rank is not on the ladder this track follows.")})
 
     def check_external_source_named(self) -> None:
         """A recognised grade must say who awarded it.
@@ -421,11 +434,7 @@ class RankAward(TenantScopedModel):
         """
         if self.is_external and not self.awarded_by_external_org.strip():
             raise ValidationError(
-                {
-                    "awarded_by_external_org": _(
-                        "Name the organisation that awarded this grade."
-                    )
-                }
+                {"awarded_by_external_org": _("Name the organisation that awarded this grade.")}
             )
 
     def revoke(self, *, by=None, reason: str, at=None) -> None:
@@ -440,8 +449,5 @@ class RankAward(TenantScopedModel):
         self.revoked_at = at or django_timezone.now()
         self.revoked_by = by
         self.revocation_reason = reason
-        super().save(
-            update_fields=["revoked_at", "revoked_by", "revocation_reason", "updated_at"]
-        )
+        super().save(update_fields=["revoked_at", "revoked_by", "revocation_reason", "updated_at"])
         self.track.recompute_current_rank()
-

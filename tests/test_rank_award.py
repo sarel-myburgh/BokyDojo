@@ -24,12 +24,8 @@ def world():
     with allow_unscoped("test setup"):
         org = Organization.objects.create(name="Award Org", slug="award-org")
         adult, junior = create_shotokan_ladders(org)
-        student = Person.objects.create(
-            organization=org, given_name="Rithy", family_name="Sok"
-        )
-        sensei = Person.objects.create(
-            organization=org, given_name="Kenji", family_name="Sensei"
-        )
+        student = Person.objects.create(organization=org, given_name="Rithy", family_name="Sok")
+        sensei = Person.objects.create(organization=org, given_name="Kenji", family_name="Sensei")
         track = StudentStyleTrack.objects.create(
             student=student, style=adult.style, ladder=adult, started_on=DAY
         )
@@ -128,16 +124,14 @@ def test_a_revoked_grade_may_be_awarded_again(world):
 def test_the_same_live_grade_cannot_be_awarded_twice(world):
     _award(world, 1)
     with allow_unscoped("test setup"), pytest.raises(IntegrityError):
-        RankAward.objects.create(
-            track=world["track"], rank=world["ranks"][1], awarded_on=LATER
-        )
+        RankAward.objects.create(track=world["track"], rank=world["ranks"][1], awarded_on=LATER)
 
 
 # -- external recognition (1.2.9) ---------------------------------------------
 
 
 def test_recognised_grade_must_name_its_source(world):
-    """"Recognised, source unknown" is how unverifiable black belts enter a
+    """ "Recognised, source unknown" is how unverifiable black belts enter a
     register and never leave."""
     with pytest.raises(ValidationError, match="organisation"):
         _award(world, 5, recognition=RankAward.Recognition.RECOGNISED)
@@ -170,9 +164,7 @@ def test_a_rank_from_another_ladder_cannot_be_awarded(world):
     with allow_unscoped("test setup"):
         junior_rank = Rank.objects.filter(ladder=world["junior"]).first()
     with pytest.raises(ValidationError, match="ladder"):
-        RankAward.objects.create(
-            track=world["track"], rank=junior_rank, awarded_on=DAY
-        )
+        RankAward.objects.create(track=world["track"], rank=junior_rank, awarded_on=DAY)
 
 
 # -- tenancy ------------------------------------------------------------------

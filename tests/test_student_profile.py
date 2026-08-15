@@ -32,9 +32,7 @@ def dojo(org):
 @pytest.fixture
 def person(org):
     with allow_unscoped("test setup"):
-        return Person.objects.create(
-            organization=org, given_name="Kenji", family_name="Sato"
-        )
+        return Person.objects.create(organization=org, given_name="Kenji", family_name="Sato")
 
 
 @pytest.fixture

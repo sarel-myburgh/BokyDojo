@@ -74,9 +74,9 @@ def test_dojo_scoped_role_cannot_reach_another_dojo(governance):
     other_dojo_object = FakeObject(dojo_id=DOJO_B)
 
     for action in Action.all():
-        assert (
-            can(actor, action, other_dojo_object, governance_model=governance) is False
-        ), f"dojo_admin at Dojo A was allowed {action!r} at Dojo B"
+        assert can(actor, action, other_dojo_object, governance_model=governance) is False, (
+            f"dojo_admin at Dojo A was allowed {action!r} at Dojo B"
+        )
 
 
 @pytest.mark.parametrize("governance", [GovernanceModel.CENTRAL, GovernanceModel.FEDERATED])
@@ -92,11 +92,16 @@ def test_no_role_reaches_another_organisation(governance):
 def test_anonymous_actor_is_denied_everything():
     anonymous = Actor(user_id=None, person_id=None, organization_id=None)
     for action in Action.all():
-        assert can(anonymous, action, FakeObject(), governance_model=GovernanceModel.CENTRAL) is False
+        assert (
+            can(anonymous, action, FakeObject(), governance_model=GovernanceModel.CENTRAL) is False
+        )
 
 
 def test_none_actor_is_denied():
-    assert can(None, Action.PERSON_VIEW, FakeObject(), governance_model=GovernanceModel.CENTRAL) is False
+    assert (
+        can(None, Action.PERSON_VIEW, FakeObject(), governance_model=GovernanceModel.CENTRAL)
+        is False
+    )
 
 
 def test_dojo_scoped_role_cannot_act_on_org_level_objects():
@@ -111,9 +116,10 @@ def test_federated_denials_do_not_apply_to_org_level_objects():
     """The federation withholding applies to *dojo-owned* records specifically."""
     actor = build_actor("org_admin", ScopeType.ORG)
     org_level = FakeObject(dojo_id=None)
-    assert can(
-        actor, Action.FINANCIAL_VIEW, org_level, governance_model=GovernanceModel.FEDERATED
-    ) is True
+    assert (
+        can(actor, Action.FINANCIAL_VIEW, org_level, governance_model=GovernanceModel.FEDERATED)
+        is True
+    )
 
 
 def test_every_action_appears_in_at_least_one_role():

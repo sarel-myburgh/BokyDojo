@@ -42,9 +42,7 @@ class InstructorProfile(TenantScopedModel):
         default=0,
     )
     pay_currency = models.CharField(_("currency"), max_length=3, default="USD")
-    employment_started_on = models.DateField(
-        _("employment started on"), null=True, blank=True
-    )
+    employment_started_on = models.DateField(_("employment started on"), null=True, blank=True)
     max_grading_rank = models.ForeignKey(
         "ranks.Rank",
         null=True,
@@ -141,8 +139,7 @@ class TimeEntry(TenantScopedModel):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    models.Q(ended_at__isnull=True)
-                    | models.Q(ended_at__gt=models.F("started_at"))
+                    models.Q(ended_at__isnull=True) | models.Q(ended_at__gt=models.F("started_at"))
                 ),
                 name="timeentry_ended_after_started",
             ),
@@ -154,7 +151,11 @@ class TimeEntry(TenantScopedModel):
     def save(self, *args, **kwargs):
         self._compute_minutes()
         update_fields = kwargs.get("update_fields")
-        if update_fields is not None and "ended_at" in update_fields and "minutes" not in update_fields:
+        if (
+            update_fields is not None
+            and "ended_at" in update_fields
+            and "minutes" not in update_fields
+        ):
             update_fields = list(update_fields) + ["minutes"]
             kwargs["update_fields"] = update_fields
         super().save(*args, **kwargs)
@@ -169,6 +170,4 @@ class TimeEntry(TenantScopedModel):
         super().clean()
         if self.ended_at is not None and self.started_at is not None:
             if self.ended_at <= self.started_at:
-                raise ValidationError(
-                    {"ended_at": _("ended_at must be after started_at.")}
-                )
+                raise ValidationError({"ended_at": _("ended_at must be after started_at.")})

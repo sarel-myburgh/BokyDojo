@@ -18,10 +18,13 @@ from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from apps.core.fields import EncryptedCharField, EncryptedTextField
 from apps.core.ids import uuid7
-from apps.core.managers import ScopedManager
+from apps.core.managers import ScopedManager, ScopedQuerySet
 from apps.core.models import BaseModel, SoftDeleteModel, TenantScopedModel
 from apps.core.scoping import Actor
+
+from .student_filters import validate_saved_student_filters
 
 
 class GovernanceModel(models.TextChoices):
@@ -77,9 +80,7 @@ class Dojo(TenantScopedModel):
     tenant_org_path = "organization_id"
     tenant_dojo_path = "id"
 
-    organization = models.ForeignKey(
-        Organization, on_delete=models.PROTECT, related_name="dojos"
-    )
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT, related_name="dojos")
     name = models.CharField(_("name"), max_length=200)
     slug = models.SlugField(_("slug"), max_length=100)
 
@@ -123,9 +124,7 @@ class Person(SoftDeleteModel):
 
     tenant_org_path = "organization_id"
 
-    organization = models.ForeignKey(
-        Organization, on_delete=models.PROTECT, related_name="people"
-    )
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT, related_name="people")
 
     given_name = models.CharField(_("given name"), max_length=100)
     family_name = models.CharField(_("family name"), max_length=100, blank=True)
@@ -277,9 +276,7 @@ class RoleAssignment(TenantScopedModel):
     organization = models.ForeignKey(
         Organization, on_delete=models.CASCADE, related_name="role_assignments"
     )
-    person = models.ForeignKey(
-        Person, on_delete=models.CASCADE, related_name="role_assignments"
-    )
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="role_assignments")
     role = models.CharField(_("role"), max_length=32, choices=Role.choices)
     scope_type = models.CharField(max_length=8, choices=ScopeType.choices)
     dojo = models.ForeignKey(
@@ -333,6 +330,53 @@ class RoleAssignment(TenantScopedModel):
         return models.Q(organization_id=actor.organization_id)
 
 
+class MfaCredential(TenantScopedModel):
+    """Per-user TOTP seed and hashed one-time recovery codes.
+
+    The seed is encrypted with the owning organisation's envelope key. Recovery
+    codes are never stored directly; only keyed digests are persisted.
+    """
+
+    tenant_org_path = "organization_id"
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="mfa_credentials"
+    )
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="mfa_credential")
+    totp_secret = EncryptedCharField(max_length=64)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    recovery_code_hashes = models.JSONField(default=list, blank=True)
+    last_used_counter = models.BigIntegerField(null=True, blank=True)
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("multi-factor credential")
+        verbose_name_plural = _("multi-factor credentials")
+
+    def check_same_organization(self) -> None:
+        """A login may only hold a credential for its Person's organisation."""
+        if not self.user_id or not self.organization_id:
+            return
+        from django.core.exceptions import ValidationError
+
+        user_org_id = (
+            User.objects.filter(pk=self.user_id)
+            .values_list("person__organization_id", flat=True)
+            .first()
+        )
+        if user_org_id is None:
+            raise ValidationError(
+                {"user": _("A user needs an organisation-linked person before enabling MFA.")}
+            )
+        if user_org_id != self.organization_id:
+            raise ValidationError({"user": _("The user belongs to a different organisation.")})
+
+    @property
+    def is_confirmed(self) -> bool:
+        return self.confirmed_at is not None
+
+
 class InstructorAssignment(TenantScopedModel):
     """A Person teaching at a Dojo — plan §4.3."""
 
@@ -341,9 +385,7 @@ class InstructorAssignment(TenantScopedModel):
     #: An instructor from another organisation must not be assignable here.
     same_organization_fields = ("dojo", "person")
 
-    dojo = models.ForeignKey(
-        Dojo, on_delete=models.PROTECT, related_name="instructor_assignments"
-    )
+    dojo = models.ForeignKey(Dojo, on_delete=models.PROTECT, related_name="instructor_assignments")
     person = models.ForeignKey(
         Person, on_delete=models.CASCADE, related_name="instructor_assignments"
     )
@@ -394,9 +436,7 @@ class StudentProfile(TenantScopedModel):
         LAPSED = "lapsed", _("Lapsed")
         ALUMNI = "alumni", _("Alumni")
 
-    person = models.OneToOneField(
-        Person, on_delete=models.CASCADE, related_name="student_profile"
-    )
+    person = models.OneToOneField(Person, on_delete=models.CASCADE, related_name="student_profile")
     home_dojo = models.ForeignKey(
         Dojo,
         null=True,
@@ -412,7 +452,17 @@ class StudentProfile(TenantScopedModel):
         db_index=True,
     )
     joined_on = models.DateField(_("joined on"), null=True, blank=True)
-    hold_reason = models.CharField(_("hold reason"), max_length=200, blank=True)
+    hold_reason = EncryptedCharField(_("hold reason"), max_length=200, blank=True)
+
+    # Special-category health data. Text fields are encrypted with the owning
+    # organisation's data key; the operational do-not-spar flag is deliberately
+    # minimal and plaintext so a roster can surface it without searching cipher text.
+    medical_notes = EncryptedTextField(_("medical notes"), blank=True)
+    allergies = EncryptedTextField(_("allergies"), blank=True)
+    conditions = EncryptedTextField(_("medical conditions"), blank=True)
+    medications = EncryptedTextField(_("medications"), blank=True)
+    doctor_contact = EncryptedCharField(_("doctor contact"), max_length=255, blank=True)
+    do_not_spar = models.BooleanField(_("do not spar"), default=False)
 
     shirt_size = models.CharField(_("shirt size"), max_length=20, blank=True)
     gi_size = models.CharField(_("gi size"), max_length=20, blank=True)
@@ -420,9 +470,7 @@ class StudentProfile(TenantScopedModel):
     federation_licence_no = models.CharField(
         _("federation licence number"), max_length=100, blank=True
     )
-    licence_expires_on = models.DateField(
-        _("licence expires on"), null=True, blank=True
-    )
+    licence_expires_on = models.DateField(_("licence expires on"), null=True, blank=True)
 
     objects = ScopedManager()
 
@@ -434,12 +482,55 @@ class StudentProfile(TenantScopedModel):
         return f"Student: {self.person}"
 
     @property
+    def organization_id(self):
+        """Owning tenant for encryption, permissions, and audit attribution."""
+        return self.person.organization_id
+
+    @property
     def is_active(self) -> bool:
         return self.status == self.Status.ACTIVE
 
     @property
     def is_training(self) -> bool:
         return self.status in (self.Status.ACTIVE, self.Status.TRIAL)
+
+
+class StudentSegment(TenantScopedModel):
+    """A named, reusable student-directory filter owned by one staff member."""
+
+    tenant_org_path = "organization_id"
+    same_organization_fields = ("organization", "owner")
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="student_segments"
+    )
+    owner = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="student_segments")
+    name = models.CharField(_("name"), max_length=80)
+    filters = models.JSONField(
+        _("filters"),
+        default=dict,
+        validators=[validate_saved_student_filters],
+    )
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("student segment")
+        verbose_name_plural = _("student segments")
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "owner", "name"],
+                name="unique_student_segment_name_per_owner",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def save(self, *args, **kwargs):
+        self.full_clean(validate_unique=False, validate_constraints=False)
+        return super().save(*args, **kwargs)
 
 
 class GuardianLink(TenantScopedModel):
@@ -451,6 +542,7 @@ class GuardianLink(TenantScopedModel):
     """
 
     tenant_org_path = "student__organization_id"
+    tenant_dojo_path = "student__student_profile__home_dojo_id"
     #: The tenant path runs through the student, so a guardian from another
     #: organisation would be a one-way window into that tenant's people.
     same_organization_fields = ("student", "guardian")
@@ -463,24 +555,16 @@ class GuardianLink(TenantScopedModel):
         SIBLING = "sibling", _("Sibling")
         OTHER = "other", _("Other")
 
-    guardian = models.ForeignKey(
-        Person, on_delete=models.CASCADE, related_name="guarded_links"
-    )
-    student = models.ForeignKey(
-        Person, on_delete=models.CASCADE, related_name="guardian_links"
-    )
-    relationship = models.CharField(
-        _("relationship"), max_length=16, choices=Relationship.choices
-    )
+    guardian = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="guarded_links")
+    student = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="guardian_links")
+    relationship = models.CharField(_("relationship"), max_length=16, choices=Relationship.choices)
 
     is_primary_contact = models.BooleanField(_("primary contact"), default=False)
     is_emergency_contact = models.BooleanField(_("emergency contact"), default=False)
-    is_financially_responsible = models.BooleanField(
-        _("financially responsible"), default=False
-    )
+    is_financially_responsible = models.BooleanField(_("financially responsible"), default=False)
     has_custody = models.BooleanField(_("has custody"), default=False)
 
-    notes = models.CharField(_("notes"), max_length=255, blank=True)
+    notes = EncryptedCharField(_("notes"), max_length=255, blank=True)
 
     objects = ScopedManager()
 
@@ -495,8 +579,249 @@ class GuardianLink(TenantScopedModel):
             ),
         ]
 
+    @property
+    def organization_id(self):
+        """Owning tenant for encrypted safeguarding notes."""
+        return self.student.organization_id
+
     def __str__(self) -> str:
         return f"{self.guardian} → {self.student} ({self.get_relationship_display()})"
+
+
+class AppendOnlyConsentQuerySet(ScopedQuerySet):
+    """Consent evidence is superseded by a new row, never rewritten or deleted."""
+
+    def update(self, **kwargs):
+        raise NotImplementedError("Consent records are append-only; add a superseding record.")
+
+    def delete(self):
+        raise NotImplementedError("Consent records are append-only and cannot be deleted.")
+
+    def bulk_create(self, objs, **kwargs):
+        raise NotImplementedError("Consent records must be created through the consent service.")
+
+    def bulk_update(self, objs, fields, **kwargs):
+        raise NotImplementedError("Consent records are append-only and cannot be updated.")
+
+
+class ConsentManager(ScopedManager.from_queryset(AppendOnlyConsentQuerySet)):
+    use_in_migrations = False
+
+
+class ConsentRecord(TenantScopedModel):
+    """One versioned consent decision — TODO 1.1.6, plan §4.2."""
+
+    tenant_org_path = "person__organization_id"
+    same_organization_fields = ("person", "granted_by", "document", "policy", "supersedes")
+
+    class Type(models.TextChoices):
+        PHOTO = "photo", _("Photo and video")
+        MARKETING = "marketing", _("Marketing")
+        DATA_PROCESSING = "data_processing", _("Data processing")
+        MEDICAL = "medical", _("Medical data")
+        WAIVER = "waiver", _("Liability waiver")
+
+    class Capacity(models.TextChoices):
+        SELF = "self", _("Self")
+        PARENT = "parent", _("Parent")
+        GUARDIAN = "guardian", _("Legal guardian")
+
+    person = models.ForeignKey(Person, on_delete=models.PROTECT, related_name="consent_records")
+    consent_type = models.CharField(_("consent type"), max_length=24, choices=Type.choices)
+    version = models.CharField(_("version"), max_length=64)
+    granted = models.BooleanField(_("granted"))
+    granted_at = models.DateTimeField(_("recorded at"), default=timezone.now)
+    granted_by = models.ForeignKey(
+        Person,
+        on_delete=models.PROTECT,
+        related_name="consents_given",
+    )
+    capacity = models.CharField(_("capacity"), max_length=16, choices=Capacity.choices)
+    ip_address = models.GenericIPAddressField(_("IP address"))
+    user_agent = models.CharField(_("user agent"), max_length=512, blank=True)
+    signature_name = EncryptedCharField(_("signature name"), max_length=200, blank=True)
+    document = models.ForeignKey(
+        "core.Document",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="consent_records",
+    )
+    policy = models.ForeignKey(
+        "ConsentPolicy",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="consent_records",
+    )
+    supersedes = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="superseded_by",
+    )
+
+    objects = ConsentManager()
+
+    class Meta:
+        verbose_name = _("consent record")
+        verbose_name_plural = _("consent records")
+        ordering = ("-granted_at", "-created_at")
+        indexes = [
+            models.Index(fields=["person", "consent_type", "version", "-granted_at"]),
+        ]
+
+    @property
+    def organization_id(self):
+        return self.person.organization_id
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.supersedes_id:
+            previous = self.supersedes
+            if (
+                previous.person_id != self.person_id
+                or previous.consent_type != self.consent_type
+                or previous.version != self.version
+            ):
+                errors["supersedes"] = _(
+                    "A consent may only supersede the same person, type, and version."
+                )
+        if self.document_id:
+            if self.document.subject_person_id not in (None, self.person_id):
+                errors["document"] = _("The document belongs to a different person.")
+            if self.consent_type == self.Type.WAIVER and self.document.kind != "waiver":
+                errors["document"] = _("Waiver consent requires a waiver document.")
+        if self.policy_id:
+            if self.policy.consent_type != self.consent_type or self.policy.version != self.version:
+                errors["policy"] = _("The policy type and version do not match the decision.")
+            if self.document_id != self.policy.document_id:
+                errors["document"] = _("The evidence document does not match the policy.")
+        if errors:
+            from django.core.exceptions import ValidationError
+
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise NotImplementedError("Consent records are append-only; add a superseding record.")
+        self.full_clean(validate_unique=False, validate_constraints=False)
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise NotImplementedError("Consent records are append-only and cannot be deleted.")
+
+    def __str__(self) -> str:
+        decision = _("granted") if self.granted else _("revoked")
+        return f"{self.person} — {self.get_consent_type_display()} {self.version}: {decision}"
+
+
+class ConsentPolicyQuerySet(ScopedQuerySet):
+    def update(self, **kwargs):
+        if set(kwargs) - {"is_active", "updated_at"}:
+            raise NotImplementedError(
+                "Published consent policy content is immutable; create a new version."
+            )
+        return super().update(**kwargs)
+
+    def delete(self):
+        raise NotImplementedError("Published consent policies cannot be deleted.")
+
+    def bulk_create(self, objs, **kwargs):
+        raise NotImplementedError("Consent policies must be validated individually.")
+
+    def bulk_update(self, objs, fields, **kwargs):
+        raise NotImplementedError("Published consent policies cannot be bulk-updated.")
+
+
+class ConsentPolicyManager(ScopedManager.from_queryset(ConsentPolicyQuerySet)):
+    use_in_migrations = False
+
+
+class ConsentPolicy(TenantScopedModel):
+    """Organisation-authored wording for one exact consent version."""
+
+    tenant_org_path = "organization_id"
+    same_organization_fields = ("organization", "document")
+
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="consent_policies"
+    )
+    consent_type = models.CharField(
+        _("consent type"), max_length=24, choices=ConsentRecord.Type.choices
+    )
+    version = models.CharField(_("version"), max_length=64)
+    title = models.CharField(_("title"), max_length=200)
+    body = models.TextField(
+        _("document text"),
+        blank=True,
+        help_text=_("Plain text shown verbatim to the signer."),
+    )
+    document = models.ForeignKey(
+        "core.Document",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="consent_policies",
+    )
+    published_at = models.DateTimeField(_("published at"), default=timezone.now)
+    is_active = models.BooleanField(_("active"), default=True)
+
+    objects = ConsentPolicyManager()
+
+    class Meta:
+        verbose_name = _("consent policy")
+        verbose_name_plural = _("consent policies")
+        ordering = ("consent_type", "-published_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "consent_type", "version"],
+                name="unique_consent_policy_version",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "consent_type"],
+                condition=Q(is_active=True),
+                name="unique_active_consent_policy",
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if not self.body.strip() and self.document_id is None:
+            errors["body"] = _("Enter document text or attach a document.")
+        if self.document_id and self.document.kind != "waiver":
+            errors["document"] = _("Consent policy attachments must be waiver documents.")
+        if errors:
+            from django.core.exceptions import ValidationError
+
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            original = ConsentPolicy.objects.for_organization(self.organization_id).get(pk=self.pk)
+            immutable = (
+                "organization_id",
+                "consent_type",
+                "version",
+                "title",
+                "body",
+                "document_id",
+            )
+            if any(getattr(original, field) != getattr(self, field) for field in immutable):
+                raise NotImplementedError(
+                    "Published consent policy content is immutable; create a new version."
+                )
+        self.full_clean(validate_unique=False, validate_constraints=False)
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise NotImplementedError("Published consent policies cannot be deleted.")
+
+    def __str__(self) -> str:
+        return f"{self.get_consent_type_display()} {self.version}: {self.title}"
 
 
 class EmergencyContact(TenantScopedModel):
@@ -507,10 +832,9 @@ class EmergencyContact(TenantScopedModel):
     """
 
     tenant_org_path = "person__organization_id"
+    tenant_dojo_path = "person__student_profile__home_dojo_id"
 
-    person = models.ForeignKey(
-        Person, on_delete=models.CASCADE, related_name="emergency_contacts"
-    )
+    person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="emergency_contacts")
     name = models.CharField(_("name"), max_length=200)
     phone = models.CharField(_("phone"), max_length=40)
     relationship = models.CharField(_("relationship"), max_length=100, blank=True)
@@ -553,9 +877,7 @@ class Enrollment(TenantScopedModel):
         ON_HOLD = "on_hold", _("On hold")
         ENDED = "ended", _("Ended")
 
-    student = models.ForeignKey(
-        Person, on_delete=models.CASCADE, related_name="enrollments"
-    )
+    student = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="enrollments")
     dojo = models.ForeignKey(Dojo, on_delete=models.PROTECT, related_name="enrollments")
 
     #: The student's home dojo — drives default billing, reporting attribution
@@ -572,7 +894,7 @@ class Enrollment(TenantScopedModel):
     )
     started_on = models.DateField(_("started on"))
     ended_on = models.DateField(_("ended on"), null=True, blank=True)
-    hold_reason = models.CharField(_("hold reason"), max_length=200, blank=True)
+    hold_reason = EncryptedCharField(_("hold reason"), max_length=200, blank=True)
     notes = models.CharField(_("notes"), max_length=255, blank=True)
 
     objects = ScopedManager()
@@ -607,8 +929,7 @@ class Enrollment(TenantScopedModel):
             ),
             models.CheckConstraint(
                 condition=(
-                    models.Q(ended_on__isnull=True)
-                    | models.Q(ended_on__gte=models.F("started_on"))
+                    models.Q(ended_on__isnull=True) | models.Q(ended_on__gte=models.F("started_on"))
                 ),
                 name="enrollment_ended_on_gte_started_on",
             ),
@@ -618,6 +939,11 @@ class Enrollment(TenantScopedModel):
     def __str__(self) -> str:
         marker = " (primary)" if self.is_primary else ""
         return f"{self.student} @ {self.dojo}{marker}"
+
+    @property
+    def organization_id(self):
+        """Owning tenant for encrypted enrolment fields."""
+        return self.dojo.organization_id
 
     @property
     def is_live(self) -> bool:
@@ -634,9 +960,7 @@ class Enrollment(TenantScopedModel):
         self.is_primary = False
         if reason:
             self.notes = reason[:255]
-        self.save(
-            update_fields=["status", "ended_on", "is_primary", "notes", "updated_at"]
-        )
+        self.save(update_fields=["status", "ended_on", "is_primary", "notes", "updated_at"])
 
 
 class TransferRecord(TenantScopedModel):
@@ -652,15 +976,9 @@ class TransferRecord(TenantScopedModel):
     tenant_org_path = "from_dojo__organization_id"
     same_organization_fields = ("student", "from_dojo", "to_dojo", "approved_by")
 
-    student = models.ForeignKey(
-        Person, on_delete=models.CASCADE, related_name="transfers"
-    )
-    from_dojo = models.ForeignKey(
-        Dojo, on_delete=models.PROTECT, related_name="transfers_out"
-    )
-    to_dojo = models.ForeignKey(
-        Dojo, on_delete=models.PROTECT, related_name="transfers_in"
-    )
+    student = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="transfers")
+    from_dojo = models.ForeignKey(Dojo, on_delete=models.PROTECT, related_name="transfers_out")
+    to_dojo = models.ForeignKey(Dojo, on_delete=models.PROTECT, related_name="transfers_in")
     effective_on = models.DateField(_("effective on"))
     reason = models.CharField(_("reason"), max_length=255, blank=True)
     approved_by = models.ForeignKey(

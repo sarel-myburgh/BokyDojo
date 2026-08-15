@@ -48,9 +48,7 @@ def _sync_home_dojo(student: Person, dojo: Dojo | None, actor: Actor) -> None:
     # client-supplied — see ScopedQuerySet.for_organization.
     organization_id = dojo.organization_id if dojo else student.organization_id
     profile = (
-        StudentProfile.objects.for_organization(organization_id)
-        .filter(person=student)
-        .first()
+        StudentProfile.objects.for_organization(organization_id).filter(person=student).first()
     )
     if profile is None or profile.home_dojo_id == (dojo.pk if dojo else None):
         return
@@ -86,9 +84,7 @@ def enrol_student(
     """
     require(actor, Action.PERSON_EDIT, dojo, governance_model=_governance_of(dojo))
 
-    live = list(
-        Enrollment.objects.for_actor(actor).filter(student=student, ended_on__isnull=True)
-    )
+    live = list(Enrollment.objects.for_actor(actor).filter(student=student, ended_on__isnull=True))
     if is_primary is None:
         is_primary = not live
 
@@ -216,9 +212,7 @@ def set_primary_dojo(*, student: Person, dojo: Dojo, actor: Actor) -> Enrollment
     """
     require(actor, Action.PERSON_EDIT, dojo, governance_model=_governance_of(dojo))
 
-    live = list(
-        Enrollment.objects.for_actor(actor).filter(student=student, ended_on__isnull=True)
-    )
+    live = list(Enrollment.objects.for_actor(actor).filter(student=student, ended_on__isnull=True))
     target = next((e for e in live if e.dojo_id == dojo.pk), None)
     if target is None:
         raise ValueError(f"{student} has no live enrolment at {dojo}.")

@@ -59,9 +59,7 @@ def dojo_b(org):
 @pytest.fixture
 def student(org):
     with allow_unscoped("test setup"):
-        person = Person.objects.create(
-            organization=org, given_name="Sokha", family_name="Chhorn"
-        )
+        person = Person.objects.create(organization=org, given_name="Sokha", family_name="Chhorn")
         StudentProfile.objects.create(person=person, status=StudentProfile.Status.ACTIVE)
         return person
 
@@ -94,9 +92,7 @@ def admin(org, admin_person):
 def instructor_at_a(org, dojo_a):
     """Dojo-scoped instructor: may record attendance, may not move students."""
     with allow_unscoped("test setup"):
-        person = Person.objects.create(
-            organization=org, given_name="Takeshi", family_name="Yamada"
-        )
+        person = Person.objects.create(organization=org, given_name="Takeshi", family_name="Yamada")
     return Actor(
         user_id=None,
         person_id=person.pk,
@@ -175,13 +171,9 @@ def test_rejoining_after_leaving_is_allowed(student, dojo_a):
 
 def test_two_primary_enrolments_are_rejected(student, dojo_a, dojo_b):
     with allow_unscoped("test setup"):
-        Enrollment.objects.create(
-            student=student, dojo=dojo_a, started_on=JAN, is_primary=True
-        )
+        Enrollment.objects.create(student=student, dojo=dojo_a, started_on=JAN, is_primary=True)
         with pytest.raises(IntegrityError), transaction.atomic():
-            Enrollment.objects.create(
-                student=student, dojo=dojo_b, started_on=MAR, is_primary=True
-            )
+            Enrollment.objects.create(student=student, dojo=dojo_b, started_on=MAR, is_primary=True)
 
 
 def test_ended_status_requires_an_end_date(student, dojo_a):
@@ -197,9 +189,7 @@ def test_ended_status_requires_an_end_date(student, dojo_a):
 def test_enrolment_may_not_span_organisations(student, other_org):
     """The same_organization_fields invariant — SEC §2.2."""
     with allow_unscoped("test setup"):
-        foreign_dojo = Dojo.objects.create(
-            organization=other_org, name="Foreign", slug="foreign"
-        )
+        foreign_dojo = Dojo.objects.create(organization=other_org, name="Foreign", slug="foreign")
         with pytest.raises(ValidationError):
             Enrollment.objects.create(student=student, dojo=foreign_dojo, started_on=JAN)
 
@@ -258,9 +248,7 @@ def test_transfer_requires_rights_at_both_dojos(student, dojo_a, dojo_b, org, ad
     )
 
     with pytest.raises(PermissionDenied):
-        transfer_student(
-            student=student, to_dojo=dojo_b, effective_on=JUN, actor=admin_of_a_only
-        )
+        transfer_student(student=student, to_dojo=dojo_b, effective_on=JUN, actor=admin_of_a_only)
 
 
 def test_transfer_without_a_live_enrolment_is_refused(student, dojo_b, admin):
@@ -349,9 +337,7 @@ def test_attendance_history_survives_a_transfer(student, dojo_a, dojo_b, admin):
     assert old.ended_on == JUN
 
 
-def test_federated_org_admin_may_not_transfer_between_member_dojos(
-    other_org, admin_person
-):
+def test_federated_org_admin_may_not_transfer_between_member_dojos(other_org, admin_person):
     """A federation ratifies grades; it does not move members' students — plan §13.1."""
     with allow_unscoped("test setup"):
         other_org.governance_model = GovernanceModel.FEDERATED
@@ -361,12 +347,8 @@ def test_federated_org_admin_may_not_transfer_between_member_dojos(
         person = Person.objects.create(
             organization=other_org, given_name="Fed", family_name="Admin"
         )
-        pupil = Person.objects.create(
-            organization=other_org, given_name="Pupil", family_name="One"
-        )
-        Enrollment.objects.create(
-            student=pupil, dojo=member_a, started_on=JAN, is_primary=True
-        )
+        pupil = Person.objects.create(organization=other_org, given_name="Pupil", family_name="One")
+        Enrollment.objects.create(student=pupil, dojo=member_a, started_on=JAN, is_primary=True)
 
     fed_admin = Actor(
         user_id=None,
@@ -376,6 +358,4 @@ def test_federated_org_admin_may_not_transfer_between_member_dojos(
     )
 
     with pytest.raises(PermissionDenied):
-        transfer_student(
-            student=pupil, to_dojo=member_b, effective_on=JUN, actor=fed_admin
-        )
+        transfer_student(student=pupil, to_dojo=member_b, effective_on=JUN, actor=fed_admin)
