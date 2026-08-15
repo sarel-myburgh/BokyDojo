@@ -1,0 +1,31 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Medical consent" %} — {{ profile.person.full_name }}{% endblock %}
+
+{% block content %}
+<a href="{% url 'today' %}" class="text-sm text-gray-500">&larr; {% translate "Today" %}</a>
+<h1 class="mt-2 text-2xl font-semibold">{% translate "Medical consent" %}</h1>
+<p class="mt-1 text-gray-600">{{ profile.person.full_name }}</p>
+
+<div class="mt-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+  {% translate "This is a separate, explicit medical-data decision. It does not grant a waiver, marketing permission, photo permission, or general terms." %}
+</div>
+
+<section class="mt-5 rounded-xl border border-gray-200 bg-white p-5">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="text-lg font-medium">{{ policy.title }}</h2>
+    <span class="text-xs text-gray-500">{% blocktranslate with version=policy.version %}Version {{ version }}{% endblocktranslate %}</span>
+  </div>
+  <div class="mt-4 whitespace-pre-line text-sm leading-6 text-gray-700">{{ policy.body }}</div>
+</section>
+
+{% if current %}
+<p class="mt-4 rounded-lg px-4 py-3 text-sm {% if current.granted %}bg-green-50 text-green-900{% else %}bg-gray-100 text-gray-700{% endif %}">
+  {% if current.granted %}{% translate "Current decision: consent granted." %}{% else %}{% translate "Current decision: consent revoked." %}{% endif %}
+  {% blocktranslate with at=current.granted_at %}Recorded {{ at }}.{% endblocktranslate %}
+</p>
+{% endif %}
+
+{% include "consent/_decision_form.html" %}
+{% endblock %}
