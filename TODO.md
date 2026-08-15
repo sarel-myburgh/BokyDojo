@@ -263,10 +263,119 @@ OUTPUT
   `agent/*` branches are deleted, and the `DojoMaster-*` directories are gone.
   Work directly here. The multi-agent section below is retained as a record of
   how to set the fan-out up again, not as a description of the current state.
-- **Current phase:** Phase 0 finishing / Phase 1 in progress
-- **Last completed:** the attendance vertical slice — `1.3.1`–`1.3.4`, `1.4.2`,
-  `1.5.1`–`1.5.5`, `1.5.2` roster UI, `1.11.1`/`1.11.3`/`1.11.4`, plus `0.6.4`
-  and the login view that finally gives `0.6.5` a call site.
+- **Current phase:** Phase 0 complete / Phase 1 in progress
+- ⚠ **This session — the app was serving no static files at all.**
+  `STATICFILES_DIRS` was never set, and no app ships its own `static/` dir, so
+  the finders never looked in the project-level `static/` tree. Every asset
+  404ed: both stylesheets *and* every piece of offline-attendance JavaScript.
+  The pages still rendered, so 981 tests stayed green while the UI was unstyled
+  and the service worker's `cache.addAll` rejected on install — meaning the
+  `1.6.x` offline queue was silently dead in a real browser, despite being
+  ticked. Fixed in `config/settings/base.py`, with the regression test in
+  `tests/test_pwa.py` (`test_every_shell_asset_actually_resolves`) asserting the
+  worker's own shell list resolves. **Lesson: a green suite says nothing about
+  asset delivery. Open the page.**
+- **Also this session — the service worker could never ship an update.**
+  `/static/` was cache-first with no revalidation, and Django serves unhashed
+  filenames, so an installed PWA was pinned to whatever CSS and JS it first saw:
+  a fix to `roster.js` could not reach an instructor's phone unless someone
+  remembered to bump `CACHE`. Now stale-while-revalidate. The test that forbade
+  this asserted `"cache.put" not in source` — right intent, wrong mechanism; it
+  now checks *where* the writes happen instead.
+- **UI reworked to a deliberate design language.** Warm ink-and-cotton palette
+  (`gray` is overridden in `tailwind.config.cjs`, so all 28 templates retheme
+  from one place), near-square corners, one crimson accent used sparingly, and a
+  four-part vocabulary in `static/css/tailwind-input.css`: `.obi` (belt rule),
+  `.eyebrow` (tracked label), `.wordmark`, `.seal`. ⚠ **Templates are styled via
+  the `gray-*` stops on purpose — retheme there, don't add a parallel palette.**
+  ⚠ **Run `npm run build:css` after touching any template**, or new utility
+  classes are missing from the compiled build.
+- ⚠ **`0.4.4` is ticked but its font claim is false.** No webfont is bundled
+  anywhere; `dojo.css` used to say the Khmer face loaded "via Google Fonts in
+  base.html", which it did not and could not — the CSP sets `font-src 'self'`.
+  The stack now relies on OS-provided faces (fine on Android/iOS/Windows,
+  unverified elsewhere). Bundling a subset woff2 is still outstanding.
+- **Demo logins are short now:** `admin@karate.test`, `dojoadmin@karate.test`,
+  `instructor@karate.test`, `parent@karate.test`, numbered from the second
+  holder onwards. `.test` is RFC 6761 reserved so a misconfigured demo cannot
+  mail a real person; change `DEMO_EMAIL_DOMAIN` in the seed command if you want
+  a different one. Students still get generated addresses — most never log in.
+- **Last completed:** offline attendance `1.6.1`–`1.6.5`: installable PWA shell,
+  IndexedDB queue, CSRF-protected and tenant-scoped sync endpoint, idempotent
+  replay, optimistic conflict detection, visible pending/conflict state, and a
+  20-student network-off/reconnect JavaScript test. Canonical attendance writers
+  lock the session row so concurrent reconnects cannot bypass stale-write checks.
+- **Also completed:** `1.1.2` encrypted medical fields plus a strict medical
+  access service. Sensitive values never enter generic audit snapshots or the
+  generic admin; reads and writes require medical permissions and are access-logged.
+- **Consent evidence completed:** `1.1.6` is append-only and exact-versioned;
+  revocations supersede rather than mutate grants. Signer capacity, custodial
+  guardian status, explicit self-consent age, signature, IP, document linkage,
+  tenant integrity, permission-checked reads, and audit evidence are enforced.
+  Dedicated `1.1.7` medical and `1.1.8` waiver screens now publish separate,
+  immutable organisation-authored policy versions, capture deliberate guardian
+  or self decisions, and serve attached waivers through permission-checked,
+  audited downloads. Demo seed wording is conspicuously marked for replacement.
+
+- **Student directory completed:** `1.1.9` adds tenant-scoped name/contact, dojo,
+  rank, status, age, attendance-gap, unsigned-waiver, and expired-licence filters,
+  plus permission-gated consent actions. Federated organisation actors cannot
+  search or render dojo-private contact and birth-date-derived fields.
+- **Saved segments completed:** `1.1.10` persists validated personal filter sets,
+  reapplies them through the same scoped form, and provides audited create/delete
+  controls. Search values stay out of audit snapshots; CSRF, ownership, tenant,
+  malformed-ID, duplicate, and schema-tampering cases fail closed.
+- **Student detail hub completed:** `1.1.11` adds the permission-scoped header,
+  pinned operational alerts, and attendance, rank-history, notes, billing,
+  documents, and family tabs. Billing is honestly marked as a Phase 2 placeholder.
+  Medical alerts use a narrow audited flag read; sensitive documents, notes,
+  family contacts, and federated private fields are filtered server-side.
+- **Student lifecycle completed:** `1.1.12` adds a row-locked, permission-checked
+  transition service and mobile detail-page control for join, trial, hold, resume,
+  lapse, alumni, and return paths. Invalid jumps and tampered choices fail closed;
+  audit failure rolls back the change. Hold reasons are tenant-encrypted, existing
+  values are backfilled by a reversible migration, and values never enter audits.
+- **Bulk hold/resume completed:** `1.1.13` adds mobile directory selection and
+  a 50-student, tenant-scoped batch action. Each batch is atomic, accepts only
+  active students for hold or held students for resume, reuses strict per-student
+  audits, rejects tampered IDs, and rolls everything back on any invalid state or
+  audit failure.
+- **Student photos completed:** `1.1.14` adds a separate exact-version photo
+  consent screen, permission-checked upload/display routes, byte-sniffed image
+  validation, EXIF/GPS-stripping re-encoding, private no-store rendering, and
+  latest-photo selection without deleting history. Revocation immediately blocks
+  profile display and direct document reads; federation-level actors cannot read
+  dojo-owned photographs. Demo wording is clearly marked for replacement.
+- **Guardian management completed:** `1.1.4` adds audited add/edit/unlink screens,
+  multiple independently flagged contacts per student, and reuse of one guardian
+  Person across siblings. Guardian notes are encrypted and excluded from audits
+  and generic admin; dojo scoping now covers guardian links and emergency contacts,
+  and shared contact details require edit rights over every linked child.
+- **Manual promotion completed:** `1.2.6` records forward-only internal awards
+  from the student rank tab, with tenant and dojo permissions, chronology checks,
+  row locking, derived-current-rank updates, CSRF protection, and strict audit
+  rollback. Rank awards are now append-only in models, querysets, and generic admin.
+- **Bulk promotion and ceilings completed:** `1.2.7`/`1.2.8` reuse the
+  canonical promotion service for atomic batches of up to 30 students. Examiner
+  ceilings filter choices and are rechecked server-side, including self-promotion
+  and cross-ladder attempts; one invalid student or audit failure rolls back the batch.
+- **Just completed:** `1.5.6` attendance catch-up, plus `0.6.2`/`0.6.3`
+  mandatory TOTP MFA and one-time recovery codes with encrypted seeds, hashed
+  recovery values, replay prevention, step-up enforcement, and throttling.
+- **Also completed:** `0.6.6` single-use password reset and `0.6.7`
+  strict nonce CSP with all runtime assets self-hosted and no inline executable content.
+- **Security audit:** dependency CVE scan clean; Bandit medium/high clean; Django
+  deployment checks clean. Demo seed credentials are disabled outside dev/test,
+  and the holiday API transport is pinned to HTTPS on the expected host.
+- **Backup/restore completed:** PostgreSQL custom dump plus hashed media archive;
+  restore requires exact database confirmation and rejects traversal, links,
+  tampering, and broad media roots. Real client binaries are present, but a live
+  restore was not run because no local PostgreSQL credentials were available.
+- **Phase 0 complete:** the first-run wizard transactionally creates the
+  organisation, first dojo, owner, mandatory admin role, and then closes forever.
+  Production requires a deployment setup token. Automated UI/template tests pass;
+  a browser visual pass remains for the human dry run because the in-app browser
+  could not reach the WSL loopback server and no Chrome session was connected.
 
 - 🚀 **The app is clickable end to end.** `python manage.py runserver
   --settings config.settings.dev` after `manage.py migrate && manage.py seed
@@ -325,21 +434,62 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 745 passing, 35 skipped, ruff clean, `makemigrations --check`
-  clean. From `Code/DojoMaster`: `.venv\Scripts\python.exe -m pytest`
-- **Remaining in Phase 0:** `0.6.2` ⚠ (TOTP), `0.6.3` (recovery codes),
-  `0.6.6` ⚠ (password reset), `0.6.7` (CSP — note `templates/base.html` loads
-  Tailwind, HTMX and Alpine from CDNs and the roster has an inline `<script>`,
-  all of which a strict CSP has to deal with), `0.7.3` (backup/restore),
-  `0.7.4` (first-run wizard).
+- **Test suite:** 994 passing, 44 skipped; Ruff lint and format gates clean;
+  `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
+  Django production deploy checks are clean. From WSL:
+  `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
+  `.venv/Scripts/python.exe -m pytest`.
+- 🐧 **Running on native Linux now, not WSL/Windows.** The checked-in `.venv/` is
+  a *Windows* venv (`Scripts/`, `Lib/`) and is useless here. This box has only
+  Python 3.14, no `pip`, no `ensurepip` and no sudo, so the venv was rebuilt with
+  `python3 -m venv --without-pip` plus a downloaded `get-pip.py`, then
+  `pip install -e ".[dev]"`. Django resolves to **5.2.17 on Python 3.14** — one
+  version and one interpreter ahead of what the rest of this file assumes, and
+  the whole suite passes on it. Same path as before:
+  `$HOME/.cache/dojomaster-venv/bin/pytest`.
+  ⚠ `node_modules/.bin/tailwindcss` arrived from the Windows checkout without an
+  exec bit, so `npm run build:css` failed with "Permission denied" until
+  `chmod +x`. If the CSS build dies on a fresh clone, check the mode bits first.
+- **Human dry-run debt:** install the PWA on the intended phone/tablet, mark a
+  real 20-person roster with networking disabled, reconnect, and time the full
+  instructor interaction. The automated 20-mark queue/reconnect and endpoint
+  checks pass, but the human `1.6.6` under-30-second target is intentionally not
+  ticked from a test-client timing.
+- **`1.11.2` is done.** The view, template and CSV export were already on disk
+  but the report was **unreachable** — no route in `config/urls.py`, no link
+  from the other two reports. Now routed at `/reports/ranks/` as
+  `active-by-rank`, cross-linked both ways, and covered by
+  `tests/test_rank_report.py` (11 tests: grouping, ungraded, non-active
+  exclusion, dojo scoping both directions, ordering, CSV scope, export audit,
+  permission refusal, anonymous redirect).
+- ⚠ **Two bugs the tests could not have found, both caught by opening the page.**
+  1. **The seed never put a single student on a rank ladder.** It created the
+     ladders (`1.2.11`) and then stopped: 140 profiles, 60 ranks, **zero**
+     `StudentStyleTrack` and zero `RankAward` rows. Every rank surface in the
+     demo — this report, the student rank tab, the promotion screens — showed
+     one meaningless "no active rank track" bucket. `seed.py` now has
+     `_create_rank_tracks`: ladder chosen by age (under 14 → mon), a grading
+     roughly every four months, and ~1 in 6 deliberately left ungraded because
+     that is a real state the screens must render. Reseeds to 140 tracks /
+     458 awards.
+  2. **Groups were sorted alphabetically by rank name.** The view computed
+     `rank_order` and then threw it away. Kyu grades survive this by accident,
+     but the mon ladder inverts: `10th Mon` — the most junior grade there is —
+     sorted above `9th Mon`. Now ordered by `Rank.order`, seniors first,
+     ungraded last. ⚠ The first version of the regression test passed against
+     *both* sorts, because the adult grades I picked happened to sort the same
+     either way; it only bites now because it uses the mon ladder. **Check that
+     an ordering test fails against the old ordering before trusting it.**
 - **Best next tasks in Phase 1**, in dependency order:
-  - `1.5.6` catch-up flow — the Today screen already lists unmarked classes, so
-    this is the bulk-entry screen behind that list.
-  - `1.6.x` offline PWA — the sync contract already exists and is tested;
-    `1.6.3` is "expose `mark_attendance` over HTTP", not a redesign.
-  - `1.1.2` medical fields, `1.1.6`–`1.1.8` consent and waivers — unblocked, and
-    everything else in `1.1` is list/detail UI that needs a student screen first.
-  - `1.11.2` active students by rank — the only report of the four still missing.
+  - `1.8.2` note visibility enforcement. `Note.visibility` is stored and
+    honoured in exactly one place — `_visible_student_notes` in
+    `apps/identity/student_views.py`, a view-local helper. There is no canonical
+    queryset-level enforcement and no note-writing UI, so the next reader of
+    `Note.objects` gets no protection. `1.8.4` (safeguarding) is not startable
+    until this is: the `Visibility` choices have no safeguarding level and
+    `body` is a plain `TextField`, not encrypted.
+  - `1.4.5` / `1.4.8` / `1.4.9` scheduling gaps, then the `1.7.x` kiosk (12
+    tasks, none started) and `1.10.x` import (7 tasks, none started).
 - ⚠ **Never edit TODO.md with PowerShell `Get-Content -Raw` / `Set-Content`.**
   PS 5.1 reads a BOM-less file as ANSI and rewrites it as UTF-8, mangling every
   em-dash and `§` in the document. Use an editor/Edit tool, or Python with
@@ -356,12 +506,19 @@ OUTPUT
   **decided** — AGPL-3.0-or-later plus a commercial exception; `LICENSE` is in
   place. `D10` (pilot dojo) still blocks the Phase 1 exit gate `1.12`, and only
   that.
-- ⚠ **Uncommitted work is stranded in two worktrees** (as of this session):
-  `DojoMaster-codex` has modified `tests/permission_matrix.py` and
-  `tests/test_permission_matrix.py`; `DojoMaster-opencode` has scheduling
-  holiday work including an **untracked `apps/scheduling/migrations/0002_*`**.
-  That is exactly the migration collision rule 7 warns about — `apps.attendance`
-  was given its own app partly to avoid colliding with it. Land or discard both.
+- ⚠⚠ **Almost none of Phase 1 is committed.** `git status` shows ~70 untracked
+  paths covering work that is *ticked as done*: all of MFA / password reset / CSP
+  (`0.6.2`, `0.6.3`, `0.6.6`, `0.6.7`), backups (`0.7.3`), the first-run wizard
+  (`0.7.4`), medical fields (`1.1.2`), guardians (`1.1.4`), every consent flow
+  (`1.1.6`–`1.1.8`), the student directory, segments, detail hub, lifecycle and
+  photos (`1.1.9`–`1.1.14`), promotions (`1.2.6`–`1.2.8`), **the entire PWA in
+  `static/js/`** (`1.6.1`–`1.6.5`), 11 migrations, and ~20 test files. It exists
+  only in this working tree. Rule 1 of the workflow section — never leave work
+  uncommitted — has been broken at scale, and a single `git clean` would delete
+  most of Phase 1. **Commit this before starting anything new.**
+  `/node_modules/` has been added to `.gitignore` so `git add -A` is safe;
+  `static/css/tailwind.css` is intentionally *not* ignored, because the CSP
+  forbids a CDN and a Node-less checkout still has to render.
 - **Deviations from the plan so far:**
   - `Person` was made a `SoftDeleteModel` rather than a plain `TenantScopedModel`. Rationale: student records are attached to attendance, rank awards and invoices, all of which are evidence; erasure requests go through redaction, not DELETE. Consistent with plan §2 ("never hard-delete user data"). Migration `identity/0002`.
   - `0.3.6` (Money) and `0.3.1` (BaseModel) were marked `[DS]` but built in-house — everything else depends on them, so the parallel track would have blocked.
@@ -559,18 +716,18 @@ Apply to every task, including delegated ones. Violating these is the most likel
 
 ### 0.6 Auth hardening
 - [x] `0.6.1` `[DS]` Argon2id password hashing
-- [ ] `0.6.2` ⚠ TOTP 2FA, mandatory for org/dojo admin and any financial or PII-export role `SEC §2.1`
-- [ ] `0.6.3` Recovery codes (generate once, show once, hashed at rest)
+- [x] `0.6.2` ⚠ TOTP 2FA, mandatory for org/dojo admin and any financial or PII-export role `SEC §2.1`
+- [x] `0.6.3` Recovery codes (generate once, show once, hashed at rest)
 - [x] `0.6.4` Session config: HttpOnly, Secure, SameSite=Lax, idle timeout, absolute cap, rotate on privilege change
 - [x] `0.6.5` Rate limiting + progressive lockout: login, reset, PIN, API — `apps/core/throttle.py`. Wired into the login view (`apps/identity/views.py`); ⚠ the reset and kiosk-PIN policies still have no call site — wire on `0.6.6` / `1.7.8`.
-- [ ] `0.6.6` ⚠ Password reset: single-use, short-lived, no user enumeration (response *and* timing)
-- [ ] `0.6.7` Security headers + strict CSP with nonces, no `unsafe-inline` `SEC §2.4`
+- [x] `0.6.6` ⚠ Password reset: single-use, short-lived, no user enumeration (response *and* timing)
+- [x] `0.6.7` Security headers + strict CSP with nonces, no `unsafe-inline` `SEC §2.4`
 
 ### 0.7 Developer experience
 - [x] `0.7.1` `[DS]` Seed command: 2 orgs (one of each governance model), 3 dojos, 200 students, 2 years of attendance, ranks, invoices
 - [x] `0.7.2` `[DS]` Demo reset command (idempotent, safe to cron)
-- [ ] `0.7.3` `backup` / `restore` management commands (pg_dump + media tarball) `§7.3`
-- [ ] `0.7.4` First-run wizard: create org, first dojo, admin user, choose governance model
+- [x] `0.7.3` `backup` / `restore` management commands (pg_dump + media tarball) `§7.3`
+- [x] `0.7.4` First-run wizard: create org, first dojo, admin user, choose governance model
 
 ---
 
@@ -581,19 +738,19 @@ Apply to every task, including delegated ones. Violating these is the most likel
 
 ### 1.1 Students & families
 - [x] `1.1.1` `[DS]` `StudentProfile` — status, home dojo, sizes, licence `§4.2`
-- [ ] `1.1.2` ⚠ Medical fields (allergies, conditions, medications, doctor, `do_not_spar`) with field-level encryption `SEC §2.3`
+- [x] `1.1.2` ⚠ Medical fields (allergies, conditions, medications, doctor, `do_not_spar`) with field-level encryption `SEC §2.3`
 - [x] `1.1.3` `[DS]` `GuardianLink` — relationship, contact / emergency / financial / custody flags, independent of each other `§4.2`
-- [ ] `1.1.4` Multiple guardians per student, each independently contactable `§2 item 26`
+- [x] `1.1.4` Multiple guardians per student, each independently contactable `§2 item 26`
 - [x] `1.1.5` `[DS]` `EmergencyContact` (Person link or plain name/phone)
-- [ ] `1.1.6` ⚠ `ConsentRecord` — versioned, granular, revocable, timestamped `§4.2`
-- [ ] `1.1.7` ⚠ Medical consent collected as its own deliberate act, not bundled into terms `SEC §6.5`
-- [ ] `1.1.8` Waiver flow: present versioned document, capture signature + IP + timestamp
-- [ ] `1.1.9` `[DS]` Student list: filter by dojo, rank, status, age, attendance gap, unsigned waiver, expired licence `§2 item 25`
-- [ ] `1.1.10` `[DS]` Saved filter segments, reusable
-- [ ] `1.1.11` `[DS]` Student detail hub — header, pinned alerts, tabs (attendance / rank / notes / billing / documents / family)
-- [ ] `1.1.12` Student lifecycle status transitions: prospect → trial → active → on_hold → lapsed → alumni `§2 item 7`
-- [ ] `1.1.13` Bulk hold / resume (seasonal mass pauses) `§12.5`
-- [ ] `1.1.14` Student photo upload + re-encode + consent gate
+- [x] `1.1.6` ⚠ `ConsentRecord` — versioned, granular, revocable, timestamped `§4.2`
+- [x] `1.1.7` ⚠ Medical consent collected as its own deliberate act, not bundled into terms `SEC §6.5`
+- [x] `1.1.8` Waiver flow: present versioned document, capture signature + IP + timestamp
+- [x] `1.1.9` `[DS]` Student list: filter by dojo, rank, status, age, attendance gap, unsigned waiver, expired licence `§2 item 25`
+- [x] `1.1.10` `[DS]` Saved filter segments, reusable
+- [x] `1.1.11` `[DS]` Student detail hub — header, pinned alerts, tabs (attendance / rank / notes / billing / documents / family)
+- [x] `1.1.12` Student lifecycle status transitions: prospect → trial → active → on_hold → lapsed → alumni `§2 item 7`
+- [x] `1.1.13` Bulk hold / resume (seasonal mass pauses) `§12.5`
+- [x] `1.1.14` Student photo upload + re-encode + consent gate
 
 ### 1.2 Ranks
 - [x] `1.2.1` `[DS]` `Style` model `§4.4`
@@ -601,9 +758,9 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.2.3` `[DS]` `Rank` — order, name, colour, stripes, min months, min classes, min age
 - [x] `1.2.4` ⚠ `StudentStyleTrack` — rank is **per style**, not per student `§4.2`
 - [x] `1.2.5` `[DS]` `RankAward` + derived `current_rank` (denormalised, recomputed on write)
-- [ ] `1.2.6` `[DS]` Manual promotion flow with audit
-- [ ] `1.2.7` `[DS]` **Bulk promotion** — 30 students in one action after a grading `§2 item 24`
-- [ ] `1.2.8` ⚠ `InstructorProfile.max_grading_rank_id` — grading ceiling enforced `§4.2`
+- [x] `1.2.6` `[DS]` Manual promotion flow with audit
+- [x] `1.2.7` `[DS]` **Bulk promotion** — 30 students in one action after a grading `§2 item 24`
+- [x] `1.2.8` ⚠ `InstructorProfile.max_grading_rank_id` — grading ceiling enforced `§4.2`
 - [x] `1.2.9` `[DS]` External / transfer-in rank recognition (`awarded_by_external_org`, recognised / provisional / not recognised) `§12.6`
 - [x] `1.2.10` Negating award record for rank stripping (never delete) `§12.6`
 - [x] `1.2.11` `[DS]` Seed a Shotokan adult ladder + a junior mon ladder as fixtures
@@ -633,15 +790,15 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.5.3` `[DS]` Status set: present / late / absent / excused / visiting
 - [x] `1.5.4` `[DS]` Visiting-student attendance at a non-enrolled dojo
 - [x] `1.5.5` Retroactive edit with audit trail
-- [ ] `1.5.6` ⚠ **Catch-up flow** — sessions in the last 14 days with no records, fast bulk entry, nag the instructor `§12.7`
+- [x] `1.5.6` ⚠ **Catch-up flow** — sessions in the last 14 days with no records, fast bulk entry, nag the instructor `§12.7`
 
 ### 1.6 Attendance — offline PWA
 *Hardest correctness area in the project. None of this is delegable.*
-- [ ] `1.6.1` PWA shell: manifest, service worker, installable
-- [ ] `1.6.2` IndexedDB queue for pending attendance writes
-- [ ] `1.6.3` ⚠ Sync endpoint, idempotent on `client_generated_id`
-- [ ] `1.6.4` Conflict handling + visible sync state ("3 pending")
-- [ ] `1.6.5` ⚠ Test: full class marked with network disabled, syncs correctly on reconnect
+- [x] `1.6.1` PWA shell: manifest, service worker, installable
+- [x] `1.6.2` IndexedDB queue for pending attendance writes
+- [x] `1.6.3` ⚠ Sync endpoint, idempotent on `client_generated_id`
+- [x] `1.6.4` Conflict handling + visible sync state ("3 pending")
+- [x] `1.6.5` ⚠ Test: full class marked with network disabled, syncs correctly on reconnect
 - [ ] `1.6.6` Target: 20-student class marked in under 30 seconds `§11 risks`
 
 ### 1.7 Attendance — kiosk
@@ -681,9 +838,9 @@ Apply to every task, including delegated ones. Violating these is the most likel
 
 ### 1.11 Core reports
 - [x] `1.11.1` `[DS]` Attendance summary by dojo / class / period
-- [ ] `1.11.2` `[DS]` Active students by rank
+- [x] `1.11.2` `[DS]` Active students by rank
 - [x] `1.11.3` `[DS]` Attendance drop-off alert list (no attendance in N days)
-- [x] `1.11.4` `[DS]` CSV export on every report *(both reports that exist; exports are audited)*
+- [x] `1.11.4` `[DS]` CSV export on every report *(all three reports; exports are audited)*
 
 ### 1.12 Phase 1 exit
 - [ ] `1.12.1` Pilot dojo's real data imported

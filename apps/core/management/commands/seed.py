@@ -17,6 +17,7 @@ import random
 import string
 from datetime import date, time, timedelta
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from django.utils.text import slugify
@@ -24,6 +25,8 @@ from django.utils.text import slugify
 from apps.attendance.models import AttendanceRecord
 from apps.core.scoping import Actor, allow_unscoped
 from apps.identity.models import (
+    ConsentPolicy,
+    ConsentRecord,
     Dojo,
     EmergencyContact,
     Enrollment,
@@ -50,47 +53,162 @@ from apps.scheduling.models import ClassSession, ClassTemplate, ClosurePeriod
 HISTORY_DAYS = 60
 
 KHMER_GIVEN_NAMES = [
-    "Sokha", "Sokhem", "Sokly", "Sophea", "Sokun", "Sovann", "Srey",
-    "Chantrea", "Chandara", "Chamroeun", "Chantrea", "Chhay",
-    "Dara", "Davin", "Dewin",
-    "Kosal", "Koemhong", "Kong",
-    "Makara", "Maly", "Monirith",
-    "Nary", "Nita", "Navin",
-    "Pheakdey", "Pich", "Piseth",
-    "Ratanak", "Rotha",
-    "Sakhorn", "Salin", "Saran", "Sary", "Seat", "Seng",
-    "Tep", "Thida", "Thouch", "Tharith",
-    "Vannak", "Vathanak", "Vicheka",
+    "Sokha",
+    "Sokhem",
+    "Sokly",
+    "Sophea",
+    "Sokun",
+    "Sovann",
+    "Srey",
+    "Chantrea",
+    "Chandara",
+    "Chamroeun",
+    "Chantrea",
+    "Chhay",
+    "Dara",
+    "Davin",
+    "Dewin",
+    "Kosal",
+    "Koemhong",
+    "Kong",
+    "Makara",
+    "Maly",
+    "Monirith",
+    "Nary",
+    "Nita",
+    "Navin",
+    "Pheakdey",
+    "Pich",
+    "Piseth",
+    "Ratanak",
+    "Rotha",
+    "Sakhorn",
+    "Salin",
+    "Saran",
+    "Sary",
+    "Seat",
+    "Seng",
+    "Tep",
+    "Thida",
+    "Thouch",
+    "Tharith",
+    "Vannak",
+    "Vathanak",
+    "Vicheka",
 ]
 
 KHMER_FAMILY_NAMES = [
-    "Chhorn", "Chhouen", "Doeum", "Heng", "Hun", "Keo", "Khem",
-    "Kim", "Kong", "Lim", "Mao", "Mean", "Nguon", "Nov",
-    "Ouk", "Phan", "Phirun", "Pol", "Rith", "San", "Sang",
-    "Sem", "Seng", "Sok", "Sorn", "Sou", "Suon", "Thach",
-    "Thorn", "Tith", "Touch", "Tum", "Uon", "Van", "Vann",
+    "Chhorn",
+    "Chhouen",
+    "Doeum",
+    "Heng",
+    "Hun",
+    "Keo",
+    "Khem",
+    "Kim",
+    "Kong",
+    "Lim",
+    "Mao",
+    "Mean",
+    "Nguon",
+    "Nov",
+    "Ouk",
+    "Phan",
+    "Phirun",
+    "Pol",
+    "Rith",
+    "San",
+    "Sang",
+    "Sem",
+    "Seng",
+    "Sok",
+    "Sorn",
+    "Sou",
+    "Suon",
+    "Thach",
+    "Thorn",
+    "Tith",
+    "Touch",
+    "Tum",
+    "Uon",
+    "Van",
+    "Vann",
 ]
 
 LATIN_GIVEN_NAMES = [
-    "Alex", "Sam", "Jordan", "Casey", "Morgan", "Taylor", "Riley",
-    "Jamie", "Drew", "Avery", "Quinn", "Reese", "Skyler", "Hayden",
-    "Emery", "Finley", "Rowan", "Sage", "Blair", "Parker",
+    "Alex",
+    "Sam",
+    "Jordan",
+    "Casey",
+    "Morgan",
+    "Taylor",
+    "Riley",
+    "Jamie",
+    "Drew",
+    "Avery",
+    "Quinn",
+    "Reese",
+    "Skyler",
+    "Hayden",
+    "Emery",
+    "Finley",
+    "Rowan",
+    "Sage",
+    "Blair",
+    "Parker",
 ]
 
 LATIN_FAMILY_NAMES = [
-    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia",
-    "Miller", "Davis", "Rodriguez", "Martinez", "Anderson", "Thomas",
-    "Jackson", "White", "Harris", "Martin", "Thompson", "Moore",
+    "Smith",
+    "Johnson",
+    "Williams",
+    "Brown",
+    "Jones",
+    "Garcia",
+    "Miller",
+    "Davis",
+    "Rodriguez",
+    "Martinez",
+    "Anderson",
+    "Thomas",
+    "Jackson",
+    "White",
+    "Harris",
+    "Martin",
+    "Thompson",
+    "Moore",
 ]
 
 JAPANESE_GIVEN_NAMES = [
-    "Haruto", "Yuto", "Sota", "Riku", "Kaito", "Ren", "Haruki",
-    "Yui", "Aoi", "Hinata", "Mei", "Mio", "Sakura", "Ichika",
+    "Haruto",
+    "Yuto",
+    "Sota",
+    "Riku",
+    "Kaito",
+    "Ren",
+    "Haruki",
+    "Yui",
+    "Aoi",
+    "Hinata",
+    "Mei",
+    "Mio",
+    "Sakura",
+    "Ichika",
 ]
 
 JAPANESE_FAMILY_NAMES = [
-    "Tanaka", "Yamamoto", "Suzuki", "Watanabe", "Itou", "Takahashi",
-    "Sato", "Kobayashi", "Kato", "Yoshida", "Yamada", "Sasaki",
+    "Tanaka",
+    "Yamamoto",
+    "Suzuki",
+    "Watanabe",
+    "Itou",
+    "Takahashi",
+    "Sato",
+    "Kobayashi",
+    "Kato",
+    "Yoshida",
+    "Yamada",
+    "Sasaki",
 ]
 
 
@@ -104,6 +222,32 @@ def _random_email(given: str, family: str, org_slug: str) -> str:
     return f"{base}@{org_slug}.example.com"
 
 
+# Demo sign-ins are typed by hand, over and over, on a phone. Generated
+# addresses like `kenji.instructor@phnom-penh-central.example.com` are correct
+# and unusable. Role-holders get `<role>@karate.test` instead, numbered from the
+# second onwards because there are several dojos and admins per seed run.
+#
+# `.test` is reserved by RFC 6761 and can never resolve, so a misconfigured demo
+# cannot mail a real person. It is exactly as short to type as a real domain.
+DEMO_EMAIL_DOMAIN = "karate.test"
+
+
+class _DemoLogins:
+    """Hands out short, predictable demo addresses and remembers the first of each."""
+
+    def __init__(self) -> None:
+        self._counts: dict[str, int] = {}
+        self.canonical: dict[str, str] = {}
+
+    def allocate(self, label: str) -> str:
+        seen = self._counts.get(label, 0) + 1
+        self._counts[label] = seen
+        suffix = "" if seen == 1 else str(seen)
+        email = f"{label}{suffix}@{DEMO_EMAIL_DOMAIN}"
+        self.canonical.setdefault(label, email)
+        return email
+
+
 class Command(BaseCommand):
     help = "Seed the database with demo data for development and evaluation."
 
@@ -115,6 +259,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not settings.DEMO_SEED_ENABLED:
+            raise CommandError("Demo seeding is disabled in this environment.")
+        self.logins = _DemoLogins()
         with allow_unscoped("seed command deliberately creates cross-tenant data"):
             if options["clear"]:
                 self.stdout.write("Clearing existing data...")
@@ -131,15 +278,20 @@ class Command(BaseCommand):
             self.stdout.write("Seeding organisations...")
             orgs = self._create_organizations()
 
+            self.stdout.write("Seeding demo consent policies...")
+            self._create_consent_policies(orgs)
+
             self.stdout.write("Seeding rank ladders...")
-            for org in orgs:
-                create_shotokan_ladders(org)
+            ladders = {org: create_shotokan_ladders(org) for org in orgs}
 
             self.stdout.write("Seeding dojos...")
             dojos = self._create_dojos(orgs)
 
             self.stdout.write("Seeding people and roles...")
             self._create_people(dojos)
+
+            self.stdout.write("Seeding rank tracks and grading history...")
+            self._create_rank_tracks(ladders)
 
             self.stdout.write("Seeding class templates...")
             self._create_class_templates(dojos)
@@ -157,27 +309,20 @@ class Command(BaseCommand):
     def _report_logins(self) -> None:
         """Print one usable sign-in per role.
 
-        Instructor emails carry a random suffix, so without this the demo data is
-        unreachable without a database query — which is a silly place for a
-        five-minute demo to stall.
+        Every address is confirmed against the database before it is printed —
+        an invented sign-in that does not work is worse than no hint at all.
         """
         self.stdout.write("\nSign in at /login/ with:")
-        for role, password in (
-            (Role.ORG_ADMIN, "admin123!"),
-            (Role.DOJO_ADMIN, "instructor123!"),
-            (Role.INSTRUCTOR, "instructor123!"),
-            (Role.GUARDIAN, "parent123!"),
+        for role, label, password in (
+            (Role.ORG_ADMIN, "admin", "admin123!"),
+            (Role.DOJO_ADMIN, "dojoadmin", "instructor123!"),
+            (Role.INSTRUCTOR, "instructor", "instructor123!"),
+            (Role.GUARDIAN, "parent", "parent123!"),
         ):
-            assignment = (
-                RoleAssignment.objects.filter(role=role, person__user__isnull=False)
-                .select_related("person__user")
-                .first()
-            )
-            if assignment is None:
+            email = self.logins.canonical.get(label)
+            if email is None or not User.objects.filter(email=email).exists():
                 continue
-            self.stdout.write(
-                f"  {role:<22} {assignment.person.user.email:<48} {password}"
-            )
+            self.stdout.write(f"  {role:<22} {email:<28} {password}")
 
     def _clear(self) -> None:
         """Delete seeded data, children first.
@@ -214,6 +359,11 @@ class Command(BaseCommand):
         ]
         for model in ordered_models:
             queryset = model.objects.all()
+            if model is RankAward:
+                # The disposable demo reset is the only sanctioned hard-delete
+                # path for append-only award history.
+                queryset._raw_delete(queryset.db)
+                continue
             hard_delete = getattr(queryset, "hard_delete", None)
             if hard_delete is not None:
                 hard_delete()
@@ -237,6 +387,46 @@ class Command(BaseCommand):
             )
             orgs.append(org)
         return orgs
+
+    def _create_consent_policies(self, orgs: list[Organization]) -> None:
+        """Publish clearly labelled demo wording so consent screens are testable."""
+        policies = (
+            (
+                ConsentRecord.Type.MEDICAL,
+                "demo-medical-2026-01",
+                "Demo medical information consent",
+                "DEMO ONLY — replace before real use.\n\n"
+                "I consent to this dojo collecting and using the student's medical "
+                "information for safe training, emergency response, and reasonable "
+                "training adjustments.",
+            ),
+            (
+                ConsentRecord.Type.PHOTO,
+                "demo-photo-2026-01",
+                "Demo photo and video consent",
+                "DEMO ONLY — replace before real use.\n\n"
+                "I consent to photographs and video of the student being used for "
+                "internal attendance identification and the specific dojo purposes "
+                "described here. Public or marketing use requires wording that says so.",
+            ),
+            (
+                ConsentRecord.Type.WAIVER,
+                "demo-waiver-2026-01",
+                "Demo training waiver",
+                "DEMO ONLY — not legal advice; replace with locally reviewed wording "
+                "before real use.\n\nI acknowledge that martial-arts training involves "
+                "physical activity and risk of injury, and I agree to follow the "
+                "instructor's safety directions.",
+            ),
+        )
+        for org in orgs:
+            for consent_type, version, title, body in policies:
+                ConsentPolicy.objects.get_or_create(
+                    organization=org,
+                    consent_type=consent_type,
+                    version=version,
+                    defaults={"title": title, "body": body, "is_active": True},
+                )
 
     def _create_dojos(self, orgs: list[Organization]) -> dict[Organization, list[Dojo]]:
         dojos: dict[Organization, list[Dojo]] = {}
@@ -269,7 +459,7 @@ class Command(BaseCommand):
                 org, "Admin", "User", org_slug=org.slug, is_khmer=False
             )
             User.objects.create_user(
-                email=_random_email("admin", "user", org.slug),
+                email=self.logins.allocate("admin"),
                 password="admin123!",
                 person=admin_person,
             )
@@ -292,7 +482,7 @@ class Command(BaseCommand):
                     is_khmer=False,
                 )
                 User.objects.create_user(
-                    email=_random_email(instructor_person.given_name, "instructor", dojo.slug),
+                    email=self.logins.allocate("dojoadmin"),
                     password="instructor123!",
                     person=instructor_person,
                 )
@@ -315,9 +505,7 @@ class Command(BaseCommand):
                         is_khmer=random.random() > 0.5,
                     )
                     User.objects.create_user(
-                        email=_random_email(
-                            inst_person.given_name, "inst", dojo.slug + str(random.randint(1, 99))
-                        ),
+                        email=self.logins.allocate("instructor"),
                         password="instructor123!",
                         person=inst_person,
                     )
@@ -383,12 +571,36 @@ class Command(BaseCommand):
                             has_custody=True,
                         )
                         User.objects.create_user(
-                            email=_random_email(
-                                guardian_given, guardian_family, dojo.slug + str(random.randint(100, 999))
-                            ),
+                            email=self.logins.allocate("parent"),
                             password="parent123!",
                             person=guardian,
                         )
+
+                        # Keep enough two-guardian households in the demo to make
+                        # the independent contact/custody flags easy to test by hand.
+                        if random.random() < 0.35:
+                            second_guardian = self._create_person(
+                                org,
+                                random.choice(KHMER_GIVEN_NAMES if is_khmer else LATIN_GIVEN_NAMES),
+                                guardian_family,
+                                org_slug=org.slug,
+                                is_khmer=is_khmer,
+                            )
+                            GuardianLink.objects.create(
+                                guardian=second_guardian,
+                                student=student_person,
+                                relationship=random.choice(
+                                    [
+                                        GuardianLink.Relationship.MOTHER,
+                                        GuardianLink.Relationship.FATHER,
+                                        GuardianLink.Relationship.GUARDIAN,
+                                    ]
+                                ),
+                                is_primary_contact=False,
+                                is_emergency_contact=False,
+                                is_financially_responsible=True,
+                                has_custody=False,
+                            )
 
                     # Create student role
                     RoleAssignment.objects.create(
@@ -431,6 +643,68 @@ class Command(BaseCommand):
                     student_count += 1
 
         self.stdout.write(f"  Created {student_count} students across all dojos.")
+
+    def _create_rank_tracks(self, ladders: dict) -> None:
+        """Put every student on a ladder and give them a grading history.
+
+        ⚠ Without this the demo has ranks but nobody holding one: the seed built
+        the ladders (task 1.2.11) and then never enrolled a student on one, so
+        `1.11.2`'s report, the student rank tab and every promotion screen all
+        rendered a single "no active rank track" bucket. Found by opening the
+        report against seeded data, not by any test — TODO 1.2.4/1.2.5.
+
+        Which ladder a student lands on is decided by age, the same rule the
+        junior-to-adult transition uses: under 14 grades on mon, everyone else
+        on kyu/dan.
+        """
+        today = date.today()
+        track_count = 0
+        award_count = 0
+
+        for org, (adult, junior) in ladders.items():
+            adult_ranks = list(Rank.objects.filter(ladder=adult).order_by("order"))
+            junior_ranks = list(Rank.objects.filter(ladder=junior).order_by("order"))
+
+            profiles = StudentProfile.objects.filter(person__organization=org).select_related(
+                "person"
+            )
+            for profile in profiles:
+                person = profile.person
+                dob = person.date_of_birth
+                age = (today - dob).days // 365 if dob else 20
+                ladder, ranks = (junior, junior_ranks) if age < 14 else (adult, adult_ranks)
+                if not ranks:
+                    continue
+
+                started = profile.joined_on or today - timedelta(days=180)
+                track = StudentStyleTrack.objects.create(
+                    student=person,
+                    style=ladder.style,
+                    ladder=ladder,
+                    started_on=started,
+                )
+                track_count += 1
+
+                # Roughly one in six has joined but never been graded. Ungraded
+                # is a real state every rank screen has to render, so the demo
+                # must contain some.
+                if random.randint(1, 6) == 1:
+                    continue
+
+                # A grading roughly every four months, capped by ladder length.
+                months = max(0, (today - started).days // 30)
+                steps = min(len(ranks), 1 + months // 4)
+                span = max(0, (today - started).days)
+                for index, rank in enumerate(ranks[:steps]):
+                    RankAward.objects.create(
+                        track=track,
+                        rank=rank,
+                        awarded_on=started + timedelta(days=span * index // max(1, steps)),
+                        recognition=RankAward.Recognition.INTERNAL,
+                    )
+                    award_count += 1
+
+        self.stdout.write(f"  Created {track_count} rank tracks and {award_count} awards.")
 
     def _create_class_templates(self, dojos: dict) -> None:
         """A believable weekly timetable per dojo — TODO 1.4.1."""

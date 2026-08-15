@@ -146,6 +146,7 @@ def active_students_by_rank_view(request):
                     "style": style_name or _("No style"),
                     "ladder": ladder_name or _("No active track"),
                     "rank": rank_name,
+                    "order": rank_order,
                     "students": [],
                 },
             )
@@ -160,9 +161,13 @@ def active_students_by_rank_view(request):
                 ]
             )
 
+    # ⚠ Order by the ladder's own position, never by rank name. Grades are named
+    # counting *down* towards seniority ("9th Kyu" is a beginner, "1st Kyu" is
+    # not), so an alphabetical sort interleaves the ladder — and puts "10th Mon"
+    # above "4th Mon". Seniors first; the ungraded (order -1) fall to the end.
     groups = sorted(
         grouped.values(),
-        key=lambda group: (str(group["style"]), str(group["ladder"]), str(group["rank"])),
+        key=lambda group: (str(group["style"]), str(group["ladder"]), -group["order"]),
     )
     if request.GET.get("format") == "csv":
         return csv_report_response(

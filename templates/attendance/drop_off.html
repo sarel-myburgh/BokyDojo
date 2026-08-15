@@ -8,6 +8,7 @@
 <p class="text-sm text-gray-500 mb-4">
   {% blocktranslate with days=days %}Active students with no attendance in {{ days }} days.{% endblocktranslate %}
   <a href="{% url 'attendance-summary' %}" class="underline">{% translate "Attendance summary" %}</a>
+  <a href="{% url 'active-by-rank' %}" class="ml-3 underline">{% translate "Active students by rank" %}</a>
 </p>
 
 <form method="get" class="mb-5 flex items-end gap-2">

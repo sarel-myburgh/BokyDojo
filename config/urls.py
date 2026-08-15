@@ -1,10 +1,16 @@
+from django.conf import settings
 from django.contrib import admin
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
 from django.urls import path
-from django.views.generic import RedirectView
+from django.views.decorators.cache import never_cache
+from django.views.generic import RedirectView, TemplateView
 
 from apps.attendance import views as attendance_views
+from apps.identity import consent_views, guardian_views, photo_views, student_views
+from apps.identity import password_reset as password_reset_views
+from apps.identity import setup as setup_views
 from apps.identity import views as identity_views
+from apps.ranks import views as rank_views
 
 
 def healthz(request):
@@ -12,21 +18,152 @@ def healthz(request):
     return JsonResponse({"status": "ok"})
 
 
+@never_cache
+def service_worker(request):
+    response = FileResponse(
+        open(settings.BASE_DIR / "static/js/service-worker.js", "rb"),
+        content_type="text/javascript; charset=utf-8",
+    )
+    response["Service-Worker-Allowed"] = "/"
+    return response
+
+
 urlpatterns = [
     path("", RedirectView.as_view(pattern_name="today", permanent=False), name="home"),
+    path("setup/", setup_views.first_run_view, name="first-run"),
     path("admin/", admin.site.urls),
     path("healthz", healthz, name="healthz"),
+    path("service-worker.js", service_worker, name="service-worker"),
+    path(
+        "offline/",
+        TemplateView.as_view(template_name="offline.html"),
+        name="offline",
+    ),
     # Auth — TODO 0.6.4/0.6.5
     path("login/", identity_views.login_view, name="login"),
+    path(
+        "password-reset/",
+        password_reset_views.password_reset_request_view,
+        name="password-reset",
+    ),
+    path(
+        "password-reset/<uidb64>/<token>/",
+        password_reset_views.password_reset_confirm_view,
+        name="password-reset-confirm",
+    ),
+    path(
+        "password-reset/complete/",
+        password_reset_views.password_reset_complete_view,
+        name="password-reset-complete",
+    ),
+    path("login/2fa/", identity_views.mfa_challenge_view, name="mfa-challenge"),
+    path("account/security/2fa/", identity_views.mfa_setup_view, name="mfa-setup"),
+    path(
+        "account/security/2fa/recovery-codes/",
+        identity_views.mfa_recovery_codes_view,
+        name="mfa-recovery-codes",
+    ),
     path("logout/", identity_views.logout_view, name="logout"),
+    path("students/", student_views.student_list_view, name="student-list"),
+    path(
+        "students/segments/save/",
+        student_views.student_segment_create_view,
+        name="student-segment-create",
+    ),
+    path(
+        "students/status/bulk/",
+        student_views.student_bulk_status_view,
+        name="student-bulk-status",
+    ),
+    path(
+        "students/promotions/bulk/",
+        rank_views.bulk_promotion_view,
+        name="student-bulk-promote",
+    ),
+    path(
+        "students/segments/<uuid:segment_id>/delete/",
+        student_views.student_segment_delete_view,
+        name="student-segment-delete",
+    ),
+    path(
+        "students/<uuid:person_id>/",
+        student_views.student_detail_view,
+        name="student-detail",
+    ),
+    path(
+        "students/<uuid:person_id>/status/",
+        student_views.student_status_transition_view,
+        name="student-status-transition",
+    ),
+    path(
+        "students/<uuid:person_id>/ranks/<uuid:track_id>/promote/",
+        rank_views.manual_promotion_view,
+        name="student-promote",
+    ),
+    path(
+        "students/<uuid:person_id>/guardians/add/",
+        guardian_views.guardian_add_view,
+        name="guardian-add",
+    ),
+    path(
+        "students/<uuid:person_id>/guardians/<uuid:link_id>/edit/",
+        guardian_views.guardian_edit_view,
+        name="guardian-edit",
+    ),
+    path(
+        "students/<uuid:person_id>/guardians/<uuid:link_id>/remove/",
+        guardian_views.guardian_remove_view,
+        name="guardian-remove",
+    ),
+    path(
+        "students/<uuid:person_id>/consents/medical/",
+        consent_views.medical_consent_view,
+        name="medical-consent",
+    ),
+    path(
+        "students/<uuid:person_id>/consents/photo/",
+        consent_views.photo_consent_view,
+        name="photo-consent",
+    ),
+    path(
+        "students/<uuid:person_id>/photo/",
+        photo_views.student_photo_view,
+        name="student-photo",
+    ),
+    path(
+        "students/<uuid:person_id>/photo/upload/",
+        photo_views.student_photo_upload_view,
+        name="student-photo-upload",
+    ),
+    path(
+        "students/<uuid:person_id>/consents/waiver/",
+        consent_views.waiver_consent_view,
+        name="waiver-consent",
+    ),
+    path(
+        "documents/<uuid:document_id>/download/",
+        consent_views.document_download_view,
+        name="document-download",
+    ),
     # Attendance — TODO 1.5.2
     path("today/", attendance_views.today_view, name="today"),
+    path("attendance/catch-up/", attendance_views.catch_up_view, name="catch-up"),
     path("sessions/<uuid:session_id>/roster/", attendance_views.roster_view, name="roster"),
-    # Reports — TODO 1.11.1/1.11.3/1.11.4
+    path(
+        "api/attendance/sessions/<uuid:session_id>/sync/",
+        attendance_views.attendance_sync_view,
+        name="attendance-sync",
+    ),
+    # Reports — TODO 1.11.1/1.11.2/1.11.3/1.11.4
     path(
         "reports/attendance/",
         attendance_views.attendance_summary_view,
         name="attendance-summary",
     ),
     path("reports/drop-off/", attendance_views.drop_off_view, name="drop-off"),
+    path(
+        "reports/ranks/",
+        rank_views.active_students_by_rank_view,
+        name="active-by-rank",
+    ),
 ]
