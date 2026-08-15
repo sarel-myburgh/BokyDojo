@@ -55,9 +55,7 @@ def world():
             scope_type=ScopeType.DOJO,
             dojo=dojo,
         )
-        user = User.objects.create_user(
-            email="sensei@example.com", password=PASSWORD, person=staff
-        )
+        user = User.objects.create_user(email="sensei@example.com", password=PASSWORD, person=staff)
         student = Person.objects.create(organization=org, given_name="Sokha", family_name="Chhorn")
         StudentProfile.objects.create(person=student, status=StudentProfile.Status.ACTIVE)
         Enrollment.objects.create(

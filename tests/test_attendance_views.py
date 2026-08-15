@@ -8,8 +8,12 @@ of actors who should be refused, not just of the happy path.
 from __future__ import annotations
 
 import datetime
+import json
+import time
+import uuid
 
 import pytest
+from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
@@ -137,12 +141,73 @@ def test_today_hides_another_organisations_session(client, world):
 
 
 def test_guardian_is_refused_the_attendance_screens(client, world):
-    guardian = make_staff(
-        world["org"], world["dojo_a"], Role.GUARDIAN, email="parent@example.com"
-    )
+    guardian = make_staff(world["org"], world["dojo_a"], Role.GUARDIAN, email="parent@example.com")
     client.force_login(guardian)
 
     assert client.get(reverse("today")).status_code == 403
+    assert client.get(reverse("catch-up")).status_code == 403
+
+
+# -- catch-up -----------------------------------------------------------------
+
+
+def test_catch_up_lists_recent_unmarked_sessions(client, world):
+    missed = make_session(world["dojo_a"], hours_ago=72)
+    client.force_login(world["instructor"])
+
+    response = client.get(reverse("catch-up"))
+
+    body = response.content.decode()
+    assert response.status_code == 200
+    assert str(missed.pk) in body
+    assert reverse("roster", args=[missed.pk]) in body
+
+
+def test_catch_up_hides_other_dojos_and_old_sessions(client, world):
+    other_dojo_session = make_session(world["dojo_b"], hours_ago=72)
+    expired = make_session(world["dojo_a"], hours_ago=15 * 24)
+    client.force_login(world["instructor"])
+
+    body = client.get(reverse("catch-up")).content.decode()
+
+    assert str(other_dojo_session.pk) not in body
+    assert str(expired.pk) not in body
+
+
+def test_instructor_can_fill_a_recent_unmarked_roster_through_catch_up(client, world):
+    missed = make_session(world["dojo_a"], hours_ago=72)
+    first, second = world["students"]
+    client.force_login(world["instructor"])
+
+    response = client.post(
+        reverse("roster", args=[missed.pk]),
+        {
+            f"status_{first.pk}": AttendanceRecord.Status.PRESENT,
+            f"status_{second.pk}": AttendanceRecord.Status.ABSENT,
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.url == reverse("catch-up")
+    with allow_unscoped("assertion"):
+        records = AttendanceRecord.objects.unscoped("assertion").filter(session=missed)
+        assert records.count() == 2
+    missed.refresh_from_db()
+    assert missed.status == ClassSession.Status.COMPLETED
+
+
+def test_instructor_cannot_fill_a_roster_outside_the_catch_up_window(client, world):
+    expired = make_session(world["dojo_a"], hours_ago=15 * 24)
+    client.force_login(world["instructor"])
+
+    response = client.post(
+        reverse("roster", args=[expired.pk]),
+        {f"status_{world['students'][0].pk}": AttendanceRecord.Status.PRESENT},
+    )
+
+    assert response.status_code == 403
+    with allow_unscoped("assertion"):
+        assert not AttendanceRecord.objects.unscoped("assertion").filter(session=expired).exists()
 
 
 # -- roster -------------------------------------------------------------------
@@ -393,9 +458,7 @@ def test_drop_off_csv_export(client, world):
 
 
 def test_guardian_is_refused_the_reports(client, world):
-    guardian = make_staff(
-        world["org"], world["dojo_a"], Role.GUARDIAN, email="parent@example.com"
-    )
+    guardian = make_staff(world["org"], world["dojo_a"], Role.GUARDIAN, email="parent@example.com")
     client.force_login(guardian)
 
     assert client.get(reverse("attendance-summary")).status_code == 403
@@ -426,6 +489,7 @@ def test_pages_contain_no_leaked_template_comments(client, world):
 
     for url in (
         reverse("today"),
+        reverse("catch-up"),
         reverse("roster", args=[world["session"].pk]),
         reverse("attendance-summary"),
         reverse("drop-off"),
@@ -433,3 +497,164 @@ def test_pages_contain_no_leaked_template_comments(client, world):
         body = client.get(url).content.decode()
         assert "{#" not in body, f"{url} leaked a template comment"
         assert "Mobile-first" not in body, f"{url} leaked a template comment"
+
+
+# -- offline sync -------------------------------------------------------------
+
+
+def sync_payload(students, *, status=AttendanceRecord.Status.PRESENT, versions=None, ids=None):
+    versions = versions or {}
+    ids = ids or {}
+    return {
+        "marks": [
+            {
+                "student_id": str(student.pk),
+                "status": status,
+                "client_generated_id": ids.get(student.pk, str(uuid.uuid4())),
+                "base_version": versions.get(student.pk, ""),
+            }
+            for student in students
+        ]
+    }
+
+
+def post_sync(client, session, payload):
+    return client.post(
+        reverse("attendance-sync", args=[session.pk]),
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+
+def test_offline_sync_applies_twenty_marks_in_one_request_under_target(client, world):
+    students = list(world["students"])
+    students.extend(
+        make_student(world["org"], f"Offline{index}", world["dojo_a"]) for index in range(18)
+    )
+    session = make_session(world["dojo_a"], hours_ago=0)
+    client.force_login(world["instructor"])
+
+    started = time.monotonic()
+    response = post_sync(client, session, sync_payload(students))
+    elapsed = time.monotonic() - started
+
+    assert response.status_code == 200
+    assert response.json()["conflicts"] == 0
+    assert elapsed < 30
+    with allow_unscoped("assertion"):
+        records = AttendanceRecord.objects.unscoped("assertion").filter(session=session)
+        assert records.count() == 20
+        assert set(records.values_list("status", flat=True)) == {AttendanceRecord.Status.PRESENT}
+    session.refresh_from_db()
+    assert session.status == ClassSession.Status.COMPLETED
+
+
+def test_offline_sync_replay_is_idempotent(client, world):
+    session = make_session(world["dojo_a"], hours_ago=0)
+    payload = sync_payload(world["students"])
+    client.force_login(world["instructor"])
+
+    first = post_sync(client, session, payload)
+    second = post_sync(client, session, payload)
+
+    assert first.status_code == second.status_code == 200
+    assert {result["state"] for result in second.json()["results"]} == {"replayed"}
+    with allow_unscoped("assertion"):
+        assert AttendanceRecord.objects.unscoped("assertion").filter(session=session).count() == 2
+
+
+def test_offline_sync_refuses_to_overwrite_a_newer_server_mark(client, world):
+    session = make_session(world["dojo_a"], hours_ago=0)
+    student = world["students"][0]
+    client.force_login(world["instructor"])
+
+    original = post_sync(client, session, sync_payload([student]))
+    original_version = original.json()["results"][0]["version"]
+    correction = post_sync(
+        client,
+        session,
+        sync_payload(
+            [student],
+            status=AttendanceRecord.Status.LATE,
+            versions={student.pk: original_version},
+        ),
+    )
+    assert correction.json()["conflicts"] == 0
+
+    stale = post_sync(
+        client,
+        session,
+        sync_payload(
+            [student],
+            status=AttendanceRecord.Status.ABSENT,
+            versions={student.pk: original_version},
+        ),
+    )
+
+    assert stale.status_code == 200
+    assert stale.json()["results"][0]["reason"] == "record_changed"
+    with allow_unscoped("assertion"):
+        record = AttendanceRecord.objects.unscoped("assertion").get(
+            session=session, student=student
+        )
+        assert record.status == AttendanceRecord.Status.LATE
+
+
+def test_offline_sync_rejects_cross_dojo_session_and_guardian(client, world):
+    other_session = make_session(world["dojo_b"], hours_ago=0)
+    payload = sync_payload([world["students"][0]])
+    client.force_login(world["instructor"])
+    assert post_sync(client, other_session, payload).status_code == 404
+
+    guardian = make_staff(
+        world["org"], world["dojo_a"], Role.GUARDIAN, email="sync-parent@example.com"
+    )
+    client.force_login(guardian)
+    assert post_sync(client, world["session"], payload).status_code == 403
+
+
+def test_offline_sync_validates_content_type_identifiers_and_duplicates(client, world):
+    session = make_session(world["dojo_a"], hours_ago=0)
+    client.force_login(world["instructor"])
+    url = reverse("attendance-sync", args=[session.pk])
+
+    assert client.post(url, data="{}", content_type="text/plain").status_code == 415
+    malformed = sync_payload([world["students"][0]])
+    malformed["marks"][0]["student_id"] = "not-a-uuid"
+    assert post_sync(client, session, malformed).status_code == 400
+
+    derived_status = sync_payload([world["students"][0]], status=AttendanceRecord.Status.VISITING)
+    assert post_sync(client, session, derived_status).status_code == 400
+
+    oversized = {"marks": [], "padding": "x" * (64 * 1024)}
+    assert post_sync(client, session, oversized).status_code == 413
+
+    duplicate = sync_payload([world["students"][0]])
+    duplicate["marks"].append(dict(duplicate["marks"][0]))
+    duplicate["marks"][1]["client_generated_id"] = str(uuid.uuid4())
+    assert post_sync(client, session, duplicate).status_code == 400
+
+
+def test_offline_sync_enforces_csrf(world):
+    session = make_session(world["dojo_a"], hours_ago=0)
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(world["instructor"])
+    roster = csrf_client.get(reverse("roster", args=[session.pk]))
+    token = csrf_client.cookies["csrftoken"].value
+    payload = sync_payload([world["students"][0]])
+    url = reverse("attendance-sync", args=[session.pk])
+
+    assert roster.status_code == 200
+    assert (
+        csrf_client.post(url, data=json.dumps(payload), content_type="application/json").status_code
+        == 403
+    )
+    assert (
+        csrf_client.post(
+            url,
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=token,
+        ).status_code
+        == 200
+    )

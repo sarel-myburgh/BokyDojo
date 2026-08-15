@@ -4,15 +4,15 @@
 {% block title %}{% translate "Today" %} — DojoMaster{% endblock %}
 
 {% block content %}
-<h1 class="text-xl font-semibold mb-4">{% translate "Today's classes" %}</h1>
+<h1 class="text-2xl font-bold tracking-tight mb-6">{% translate "Today's classes" %}</h1>
 
 {% if sessions %}
-  <ul class="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white mb-8">
+  <ul class="panel divide-y divide-gray-200 mb-10">
     {% for session in sessions %}
     <li>
-      <a href="{% url 'roster' session.pk %}" class="flex items-center gap-3 p-4 active:bg-gray-50">
+      <a href="{% url 'roster' session.pk %}" class="flex items-center gap-4 px-4 py-4 active:bg-gray-50">
         {# Each dojo's own timezone: an org admin can be looking at two countries. #}
-        <span class="w-14 shrink-0 text-sm font-medium tabular-nums">
+        <span class="w-12 shrink-0 text-base font-semibold tabular-nums">
           {% timezone session.local_zone %}{{ session.starts_at|time:"H:i" }}{% endtimezone %}
         </span>
         <span class="min-w-0 flex-1">
@@ -21,35 +21,43 @@
           </span>
           <span class="block text-sm text-gray-500">{{ session.dojo.name }}{% if session.room %} · {{ session.room }}{% endif %}</span>
         </span>
+        {# State as a tracked label, not a coloured pill — quieter, and it reads at a glance. #}
         {% if session.status == "cancelled" %}
-          <span class="shrink-0 rounded bg-red-100 px-2 py-1 text-xs text-red-800">{% translate "cancelled" %}</span>
+          <span class="eyebrow shrink-0 text-red-700">{% translate "cancelled" %}</span>
         {% elif session.marked_count %}
-          <span class="shrink-0 rounded bg-green-100 px-2 py-1 text-xs text-green-800">
+          <span class="eyebrow shrink-0 text-green-700">
             {% blocktranslate with count=session.marked_count %}{{ count }} marked{% endblocktranslate %}
           </span>
         {% else %}
-          <span class="shrink-0 rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">{% translate "not marked" %}</span>
+          <span class="eyebrow shrink-0 text-gray-400">{% translate "not marked" %}</span>
         {% endif %}
       </a>
     </li>
     {% endfor %}
   </ul>
 {% else %}
-  <p class="mb-8 rounded-lg bg-gray-100 px-4 py-6 text-center text-sm text-gray-600">
+  <p class="mb-10 border border-dashed border-gray-300 px-4 py-10 text-center text-sm text-gray-500">
     {% translate "No classes scheduled today." %}
   </p>
 {% endif %}
 
 {% if unmarked %}
-  <h2 class="text-base font-semibold mb-1">{% translate "Not yet marked" %}</h2>
+  {# The nag. Seal it: on this screen, this is the thing that needs doing. #}
+  <div class="flex items-center gap-2 mb-1">
+    <span class="seal" aria-hidden="true"></span>
+    <h2 class="text-base font-bold tracking-tight">{% translate "Not yet marked" %}</h2>
+    <a href="{% url 'catch-up' %}" class="eyebrow ml-auto text-crimson-600 hover:underline">
+      {% translate "Catch up attendance" %}
+    </a>
+  </div>
   <p class="text-sm text-gray-500 mb-3">
-    {% blocktranslate with days=catch_up_days %}Classes in the last {{ days }} days with no attendance recorded.{% endblocktranslate %}
+    {% translate "Recent classes with no attendance recorded." %}
   </p>
-  <ul class="divide-y divide-gray-200 rounded-lg border border-amber-200 bg-amber-50">
+  <ul class="divide-y divide-amber-200 border-l-2 border-amber-500 bg-amber-50">
     {% for session in unmarked %}
     <li>
-      <a href="{% url 'roster' session.pk %}" class="flex items-center gap-3 p-4 active:bg-amber-100">
-        <span class="w-24 shrink-0 text-sm tabular-nums">
+      <a href="{% url 'roster' session.pk %}" class="flex items-center gap-4 px-4 py-4 active:bg-amber-100">
+        <span class="w-24 shrink-0 text-sm font-medium tabular-nums text-amber-900">
           {% timezone session.local_zone %}{{ session.starts_at|date:"j M, H:i" }}{% endtimezone %}
         </span>
         <span class="min-w-0 flex-1 truncate">

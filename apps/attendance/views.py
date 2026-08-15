@@ -13,18 +13,20 @@ twenty times.
 
 from __future__ import annotations
 
-import csv
 import datetime
+import json
+import uuid
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Max, Q
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.translation import gettext as _
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 
+from apps.core.reports import csv_report_response
 from apps.core.timezones import dojo_zone
 from apps.identity.models import Dojo, Enrollment, GovernanceModel, Person
 from apps.identity.permissions import (
@@ -37,10 +39,13 @@ from apps.identity.permissions import (
 from apps.scheduling.models import ClassSession
 
 from .models import AttendanceRecord
-from .services import mark_session, session_roster
+from .services import (
+    is_catch_up_eligible,
+    mark_session,
+    session_roster,
+    sync_session_marks,
+)
 
-#: How far back the catch-up prompt looks — plan §12.7, TODO 1.5.6.
-CATCH_UP_DAYS = 14
 #: Default silence before a student appears on the drop-off list — TODO 1.11.3.
 DEFAULT_DROP_OFF_DAYS = 21
 
@@ -81,7 +86,12 @@ def today_view(request) -> HttpResponse:
     candidates = (
         ClassSession.objects.for_actor(actor)
         .select_related("dojo", "dojo__organization", "template")
-        .filter(starts_at__range=(now - datetime.timedelta(hours=36), now + datetime.timedelta(hours=36)))
+        .filter(
+            starts_at__range=(
+                now - datetime.timedelta(hours=36),
+                now + datetime.timedelta(hours=36),
+            )
+        )
         .annotate(marked_count=Count("attendance_records"))
         .order_by("starts_at")
     )
@@ -102,27 +112,36 @@ def today_view(request) -> HttpResponse:
     # flow is 1.5.6; this is the prompt that makes it obvious it is needed.
     # Today's own classes are excluded: they are already listed above, and a
     # class that finished twenty minutes ago is not yet a backlog.
-    unmarked = (
+    unmarked_candidates = (
         ClassSession.objects.for_actor(actor)
-        .select_related("dojo", "template")
+        .select_related("dojo", "dojo__organization", "template")
         .filter(
-            starts_at__gte=now - datetime.timedelta(days=CATCH_UP_DAYS),
+            starts_at__gte=now - datetime.timedelta(days=365),
             starts_at__lt=now,
             status=ClassSession.Status.SCHEDULED,
         )
-        .exclude(pk__in=[session.pk for session in sessions])
         .annotate(marked_count=Count("attendance_records"))
         .filter(marked_count=0)
-        .order_by("-starts_at")[:20]
+        .order_by("-starts_at")
     )
+    unmarked = [
+        session
+        for session in unmarked_candidates
+        if is_catch_up_eligible(session=session, unmarked=True)
+        and can(
+            actor,
+            Action.ATTENDANCE_VIEW,
+            session,
+            governance_model=_governance_of(session.dojo),
+        )
+    ][:20]
 
     return render(
         request,
         "attendance/today.html",
         {
             "sessions": sessions,
-            "unmarked": list(unmarked),
-            "catch_up_days": CATCH_UP_DAYS,
+            "unmarked": unmarked,
         },
     )
 
@@ -158,19 +177,27 @@ def roster_view(request, session_id) -> HttpResponse:
             governance_model=_governance_of(session.dojo),
         )
 
-        valid = set(AttendanceRecord.Status.values)
+        valid = set(AttendanceRecord.Status.values) - {AttendanceRecord.Status.VISITING}
         statuses = {}
         for key, value in request.POST.items():
             if not key.startswith("status_") or value not in valid:
                 continue
             statuses[key.removeprefix("status_")] = value
 
-        result = mark_session(session=session, statuses=statuses, actor=actor)
+        catch_up = is_catch_up_eligible(session=session)
+        result = mark_session(
+            session=session,
+            statuses=statuses,
+            actor=actor,
+            allow_catch_up=catch_up,
+        )
         messages.success(
             request,
             _("Saved: %(created)s new, %(updated)s updated.")
             % {"created": result["created"], "updated": result["updated"]},
         )
+        if catch_up:
+            return redirect("catch-up")
         return redirect("roster", session_id=session.pk)
 
     entries = session_roster(session=session, actor=actor)
@@ -190,8 +217,113 @@ def roster_view(request, session_id) -> HttpResponse:
             "statuses": AttendanceRecord.Status,
             "may_record": may_record,
             "marked_count": sum(1 for entry in entries if entry.is_marked),
+            "is_catch_up": is_catch_up_eligible(
+                session=session, unmarked=not any(entry.is_marked for entry in entries)
+            ),
         },
     )
+
+
+@login_required
+@require_http_methods(["GET"])
+def catch_up_view(request) -> HttpResponse:
+    """List missed classes an instructor may still fill in — TODO 1.5.6."""
+    actor = request.actor
+    if not _holds_anywhere(actor, Action.ATTENDANCE_VIEW):
+        raise PermissionDenied(action=Action.ATTENDANCE_VIEW, actor=actor)
+
+    now = timezone.now()
+    candidates = (
+        ClassSession.objects.for_actor(actor)
+        .select_related("dojo", "dojo__organization", "template")
+        .filter(
+            starts_at__gte=now - datetime.timedelta(days=365),
+            starts_at__lt=now,
+            status=ClassSession.Status.SCHEDULED,
+        )
+        .annotate(marked_count=Count("attendance_records"))
+        .filter(marked_count=0)
+        .order_by("-starts_at")
+    )
+    sessions = [
+        session
+        for session in candidates
+        if is_catch_up_eligible(session=session, unmarked=True)
+        and can(
+            actor,
+            Action.ATTENDANCE_VIEW,
+            session,
+            governance_model=_governance_of(session.dojo),
+        )
+    ]
+    return render(
+        request,
+        "attendance/catch_up.html",
+        {"sessions": sessions},
+    )
+
+
+@login_required
+@require_POST
+def attendance_sync_view(request, session_id) -> JsonResponse:
+    """Synchronise an offline roster with idempotency and conflict detection."""
+    if request.content_type != "application/json":
+        return JsonResponse({"error": "content_type"}, status=415)
+    try:
+        content_length = int(request.META.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        return JsonResponse({"error": "invalid_content_length"}, status=400)
+    if content_length < 0 or content_length > 64 * 1024:
+        return JsonResponse({"error": "payload_too_large"}, status=413)
+    body = request.body
+    if len(body) > 64 * 1024:
+        return JsonResponse({"error": "payload_too_large"}, status=413)
+    try:
+        payload = json.loads(body)
+    except (TypeError, ValueError, UnicodeDecodeError):
+        return JsonResponse({"error": "invalid_json"}, status=400)
+
+    raw_marks = payload.get("marks") if isinstance(payload, dict) else None
+    if not isinstance(raw_marks, list) or not 1 <= len(raw_marks) <= 200:
+        return JsonResponse({"error": "invalid_marks"}, status=400)
+
+    valid_statuses = set(AttendanceRecord.Status.values) - {AttendanceRecord.Status.VISITING}
+    marks = []
+    seen_students = set()
+    seen_client_ids = set()
+    for raw in raw_marks:
+        if not isinstance(raw, dict):
+            return JsonResponse({"error": "invalid_mark"}, status=400)
+        try:
+            student_id = uuid.UUID(str(raw.get("student_id", "")))
+            client_id = str(uuid.UUID(str(raw.get("client_generated_id", ""))))
+        except (ValueError, AttributeError):
+            return JsonResponse({"error": "invalid_identifier"}, status=400)
+        status = raw.get("status")
+        base_version = raw.get("base_version", "")
+        if (
+            status not in valid_statuses
+            or not isinstance(base_version, str)
+            or len(base_version) > 64
+        ):
+            return JsonResponse({"error": "invalid_mark"}, status=400)
+        if student_id in seen_students or client_id in seen_client_ids:
+            return JsonResponse({"error": "duplicate_mark"}, status=400)
+        seen_students.add(student_id)
+        seen_client_ids.add(client_id)
+        marks.append(
+            {
+                "student_id": student_id,
+                "status": status,
+                "client_generated_id": client_id,
+                "base_version": base_version,
+            }
+        )
+
+    session = _get_session(request.actor, session_id)
+    results = sync_session_marks(session=session, marks=marks, actor=request.actor)
+    conflicts = sum(result["state"] == "conflict" for result in results)
+    return JsonResponse({"results": results, "conflicts": conflicts})
 
 
 # -- reports ------------------------------------------------------------------
@@ -259,9 +391,18 @@ def attendance_summary_view(request) -> HttpResponse:
     ]
 
     if request.GET.get("format") == "csv":
-        return _csv_response(
+        return csv_report_response(
             filename=f"attendance-{date_from}-to-{date_to}.csv",
-            header=["Dojo", "Class", "Records", "Attended", "Absent", "Excused", "Visiting", "Rate %"],
+            header=[
+                "Dojo",
+                "Class",
+                "Records",
+                "Attended",
+                "Absent",
+                "Excused",
+                "Visiting",
+                "Rate %",
+            ],
             rows=[
                 [
                     item["dojo"],
@@ -282,9 +423,7 @@ def attendance_summary_view(request) -> HttpResponse:
         "total": sum(item["total"] for item in summary),
         "attended": sum(item["attended"] for item in summary),
     }
-    totals["rate"] = (
-        round(100 * totals["attended"] / totals["total"]) if totals["total"] else 0
-    )
+    totals["rate"] = round(100 * totals["attended"] / totals["total"]) if totals["total"] else 0
 
     return render(
         request,
@@ -353,7 +492,7 @@ def drop_off_view(request) -> HttpResponse:
     ]
 
     if request.GET.get("format") == "csv":
-        return _csv_response(
+        return csv_report_response(
             filename=f"drop-off-{days}-days.csv",
             header=["Student", "Email", "Phone", "Last attended", "Days since"],
             rows=[
@@ -370,27 +509,3 @@ def drop_off_view(request) -> HttpResponse:
         )
 
     return render(request, "attendance/drop_off.html", {"rows": rows, "days": days})
-
-
-def _csv_response(*, filename: str, header: list, rows: list, actor) -> HttpResponse:
-    """CSV export — TODO 1.11.4.
-
-    Exports of personal data are audited: SEC §2.6 treats "who took a copy of the
-    student list" as one of the questions the log has to be able to answer.
-    """
-    from apps.core import audit
-
-    audit.record(
-        "export",
-        actor=actor,
-        subject_type="report",
-        subject_id=filename,
-        note=f"{len(rows)} row(s)",
-    )
-
-    response = HttpResponse(content_type="text/csv; charset=utf-8")
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
-    writer = csv.writer(response)
-    writer.writerow(header)
-    writer.writerows(rows)
-    return response

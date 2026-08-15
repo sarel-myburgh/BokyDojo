@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="DojoMaster">
+  <rect width="512" height="512" rx="96" fill="#111827"/>
+  <circle cx="256" cy="256" r="164" fill="none" stroke="#f9fafb" stroke-width="28"/>
+  <path d="M150 184h212v42H150zm42 62h128v124H192z" fill="#f9fafb"/>
+  <path d="M164 154l92-54 92 54z" fill="#dc2626"/>
+</svg>

@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "DojoMaster",
+  "short_name": "DojoMaster",
+  "description": "Secure martial arts dojo management",
+  "start_url": "/today/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f9fafb",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "/static/icons/dojomaster-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/dojomaster-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

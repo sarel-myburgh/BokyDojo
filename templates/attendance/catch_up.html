@@ -1,0 +1,39 @@
+{% extends "app/base.html" %}
+{% load i18n tz %}
+
+{% block title %}{% translate "Catch up attendance" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <a href="{% url 'today' %}" class="text-sm text-gray-500">&larr; {% translate "Today" %}</a>
+  <h1 class="mt-1 text-xl font-semibold">{% translate "Catch up attendance" %}</h1>
+  <p class="mt-1 text-sm text-gray-500">
+    {% translate "Recent classes with no attendance recorded." %}
+  </p>
+</div>
+
+{% if sessions %}
+<ul class="divide-y divide-gray-200 rounded-lg border border-amber-200 bg-amber-50">
+  {% for session in sessions %}
+  <li>
+    <a href="{% url 'roster' session.pk %}" class="flex items-center gap-3 p-4 active:bg-amber-100">
+      <span class="w-24 shrink-0 text-sm tabular-nums">
+        {% timezone session.local_zone %}{{ session.starts_at|date:"j M, H:i" }}{% endtimezone %}
+      </span>
+      <span class="min-w-0 flex-1">
+        <span class="block truncate font-medium">
+          {% if session.template %}{{ session.template.name }}{% else %}{% translate "One-off session" %}{% endif %}
+        </span>
+        <span class="block truncate text-sm text-gray-500">{{ session.dojo.name }}</span>
+      </span>
+      <span class="shrink-0 text-sm font-medium text-blue-700">{% translate "Mark" %}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="rounded-lg bg-green-50 px-4 py-6 text-center text-sm text-green-900">
+  {% translate "All recent classes have attendance recorded." %}
+</p>
+{% endif %}
+{% endblock %}

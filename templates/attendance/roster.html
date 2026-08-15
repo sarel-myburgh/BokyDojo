@@ -1,5 +1,7 @@
 {% extends "app/base.html" %}
-{% load i18n tz %}
+{% load i18n static tz %}
+
+{% block extra_head %}<script type="module" src="{% static 'js/roster.js' %}"></script>{% endblock %}
 
 {% block title %}{% translate "Roster" %} — {{ session }}{% endblock %}
 
@@ -7,57 +9,77 @@
 {% comment %}
   Mobile-first: one column, 44px+ targets, no horizontal scrolling. The whole
   roster posts once — twenty round trips on dojo wifi is the failure mode.
+
+  Visual priority is the twenty status rows and the save button. Everything
+  else on this screen is deliberately quiet, because the instructor is standing
+  up, holding a phone, with a class waiting.
 {% endcomment %}
 
-<div class="mb-4">
-  <a href="{% url 'today' %}" class="text-sm text-gray-500">&larr; {% translate "Today" %}</a>
-  <h1 class="text-xl font-semibold mt-1">
+<div class="mb-5">
+  <a href="{% url 'today' %}" class="eyebrow hover:text-gray-900">&larr; {% translate "Today" %}</a>
+  <h1 class="text-2xl font-bold tracking-tight mt-2">
     {% if session.template %}{{ session.template.name }}{% else %}{% translate "One-off session" %}{% endif %}
   </h1>
-  <p class="text-sm text-gray-500">
+  <p class="text-sm text-gray-500 mt-1">
     {{ session.dojo.name }} ·
     {% timezone session.local_zone %}{{ session.starts_at|date:"D j M, H:i" }}{% endtimezone %}
     {% if session.status == "cancelled" %}
-      · <span class="text-red-700 font-medium">{% translate "Cancelled" %}</span>
+      · <span class="font-semibold text-red-700">{% translate "Cancelled" %}</span>
     {% endif %}
   </p>
+  {% if is_catch_up %}
+  <p class="mt-3 border-l-2 border-amber-500 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+    {% translate "This is a missed class. Record the whole roster from memory, then save." %}
+  </p>
+  {% endif %}
 </div>
 
 {% if not entries %}
-  <p class="rounded-lg bg-gray-100 px-4 py-6 text-center text-sm text-gray-600">
+  <p class="border border-dashed border-gray-300 px-4 py-10 text-center text-sm text-gray-500">
     {% translate "Nobody is enrolled at this dojo yet." %}
   </p>
 {% else %}
 
-<form method="post" action="{% url 'roster' session.pk %}" id="roster-form">
+<form method="post" action="{% url 'roster' session.pk %}" id="roster-form"
+      data-sync-url="{% url 'attendance-sync' session.pk %}" data-sync-owner="{{ request.user.pk }}">
   {% csrf_token %}
 
+  {# ⚠ roster.js rewrites this element's class attribute wholesale in showState(). #}
+  {# Restyle both or the sync banner falls out of the design on first update. #}
+  <div id="sync-status" role="status" aria-live="polite"
+       class="mb-3 border-l-2 border-gray-300 bg-gray-100 px-3 py-2 text-sm text-gray-700">
+    {% translate "Checking sync state…" %}
+  </div>
+  <button type="button" id="sync-resolve" hidden
+          class="mb-3 w-full border border-red-300 bg-white px-3 py-2.5 text-sm font-medium text-red-800 active:bg-red-50">
+    {% translate "Discard conflicted offline changes and reload" %}
+  </button>
+
   {% if may_record %}
-  <div class="flex items-center gap-2 mb-3">
-    <button type="button" onclick="markAll('present')"
-            class="flex-1 rounded-lg border border-gray-900 bg-white px-3 py-2.5 text-sm font-medium active:bg-gray-100">
+  {# Mark-all is the primary gesture: one tap, then deselect the absentees. #}
+  <div class="flex items-stretch gap-2 mb-4">
+    <button type="button" data-mark-all-status="present"
+            class="flex-1 border border-gray-900 bg-white px-3 py-3 text-sm font-semibold uppercase tracking-widest active:bg-gray-100">
       {% translate "Mark all present" %}
     </button>
-    <button type="button" onclick="markAll('')"
-            class="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-600 active:bg-gray-100">
+    <button type="button" data-mark-all-status=""
+            class="border border-gray-300 bg-white px-4 py-3 text-sm text-gray-500 active:bg-gray-100">
       {% translate "Clear" %}
     </button>
   </div>
   {% endif %}
 
-  <p class="text-xs text-gray-500 mb-2">
+  <p class="eyebrow mb-2">
     {% blocktranslate with marked=marked_count total=entries|length %}{{ marked }} of {{ total }} marked{% endblocktranslate %}
   </p>
 
-  <ul class="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+  <ul class="panel divide-y divide-gray-200">
     {% for entry in entries %}
-    <li class="p-3">
+    <li class="px-3 py-3">
       <div class="flex items-baseline justify-between gap-2 mb-2">
         <span class="font-medium">{{ entry.student.full_name }}</span>
         {% if entry.is_visitor %}
-          <span class="shrink-0 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-            {% translate "visiting" %}
-          </span>
+          <span class="eyebrow shrink-0 text-amber-700">{% translate "visiting" %}</span>
         {% endif %}
       </div>
 
@@ -68,9 +90,12 @@
           <label class="cursor-pointer">
             <input type="radio" class="peer sr-only"
                    name="status_{{ entry.student.pk }}" value="{{ value }}"
+                   data-student-id="{{ entry.student.pk }}" data-base-version="{{ entry.version }}"
                    {% if entry.status == value or entry.status == "visiting" and value == "present" %}checked{% endif %}
                    {% if not may_record %}disabled{% endif %}>
-            <span class="block rounded-lg border border-gray-300 px-1 py-2.5 text-center text-sm
+            {# Selected state is a solid ink fill, not a tint: readable in a bright #}
+            {# dojo, and unambiguous at arm's length. #}
+            <span class="block border border-gray-300 px-1 py-3 text-center text-sm font-medium
                          peer-checked:border-gray-900 peer-checked:bg-gray-900 peer-checked:text-white
                          peer-disabled:opacity-50">
               {{ label }}
@@ -84,28 +109,19 @@
   </ul>
 
   {% if may_record %}
-  <div class="sticky bottom-0 -mx-4 mt-4 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur">
+  <div class="sticky bottom-0 -mx-4 mt-5 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur">
     <button type="submit"
-            class="w-full rounded-lg bg-gray-900 px-4 py-3.5 text-base font-medium text-white active:bg-gray-700">
+            class="w-full bg-gray-900 px-4 py-4 text-sm font-semibold uppercase tracking-widest text-white active:bg-gray-700">
       {% translate "Save attendance" %}
     </button>
   </div>
   {% else %}
-  <p class="mt-4 rounded-lg bg-gray-100 px-4 py-3 text-sm text-gray-600">
+  <p class="mt-5 border-l-2 border-gray-300 bg-gray-100 px-4 py-3 text-sm text-gray-600">
     {% translate "You can view this roster but not change it." %}
   </p>
   {% endif %}
 </form>
 
-<script>
-  // Deliberately plain: "mark all present, then fix the three who aren't" is the
-  // flow that hits the 30-second target in TODO 1.6.6.
-  function markAll(status) {
-    document.querySelectorAll('#roster-form input[type=radio]').forEach(function (radio) {
-      if (radio.disabled) return;
-      radio.checked = status !== '' && radio.value === status;
-    });
-  }
-</script>
+
 {% endif %}
 {% endblock %}

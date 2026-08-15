@@ -92,9 +92,7 @@ def session(dojo):
 @pytest.fixture
 def instructor(org, dojo):
     with allow_unscoped("test setup"):
-        person = Person.objects.create(
-            organization=org, given_name="Takeshi", family_name="Yamada"
-        )
+        person = Person.objects.create(organization=org, given_name="Takeshi", family_name="Yamada")
     return Actor(
         user_id=None,
         person_id=person.pk,
@@ -144,9 +142,7 @@ def test_every_status_in_the_set_is_accepted(session, student, instructor, org, 
         ]
     ):
         pupil = make_person(org, f"Pupil{index}", dojo=dojo)
-        record, _ = mark_attendance(
-            session=session, student=pupil, status=status, actor=instructor
-        )
+        record, _ = mark_attendance(session=session, student=pupil, status=status, actor=instructor)
         assert record.status == status
 
 
@@ -297,6 +293,13 @@ def test_enrolled_student_is_not_flagged_as_visiting(session, student, instructo
     assert record.status == AttendanceRecord.Status.PRESENT
 
 
+def test_client_cannot_label_an_enrolled_student_as_visiting(session, student, instructor):
+    record, _ = mark_attendance(
+        session=session, student=student, status=AttendanceRecord.Status.VISITING, actor=instructor
+    )
+    assert record.status == AttendanceRecord.Status.PRESENT
+
+
 # -- permissions --------------------------------------------------------------
 
 
@@ -395,7 +398,9 @@ def test_instructor_may_not_correct_a_past_class(dojo, student, instructor, dojo
         )
 
 
-def test_repeating_an_unchanged_mark_on_a_past_class_is_not_an_edit(dojo, student, dojo_admin, instructor):
+def test_repeating_an_unchanged_mark_on_a_past_class_is_not_an_edit(
+    dojo, student, dojo_admin, instructor
+):
     """An idle re-save must not demand a permission the instructor lacks."""
     session = make_session(dojo, hours_ago=72)
     mark_attendance(
@@ -444,7 +449,9 @@ def test_roster_excludes_students_of_another_dojo(session, dojo, dojo_b, org, in
     make_person(org, "Mine", "Aa", dojo=dojo)
     make_person(org, "Theirs", "Bb", dojo=dojo_b)
 
-    names = {entry.student.given_name for entry in session_roster(session=session, actor=instructor)}
+    names = {
+        entry.student.given_name for entry in session_roster(session=session, actor=instructor)
+    }
 
     assert names == {"Mine"}
 
