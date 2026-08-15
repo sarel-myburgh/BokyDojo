@@ -55,9 +55,12 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.core.csp.ContentSecurityPolicyMiddleware",
     # Must follow AuthenticationMiddleware, and precede the audit context so the
     # Actor is built from a session that has already been checked for expiry.
     "apps.core.sessions.SessionTimeoutMiddleware",
+    # Enforce TOTP before privileged sessions can reach application or admin views.
+    "apps.identity.middleware.MfaEnforcementMiddleware",
     # Must follow AuthenticationMiddleware — it derives the Actor from request.user.
     "apps.core.audit.AuditContextMiddleware",
     # Must follow the audit context — it reads request.actor to decide which
@@ -82,6 +85,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "django.template.context_processors.i18n",
+                "apps.core.csp.csp_nonce",
             ],
         },
     },
@@ -132,8 +136,10 @@ PASSWORD_HASHERS = [
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
-     "OPTIONS": {"min_length": 12}},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 12},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -152,6 +158,11 @@ TIME_ZONE = "UTC"
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# ⚠ Without this the project-level static/ tree is invisible to the finders —
+# no app ships its own static dir, so every asset 404s: the stylesheets, the
+# PWA service worker, and the offline attendance queue. The pages still render,
+# which is why the test suite never noticed.
+STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -170,6 +181,12 @@ SESSION_COOKIE_AGE = 60 * 60 * 12
 # bench does not stay signed in all evening.
 SESSION_IDLE_TIMEOUT_SECONDS = int(env("DJANGO_SESSION_IDLE_TIMEOUT", 90 * 60))
 SESSION_ABSOLUTE_TIMEOUT_SECONDS = int(env("DJANGO_SESSION_ABSOLUTE_TIMEOUT", 60 * 60 * 12))
+
+FIRST_RUN_SETUP_TOKEN = env("DJANGO_FIRST_RUN_TOKEN", "")
+DEMO_SEED_ENABLED = False
+MFA_ENFORCEMENT_ENABLED = True
+PASSWORD_RESET_TIMEOUT = 30 * 60
+DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL", "DojoMaster <noreply@localhost>")
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "today"

@@ -5,6 +5,14 @@ from .guards import assert_safe_production_config
 DEBUG = env_bool("DJANGO_DEBUG", False)
 SECRET_KEY = env("DJANGO_SECRET_KEY", required=True)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS")
+FIRST_RUN_SETUP_TOKEN = env("DJANGO_FIRST_RUN_TOKEN", required=True)
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = env("SMTP_HOST", required=True)
+EMAIL_PORT = int(env("SMTP_PORT", "587"))
+EMAIL_HOST_USER = env("SMTP_USER", "")
+EMAIL_HOST_PASSWORD = env("SMTP_PASSWORD", "")
+EMAIL_USE_TLS = env_bool("SMTP_USE_TLS", True)
 
 SECURE_SSL_REDIRECT = True
 SECURE_HSTS_SECONDS = 31536000

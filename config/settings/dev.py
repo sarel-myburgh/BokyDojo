@@ -19,7 +19,7 @@ from .base import *  # noqa: F403
 from .base import BASE_DIR, env, env_bool
 
 DEBUG = env_bool("DJANGO_DEBUG", True)
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]  # nosec B104
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # SQLite unless a Postgres host is named. Zero first-run friction, container
@@ -36,3 +36,5 @@ if not env("POSTGRES_HOST", ""):
 # a secret — production refuses to boot without a real one of its own.
 if not env("DJANGO_FIELD_ENCRYPTION_KEYS", ""):
     FIELD_ENCRYPTION_KEYS = "1:ZG9qb21hc3Rlci1kZXYta2V5LW5vdC1hLXNlY3JldCE="
+
+DEMO_SEED_ENABLED = True

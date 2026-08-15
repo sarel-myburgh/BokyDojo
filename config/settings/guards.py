@@ -61,14 +61,14 @@ def assert_safe_production_config(
             "DJANGO_FIELD_ENCRYPTION_KEYS is not set. Medical and safeguarding data "
             "cannot be encrypted without it. Generate one with:\n"
             "  python -c \"import base64,os;print('1:'+base64.urlsafe_b64encode("
-            "os.urandom(32)).decode())\""
+            'os.urandom(32)).decode())"'
         )
 
     key = (secret_key or "").strip()
     if key in INSECURE_SECRET_KEYS or key.startswith("django-insecure"):
         problems.append(
             "DJANGO_SECRET_KEY is unset or a known placeholder. Generate one with:\n"
-            "  python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+            '  python -c "import secrets; print(secrets.token_urlsafe(64))"'
         )
     elif len(key) < 50:
         problems.append("DJANGO_SECRET_KEY is shorter than 50 characters.")
@@ -88,6 +88,5 @@ def assert_safe_production_config(
 
     if problems:
         raise UnsafeConfiguration(
-            "Refusing to start — unsafe production configuration:\n\n  - "
-            + "\n  - ".join(problems)
+            "Refusing to start — unsafe production configuration:\n\n  - " + "\n  - ".join(problems)
         )

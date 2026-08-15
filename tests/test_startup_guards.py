@@ -56,6 +56,4 @@ def test_rejects_empty_allowed_hosts():
 
 def test_rejects_wildcard_allowed_hosts():
     with pytest.raises(UnsafeConfiguration, match=r"\*"):
-        assert_safe_production_config(
-            secret_key=GOOD_KEY, debug=False, allowed_hosts=["*"]
-        )
+        assert_safe_production_config(secret_key=GOOD_KEY, debug=False, allowed_hosts=["*"])
