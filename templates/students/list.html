@@ -1,0 +1,154 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Students" %}{% endblock %}
+
+{% block content %}
+<div class="flex items-start justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-semibold">{% translate "Students" %}</h1>
+    <p class="mt-1 text-sm text-gray-600">{% translate "Find students who need attention, then open the relevant action." %}</p>
+  </div>
+  <span class="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700">
+    {% blocktranslate count count=page.paginator.count %}{{ count }} student{% plural %}{{ count }} students{% endblocktranslate %}
+  </span>
+</div>
+{% if may_bulk_promote %}<div class="mt-3 flex justify-end"><a href="{% url 'student-bulk-promote' %}" class="rounded-lg border border-gray-900 px-4 py-2 text-sm font-medium">{% translate "Bulk promotion" %}</a></div>{% endif %}
+
+{% if segments %}
+<section class="mt-4" aria-labelledby="saved-segments-heading">
+  <h2 id="saved-segments-heading" class="text-sm font-medium text-gray-700">{% translate "My saved segments" %}</h2>
+  <div class="mt-2 flex flex-wrap gap-2">
+    {% for segment in segments %}
+      <div class="inline-flex overflow-hidden rounded-lg border {% if selected_segment.pk == segment.pk %}border-gray-900 bg-gray-900 text-white{% else %}border-gray-300 bg-white{% endif %}">
+        <a href="?segment={{ segment.pk }}" class="px-3 py-2 text-sm font-medium">{{ segment.name }}</a>
+        <form method="post" action="{% url 'student-segment-delete' segment.pk %}" class="border-l border-current/20">
+          {% csrf_token %}
+          <button type="submit" class="px-3 py-2 text-sm" aria-label="{% blocktranslate with name=segment.name %}Delete {{ name }}{% endblocktranslate %}">×</button>
+        </form>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if not waiver_policy %}
+<div role="alert" class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+  {% translate "No active waiver policy is configured. Students are treated as unsigned until an organisation administrator publishes one." %}
+</div>
+{% endif %}
+
+<details class="mt-5 rounded-xl border border-gray-200 bg-white" {% if request.GET %}open{% endif %}>
+  <summary class="cursor-pointer px-4 py-3 font-medium">{% translate "Filter students" %}</summary>
+  <form method="get" class="border-t border-gray-100 p-4">
+    {% if form.non_field_errors %}
+      <div role="alert" class="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {% for field in form %}
+        {% if field.name == "unsigned_waiver" or field.name == "expired_licence" %}
+          <label class="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-3 sm:self-end">
+            {{ field }} <span class="text-sm">{{ field.label }}</span>
+          </label>
+        {% else %}
+          <div>
+            <label for="{{ field.id_for_label }}" class="block text-sm font-medium">{{ field.label }}</label>
+            {{ field }}
+            {% for error in field.errors %}<p class="mt-1 text-sm text-red-700">{{ error }}</p>{% endfor %}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <div class="mt-4 flex flex-col gap-2 sm:flex-row">
+      <button type="submit" class="rounded-lg bg-gray-900 px-4 py-3 font-medium text-white">{% translate "Apply filters" %}</button>
+      <a href="{% url 'student-list' %}" class="rounded-lg border border-gray-300 px-4 py-3 text-center font-medium">{% translate "Clear" %}</a>
+    </div>
+  </form>
+</details>
+
+{% if can_save_segment %}
+<form method="post" action="{% url 'student-segment-create' %}" class="mt-3 flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-3 sm:flex-row sm:items-end">
+  {% csrf_token %}
+  {{ segment_form.filter_query }}
+  <div class="flex-1">
+    <label for="{{ segment_form.name.id_for_label }}" class="block text-sm font-medium">{{ segment_form.name.label }}</label>
+    {{ segment_form.name }}
+  </div>
+  <button type="submit" class="rounded-lg border border-gray-900 px-4 py-2 font-medium">{% translate "Save current filters" %}</button>
+</form>
+{% endif %}
+
+{% if may_bulk_status %}<form method="post" action="{% url 'student-bulk-status' %}" class="mt-5">{% csrf_token %}{% endif %}
+<div class="{% if may_bulk_status %}space-y-3{% else %}mt-5 space-y-3{% endif %}">
+  {% for profile in page.object_list %}
+    <article class="rounded-xl border border-gray-200 bg-white p-4">
+      {% if profile.may_change_status %}<label class="mb-3 flex min-h-11 items-center gap-3 text-sm font-medium"><input type="checkbox" name="student_ids" value="{{ profile.pk }}" class="h-5 w-5 rounded border-gray-300 text-gray-900"> {% translate "Select for bulk status change" %}</label>{% endif %}
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 class="text-lg font-medium"><a class="hover:underline" href="{% url 'student-detail' profile.person_id %}">{{ profile.person.full_name }}</a></h2>
+          <p class="mt-1 text-sm text-gray-600">
+            {% if profile.home_dojo %}{{ profile.home_dojo.name }} · {% endif %}{{ profile.get_status_display }}
+            {% if show_private_person_fields %}{% with age=profile.person.age %}{% if age != None %} · {% blocktranslate %}Age {{ age }}{% endblocktranslate %}{% endif %}{% endwith %}{% endif %}
+          </p>
+          <div class="mt-2 flex flex-wrap gap-2 text-xs">
+            {% for track in profile.person.active_style_tracks %}
+              <span class="rounded-full bg-gray-100 px-2.5 py-1">
+                {{ track.style.name }}: {% if track.current_rank %}{{ track.current_rank.name }}{% else %}{% translate "Ungraded" %}{% endif %}
+              </span>
+            {% empty %}
+              <span class="rounded-full bg-gray-100 px-2.5 py-1">{% translate "No active rank track" %}</span>
+            {% endfor %}
+            {% if profile.waiver_granted %}
+              <span class="rounded-full bg-green-50 px-2.5 py-1 text-green-800">{% translate "Waiver signed" %}</span>
+            {% else %}
+              <span class="rounded-full bg-amber-50 px-2.5 py-1 text-amber-900">{% translate "Waiver unsigned" %}</span>
+            {% endif %}
+            {% if profile.licence_expires_on and profile.licence_expires_on < today %}
+              <span class="rounded-full bg-red-50 px-2.5 py-1 text-red-800">{% translate "Licence expired" %}</span>
+            {% endif %}
+          </div>
+          <p class="mt-3 text-xs text-gray-500">
+            {% if profile.last_attendance_at %}
+              {% blocktranslate with at=profile.last_attendance_at %}Last attended {{ at }}{% endblocktranslate %}
+            {% else %}
+              {% translate "No recorded attendance" %}
+            {% endif %}
+          </p>
+        </div>
+        <div class="flex flex-col gap-2 sm:min-w-40">
+          {% if profile.may_capture_waiver %}
+            <a href="{% url 'waiver-consent' profile.person_id %}" class="rounded-lg border border-gray-300 px-3 py-2 text-center text-sm font-medium">{% translate "Waiver" %}</a>
+          {% endif %}
+          {% if profile.may_capture_medical %}
+            <a href="{% url 'medical-consent' profile.person_id %}" class="rounded-lg border border-gray-300 px-3 py-2 text-center text-sm font-medium">{% translate "Medical consent" %}</a>
+          {% endif %}
+        </div>
+      </div>
+    </article>
+  {% empty %}
+    <div class="rounded-xl border border-dashed border-gray-300 px-5 py-10 text-center text-gray-600">
+      {% translate "No students match these filters." %}
+    </div>
+  {% endfor %}
+</div>
+{% if may_bulk_status %}
+  <div class="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-2">
+    <div><label for="{{ bulk_status_form.action.id_for_label }}" class="block text-sm font-medium">{{ bulk_status_form.action.label }}</label>{{ bulk_status_form.action }}</div>
+    <div><label for="{{ bulk_status_form.hold_reason.id_for_label }}" class="block text-sm font-medium">{{ bulk_status_form.hold_reason.label }}</label>{{ bulk_status_form.hold_reason }}<p class="mt-1 text-xs text-gray-500">{{ bulk_status_form.hold_reason.help_text }}</p></div>
+    <button type="submit" class="rounded-lg bg-gray-900 px-4 py-3 font-medium text-white sm:col-span-2">{% translate "Apply to selected students" %}</button>
+  </div>
+</form>
+{% endif %}
+
+{% if page.paginator.num_pages > 1 %}
+<nav aria-label="{% translate 'Student list pages' %}" class="mt-5 flex items-center justify-between gap-3 text-sm">
+  {% if page.has_previous %}
+    <a class="rounded-lg border border-gray-300 px-4 py-2" href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page.previous_page_number }}">{% translate "Previous" %}</a>
+  {% else %}<span></span>{% endif %}
+  <span>{% blocktranslate with current=page.number total=page.paginator.num_pages %}Page {{ current }} of {{ total }}{% endblocktranslate %}</span>
+  {% if page.has_next %}
+    <a class="rounded-lg border border-gray-300 px-4 py-2" href="?{% if query_string %}{{ query_string }}&amp;{% endif %}page={{ page.next_page_number }}">{% translate "Next" %}</a>
+  {% else %}<span></span>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}
