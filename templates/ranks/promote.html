@@ -1,0 +1,30 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Record promotion" %} — {{ profile.person.full_name }}{% endblock %}
+
+{% block content %}
+<a href="{% url 'student-detail' profile.person_id %}?tab=rank" class="text-sm text-gray-500">&larr; {% translate "Rank history" %}</a>
+<h1 class="mt-2 text-2xl font-semibold">{% translate "Record promotion" %}</h1>
+<p class="mt-1 text-gray-600">{{ profile.person.full_name }} · {{ track.style.name }} · {{ track.ladder.name }}</p>
+
+<div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+  {% if track.current_rank %}{% blocktranslate with rank=track.current_rank.name %}Current rank: {{ rank }}{% endblocktranslate %}{% else %}{% translate "This student is currently ungraded on this track." %}{% endif %}
+</div>
+
+<form method="post" class="mt-5 rounded-xl border border-gray-200 bg-white p-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div role="alert" class="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800">{{ form.non_field_errors }}</div>{% endif %}
+  <div class="space-y-4">
+    {% for field in form %}
+      <div>
+        <label for="{{ field.id_for_label }}" class="block text-sm font-medium">{{ field.label }}</label>
+        {{ field }}
+        {% for error in field.errors %}<p class="mt-1 text-sm text-red-700">{{ error }}</p>{% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+  <p class="mt-4 text-xs text-gray-500">{% translate "This creates an immutable rank-history record. Corrections are made by revocation, never deletion." %}</p>
+  <button type="submit" class="mt-5 rounded-lg bg-gray-900 px-4 py-3 font-medium text-white">{% translate "Record promotion" %}</button>
+</form>
+{% endblock %}
