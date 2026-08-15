@@ -434,7 +434,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1101 passing, 46 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1125 passing, 47 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -656,6 +656,40 @@ OUTPUT
   the cross-tenant check that matters runs in `save()`. Same trap for reverse
   relations — `session.attendance_records` is scoped, so it cannot be read in a
   loop; gather the ids in one `for_actor` query instead.
+- **`1.4.8` is done, and it was not `[DS]`-sized.** Nothing recorded who taught a
+  class at all: plan §4.5 specifies `ClassTemplate.default_instructor_ids[]` and
+  `ClassSession.instructor_ids[]`, and neither existed. That silently blocked
+  `1.4.9` ("filtered by instructor" had nothing to filter on) and `1.9.3`
+  (auto-drafting a timesheet needs somebody to pay).
+  - `TemplateInstructor` is who *normally* teaches; `SessionInstructor` is who
+    taught **one** class. ⚠ Pay and any safeguarding question about who was in
+    the room read the second, never the first.
+  - Materialisation seeds new sessions from the template defaults and ⚠ **only
+    new ones** — re-seeding existing sessions would silently undo every
+    substitution ever recorded.
+  - A substitution is *recorded*, not overwritten: the stand-in is flagged and
+    points at the person covered for, because "Dara covered for Mei on the 14th"
+    is the fact a parent actually asks for. The template is untouched, so next
+    week reverts on its own with nobody having to remember.
+  - ⚠ A substitute may come from **another dojo in the same organisation** —
+    that is what a substitute usually is. Requiring an assignment at *this* dojo
+    would refuse the ordinary case.
+  - ⚠ Unlike moving a class, assignment **is** allowed on a past session. "Who
+    actually taught last Tuesday" is a correction of fact and pay depends on it;
+    refusing would leave the record permanently wrong. Audited instead.
+  - 17 tests, checked against three broken variants.
+- ⚠⚠ **Fourth seed gap, and this one had teeth.** `InstructorAssignment` (`1.3.5`,
+  ticked) had **zero rows in the entire demo** — the model existed and nothing
+  ever wrote to it. So the "is this person actually an instructor?" check refused
+  *every* substitution in the demo. The seed now creates one per instructor and
+  head instructor. **Four features in a row have been found dark this way: ranks,
+  notes, safeguarding, and now teaching. Assume a ticked feature is unexercised
+  by the seed until checked.**
+- ⚠ **Django multi-join gotcha, cost me a false failure.** `.filter(rel__x=...)`
+  combined with `.exclude(rel__y=...)` on the *same* reverse relation turns the
+  join into a LEFT JOIN, so rows with **no** related records satisfy the
+  `__isnull=True` filter and slip through. Walk the related model directly
+  instead of excluding across a reverse relation.
 - **Best next tasks in Phase 1**, in dependency order:
   - `1.4.5` / `1.4.8` / `1.4.9` scheduling gaps, then the `1.7.x` kiosk (12
     tasks, none started) and `1.10.x` import (7 tasks, none started).
@@ -956,7 +990,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.4.5` ⚠ Template edit semantics: "this occurrence" vs "this and future" `§4.5` *(service; no UI until `1.4.9`)*
 - [x] `1.4.6` `[DS]` Ad-hoc one-off sessions (no template)
 - [x] `1.4.7` `[DS]` Cancel session + reason + notification hook
-- [ ] `1.4.8` `[DS]` Substitute instructor assignment
+- [x] `1.4.8` `[DS]` Substitute instructor assignment *(service; no UI until `1.4.9`)*
 - [ ] `1.4.9` `[DS]` Calendar views: week/month, per dojo, filtered by instructor
 - [ ] `1.4.10` `ClassTemplate.counts_toward[]` tags — which class types count for which eligibility rules `§2 item 23`
 

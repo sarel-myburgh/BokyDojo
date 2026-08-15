@@ -46,7 +46,13 @@ from apps.identity.models import (
 from apps.ranks.models import Rank, RankAward, RankLadder, StudentStyleTrack, Style
 from apps.ranks.seeding import create_shotokan_ladders
 from apps.scheduling.materialise import materialise_sessions
-from apps.scheduling.models import ClassSession, ClassTemplate, ClosurePeriod
+from apps.scheduling.models import (
+    ClassSession,
+    ClassTemplate,
+    ClosurePeriod,
+    SessionInstructor,
+    TemplateInstructor,
+)
 
 #: How far back the demo generates classes and attendance. Long enough for the
 #: reports and the drop-off list to be interesting, short enough to seed in
@@ -354,6 +360,8 @@ class Command(BaseCommand):
         """
         ordered_models = [
             Note,
+            SessionInstructor,
+            TemplateInstructor,
             AttendanceRecord,
             ClassSession,
             ClassTemplate,
@@ -512,6 +520,17 @@ class Command(BaseCommand):
                     dojo=dojo,
                     can_view_financials=True,
                 )
+                # ⚠ RoleAssignment says what they may *do*; InstructorAssignment
+                # says they teach at this dojo (TODO 1.3.5). Both are needed —
+                # substitute cover (1.4.8) checks the second, and the seed
+                # created none at all until this was added, so every substitution
+                # in the demo was refused.
+                InstructorAssignment.objects.create(
+                    dojo=dojo,
+                    person=instructor_person,
+                    is_head_instructor=True,
+                    started_on=date.today() - timedelta(days=HISTORY_DAYS),
+                )
 
                 # Create 2 regular instructors per dojo
                 for _ in range(2):
@@ -533,6 +552,11 @@ class Command(BaseCommand):
                         role=Role.INSTRUCTOR,
                         scope_type=ScopeType.DOJO,
                         dojo=dojo,
+                    )
+                    InstructorAssignment.objects.create(
+                        dojo=dojo,
+                        person=inst_person,
+                        started_on=date.today() - timedelta(days=HISTORY_DAYS),
                     )
 
                 # One safeguarding officer per dojo — TODO 1.8.4, SEC §4.
@@ -866,10 +890,21 @@ class Command(BaseCommand):
             ("Adults", "FREQ=WEEKLY;BYDAY=MO,WE,FR", time(18, 30), 90),
             ("Saturday all grades", "FREQ=WEEKLY;BYDAY=SA", time(9, 0), 90),
         ]
-        for org_dojos in dojos.values():
+        assigned = 0
+        for org, org_dojos in dojos.items():
             for dojo in org_dojos:
+                # ⚠ Who teaches has to be seeded too — TODO 1.4.8. Without it
+                # every session materialises unstaffed, "filtered by instructor"
+                # in 1.4.9 has nothing to filter on, and 1.9.3 has nobody to pay.
+                teachers = list(
+                    Person.objects.filter(
+                        organization=org,
+                        role_assignments__dojo=dojo,
+                        role_assignments__role__in=[Role.INSTRUCTOR, Role.DOJO_ADMIN],
+                    ).distinct()
+                )
                 for name, rrule, start, duration in timetable:
-                    ClassTemplate.objects.get_or_create(
+                    template, created = ClassTemplate.objects.get_or_create(
                         dojo=dojo,
                         name=name,
                         defaults={
@@ -882,6 +917,12 @@ class Command(BaseCommand):
                             "active_from": date.today() - timedelta(days=HISTORY_DAYS),
                         },
                     )
+                    if created and teachers:
+                        TemplateInstructor.objects.create(
+                            template=template, person=random.choice(teachers)
+                        )
+                        assigned += 1
+        self.stdout.write(f"  Assigned a default instructor to {assigned} template(s).")
 
     def _materialise(self) -> list:
         """Generate sessions across the demo window — TODO 1.4.2.

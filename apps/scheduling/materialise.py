@@ -36,7 +36,13 @@ from apps.core.scoping import Actor
 from apps.core.timezones import dojo_zone
 from apps.identity.models import Dojo
 
-from .models import ClassSession, ClassTemplate, ClosurePeriod
+from .models import (
+    ClassSession,
+    ClassTemplate,
+    ClosurePeriod,
+    SessionInstructor,
+    TemplateInstructor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +201,32 @@ def materialise_template(
         # ScopedQuerySet.bulk_create.
         ClassSession.objects.bulk_create(pending)
         result.created += len(pending)
+        _seed_instructors(template, pending)
     return result
+
+
+def _seed_instructors(template: ClassTemplate, sessions: list) -> None:
+    """Copy the template's default instructors onto freshly created sessions.
+
+    ⚠ Only onto *new* rows. The defaults say who normally teaches; each session
+    then owns its own answer, because a substitution (TODO 1.4.8) or a correction
+    applies to one class and must survive the next generator run. Re-seeding
+    existing sessions here would quietly undo every substitution ever recorded.
+    """
+    defaults = list(
+        TemplateInstructor.objects.for_organization(template.dojo.organization_id)
+        .filter(template=template)
+        .values_list("person_id", flat=True)
+    )
+    if not defaults:
+        return
+    SessionInstructor.objects.bulk_create(
+        [
+            SessionInstructor(session=session, person_id=person_id)
+            for session in sessions
+            for person_id in defaults
+        ]
+    )
 
 
 def materialise_sessions(

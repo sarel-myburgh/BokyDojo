@@ -386,3 +386,113 @@ class ClassSession(TenantScopedModel):
         if self.ends_at and self.starts_at:
             return int((self.ends_at - self.starts_at).total_seconds() / 60)
         return None
+
+
+class TemplateInstructor(TenantScopedModel):
+    """Who normally teaches a recurring class — plan §4.5 `default_instructor_ids[]`.
+
+    A default, not a fact: it seeds each materialised session and is then free to
+    diverge. Changing who *usually* teaches Tuesday must not rewrite who actually
+    taught last Tuesday, so nothing here reaches backwards into existing sessions.
+    """
+
+    tenant_org_path = "template__dojo__organization_id"
+    tenant_dojo_path = "template__dojo_id"
+    same_organization_fields = ("template", "person")
+
+    template = models.ForeignKey(
+        ClassTemplate,
+        on_delete=models.CASCADE,
+        related_name="default_instructors",
+    )
+    person = models.ForeignKey(
+        "identity.Person",
+        on_delete=models.PROTECT,
+        related_name="default_class_templates",
+    )
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("template instructor")
+        verbose_name_plural = _("template instructors")
+        ordering = ("template", "person")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["template", "person"],
+                name="unique_instructor_per_template",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.person} teaches {self.template}"
+
+    @staticmethod
+    def _organization_of(obj):
+        if obj is not None and obj.__class__.__name__ == "ClassTemplate":
+            return obj.dojo.organization_id
+        return TenantScopedModel._organization_of(obj)
+
+
+class SessionInstructor(TenantScopedModel):
+    """Who taught one class — plan §4.5 `instructor_ids[]`, TODO 1.4.8.
+
+    ⚠ This is the answer to "who actually took that class", which is a different
+    question from "who is timetabled to". Pay (`1.9.3`) and any safeguarding
+    question about who was in the room both read *this*, never the template.
+
+    A substitution is recorded rather than overwritten: the stand-in is flagged
+    and points at the person they covered for. Replacing the row instead would
+    lose the fact that a substitution happened at all, which is exactly what a
+    parent asking "who was teaching on the 14th" needs.
+    """
+
+    tenant_org_path = "session__dojo__organization_id"
+    tenant_dojo_path = "session__dojo_id"
+    same_organization_fields = ("session", "person", "replaces")
+
+    session = models.ForeignKey(
+        ClassSession,
+        on_delete=models.CASCADE,
+        related_name="session_instructors",
+    )
+    person = models.ForeignKey(
+        "identity.Person",
+        on_delete=models.PROTECT,
+        related_name="taught_sessions",
+    )
+    #: Set when this person is standing in for somebody — TODO 1.4.8.
+    is_substitute = models.BooleanField(_("substitute"), default=False)
+    #: Who they are covering for. Kept even after the fact, so the schedule can
+    #: still explain itself months later.
+    replaces = models.ForeignKey(
+        "identity.Person",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="covered_by",
+    )
+
+    objects = ScopedManager()
+
+    class Meta:
+        verbose_name = _("session instructor")
+        verbose_name_plural = _("session instructors")
+        ordering = ("session", "person")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "person"],
+                name="unique_instructor_per_session",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        if self.is_substitute and self.replaces_id:
+            return f"{self.person} covering {self.replaces} @ {self.session}"
+        return f"{self.person} @ {self.session}"
+
+    @staticmethod
+    def _organization_of(obj):
+        if obj is not None and obj.__class__.__name__ == "ClassSession":
+            return obj.dojo.organization_id
+        return TenantScopedModel._organization_of(obj)
