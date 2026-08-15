@@ -6,16 +6,17 @@
  * work for Khmer, Chinese, and Latin text.
  *
  * Test in tables and buttons early — Khmer breaks naive CSS there first.
+ *
+ * ⚠ NO KHMER WEBFONT IS BUNDLED, despite what 0.4.4 claims. An earlier version
+ * of this file said the face was "loaded via Google Fonts in base.html"; it was
+ * not, and it could not be — the CSP sets `font-src 'self'`, so an external
+ * font host is blocked by design. The font stack in tailwind.config.cjs
+ * therefore relies on faces the host OS provides (Android and iOS ship Noto
+ * Sans Khmer; Windows ships Leelawadee UI). That covers the phones instructors
+ * actually use, but it is not the same promise as bundling, and Khmer rendering
+ * on an arbitrary desktop is unverified. Bundling a subset woff2 into
+ * static/fonts/ and declaring @font-face here is the real fix.
  */
-
-/* -- Font stack ----------------------------------------------------------------
- * Khmer: Noto Sans Khmer (loaded via Google Fonts in base.html)
- * Latin / CJK: Inter + system fallbacks
- */
-:root {
-    --font-base: 'Inter', 'Noto Sans Khmer', system-ui, -apple-system, sans-serif;
-    --font-khmer: 'Noto Sans Khmer', 'Inter', system-ui, sans-serif;
-}
 
 /* -- Khmer line-breaking -------------------------------------------------------
  * word-break: break-word is the safest for Khmer: it allows breaks at any
@@ -34,7 +35,6 @@
     word-break: break-word;
     overflow-wrap: break-word;
     line-break: strict;
-    font-family: var(--font-khmer);
 }
 
 /* -- General line-breaking for all content ------------------------------------ */
@@ -45,18 +45,29 @@ body {
 
 /* -- Table cells ----------------------------------------------------------------
  * Tables are the first place Khmer breaks: long Khmer strings in a cell
- * overflow or push the table wider than the viewport. This forces cells to
- * wrap and constrains max-width.
+ * overflow or push the table wider than the viewport.
+ *
+ * ⚠ Opt-in via .table-wrap, not applied to every table on the site. The
+ * previous version set `table-layout: fixed` and `td, th { max-width: 0 }`
+ * globally. `max-width: 0` on every cell forces the fixed-layout algorithm to
+ * ignore content width entirely, so an eight-column report divides the
+ * viewport into eight equal slivers regardless of what is in them — a date
+ * column and a dojo name get the same width. It made wide tables look broken
+ * in exactly the way a missing stylesheet does.
  */
-td, th {
-    overflow-wrap: break-word;
-    word-break: break-word;
-    max-width: 0; /* forces table-layout: fixed behavior even without it */
+.table-wrap {
+    width: 100%;
+    overflow-x: auto;
 }
 
-table {
-    table-layout: fixed;
+.table-wrap table {
     width: 100%;
+}
+
+.table-wrap td,
+.table-wrap th {
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 /* -- Buttons -------------------------------------------------------------------
@@ -70,7 +81,7 @@ table {
 }
 
 /* -- Truncation ----------------------------------------------------------------
- * When truncation is used (ellipsipsis), Khmer text needs a different
+ * When truncation is used (ellipsis), Khmer text needs a different
  * strategy: truncate at the character level rather than the word level.
  */
 .truncate-khmer {
@@ -87,4 +98,8 @@ table {
         padding-left: 0.75rem;
         padding-right: 0.75rem;
     }
+}
+
+[x-cloak] {
+    display: none !important;
 }

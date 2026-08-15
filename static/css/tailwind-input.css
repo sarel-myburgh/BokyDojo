@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Signature layer — the small number of things that make this read as a dojo
+ * rather than as a generic admin panel. Everything else is carried by the
+ * retheme in tailwind.config.cjs.
+ *
+ * The vocabulary is deliberately tiny: an obi stripe, an engraved label, a
+ * wordmark, a seal. Four ideas, reused. Karate does not decorate.
+ */
+
+@layer components {
+  /* -- The obi -----------------------------------------------------------------
+   * A belt: black, with the crimson tab at one end. Used as the structural
+   * edge under the app header and the login mark. This is the one ornament in
+   * the design, and it earns its place by also being a real boundary.
+   */
+  .obi {
+    @apply flex h-1 w-full overflow-hidden;
+  }
+  .obi::before {
+    @apply block w-10 shrink-0 bg-crimson-600 content-[''];
+  }
+  .obi::after {
+    @apply block flex-1 bg-gray-900 content-[''];
+  }
+
+  /* -- Engraved label ----------------------------------------------------------
+   * Small, uppercase, widely tracked — the cadence of a dojo notice board or a
+   * grading certificate. Carries hierarchy without another font size.
+   */
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-widest text-gray-500;
+  }
+
+  /* -- Wordmark ----------------------------------------------------------------
+   * Weight contrast instead of two typefaces: DOJO in ink, MASTER in outline.
+   * Wide tracking reads as composure.
+   */
+  .wordmark {
+    @apply inline-flex items-baseline gap-1 whitespace-nowrap tracking-[0.18em];
+  }
+  .wordmark > .wordmark-strong {
+    @apply font-bold text-gray-900;
+  }
+  .wordmark > .wordmark-light {
+    @apply font-normal text-gray-500;
+  }
+
+  /* -- Seal --------------------------------------------------------------------
+   * A single crimson square. Marks the one thing on a screen that matters most
+   * — a pinned alert, the active nav item. Never more than one per view.
+   */
+  .seal {
+    @apply inline-block h-2 w-2 shrink-0 bg-crimson-600;
+  }
+
+  /* -- Panel -------------------------------------------------------------------
+   * A hairline-bordered surface. Flat by default; the border does the work.
+   */
+  .panel {
+    @apply border border-gray-200 bg-white;
+  }
+}
+
+@layer base {
+  /* Sharper text rendering; the warm palette is low-contrast enough to need it. */
+  body {
+    @apply antialiased;
+    font-feature-settings: "kern" 1;
+  }
+
+  /*
+   * A visible, high-contrast focus ring everywhere. The default Tailwind reset
+   * strips outlines and several templates then never restore them, which is a
+   * keyboard-accessibility hole rather than a style choice.
+   */
+  :focus-visible {
+    outline: 2px solid theme("colors.crimson.600");
+    outline-offset: 2px;
+  }
+
+  /* Numbers in a roster or a report are compared down a column, not read as prose. */
+  th,
+  td {
+    @apply tabular-nums;
+  }
+}

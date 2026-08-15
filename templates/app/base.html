@@ -4,30 +4,40 @@
 {% comment %}
   Signed-in shell. Mobile-first per the conventions: one column, big targets,
   nav that does not eat the screen on a phone.
+
+  The header is a belt: ink bar, crimson tab, hairline below. It is the only
+  ornament in the shell and it doubles as the structural edge.
 {% endcomment %}
 
 {% block body %}
 <div class="min-h-screen flex flex-col">
-  <header class="sticky top-0 z-10 bg-white border-b border-gray-200">
-    <div class="mx-auto max-w-3xl px-4 py-3 flex items-center gap-3">
-      <a href="{% url 'today' %}" class="font-semibold">DojoMaster</a>
-      <nav class="flex items-center gap-4 text-sm text-gray-600 ml-2">
-        <a href="{% url 'today' %}" class="hover:text-gray-900">{% translate "Today" %}</a>
-        <a href="{% url 'attendance-summary' %}" class="hover:text-gray-900">{% translate "Reports" %}</a>
+  <header class="sticky top-0 z-10 bg-white">
+    <div class="mx-auto max-w-3xl px-4 pt-3 pb-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <a href="{% url 'today' %}" class="wordmark text-sm">
+        <span class="wordmark-strong">DOJO</span><span class="wordmark-light">MASTER</span>
+      </a>
+      <nav class="order-3 flex w-full items-center gap-5 overflow-x-auto text-sm sm:order-none sm:w-auto">
+        {# tracking + weight carry the active state; colour alone is not enough. #}
+        <a href="{% url 'today' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Today" %}</a>
+        <a href="{% url 'student-list' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Students" %}</a>
+        <a href="{% url 'attendance-summary' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Reports" %}</a>
+        <a href="{% url 'mfa-setup' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Security" %}</a>
       </nav>
       <form method="post" action="{% url 'logout' %}" class="ml-auto">
         {% csrf_token %}
-        <button type="submit" class="text-sm text-gray-500 hover:text-gray-900">{% translate "Sign out" %}</button>
+        <button type="submit" class="eyebrow hover:text-gray-900">{% translate "Sign out" %}</button>
       </form>
     </div>
+    <div class="obi" aria-hidden="true"></div>
   </header>
 
-  <main class="mx-auto w-full max-w-3xl px-4 py-5 flex-1">
+  <main class="mx-auto w-full max-w-3xl px-4 py-6 flex-1">
     {% if messages %}
       {% for message in messages %}
-        <div class="mb-4 rounded-lg border px-4 py-3 text-sm
-                    {% if message.tags == 'error' %}bg-red-50 border-red-200 text-red-800
-                    {% else %}bg-green-50 border-green-200 text-green-800{% endif %}">
+        {# Border-left, not a filled pill: a notice, not a decoration. #}
+        <div class="mb-5 border-l-2 px-4 py-3 text-sm
+                    {% if message.tags == 'error' %}border-red-700 bg-red-50 text-red-900
+                    {% else %}border-green-700 bg-green-50 text-green-900{% endif %}">
           {{ message }}
         </div>
       {% endfor %}
