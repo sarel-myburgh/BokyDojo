@@ -113,6 +113,12 @@ def enrol_student(
     audit.record_change("create", enrollment, actor=actor)
     if is_primary:
         _sync_home_dojo(student, dojo, actor)
+
+    # A dojo teaches particular arts, so enrolling here *is* taking them up.
+    # Imported late to keep identity from importing ranks at module load.
+    from apps.ranks.enrolment_tracks import sync_tracks_for_enrolment
+
+    sync_tracks_for_enrolment(enrollment, actor=actor)
     return enrollment
 
 

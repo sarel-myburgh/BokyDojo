@@ -29,7 +29,23 @@ TOTP_WINDOW = 1
 
 
 def user_requires_mfa(user) -> bool:
-    """Whether active assignments make MFA mandatory for this user."""
+    """Whether active assignments make MFA mandatory for this user.
+
+    ⚠ The one predicate both the login view and the enforcement middleware ask.
+    It has to carry the ``MFA_ENFORCEMENT_ENABLED`` switch itself: the middleware
+    checked the setting and the login view did not, so turning enforcement off
+    for local testing left privileged accounts stuck at the enrolment screen
+    anyway — two enforcement points, one of them deaf to the switch.
+
+    ⚠ Turning enforcement off does **not** bypass MFA for somebody who has
+    already enrolled. The login view separately challenges any confirmed
+    credential, so a user with a working second factor keeps using it; this only
+    stops *demanding* one from a user who has none.
+    """
+    from django.conf import settings
+
+    if not getattr(settings, "MFA_ENFORCEMENT_ENABLED", True):
+        return False
     if not getattr(user, "is_authenticated", False) or not user.person_id:
         return False
     return (

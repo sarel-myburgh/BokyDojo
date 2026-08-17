@@ -91,6 +91,17 @@ class Dojo(TenantScopedModel):
 
     timezone = models.CharField(_("timezone"), max_length=64, default="Asia/Phnom_Penh")
     currency = models.CharField(_("currency"), max_length=3, default="USD")
+    #: What this dojo teaches. Enrolling a student here gives them a style track
+    #: per entry, so this is not decoration — it is what decides which arts a
+    #: member is recorded as training, and therefore which ranks they can hold.
+    #: ⚠ M2M, so ``same_organization_fields`` cannot police it; the services that
+    #: write it check every style belongs to this dojo's organisation.
+    styles = models.ManyToManyField(
+        "ranks.Style",
+        blank=True,
+        related_name="dojos",
+        verbose_name=_("styles taught"),
+    )
 
     contact_email = models.EmailField(_("contact email"), blank=True)
     contact_phone = models.CharField(_("contact phone"), max_length=40, blank=True)

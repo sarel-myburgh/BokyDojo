@@ -7,7 +7,7 @@ from django.views.generic import RedirectView, TemplateView
 
 from apps.attendance import kiosk_views
 from apps.attendance import views as attendance_views
-from apps.identity import consent_views, guardian_views, photo_views, student_views
+from apps.identity import consent_views, guardian_views, org_views, photo_views, student_views
 from apps.identity import password_reset as password_reset_views
 from apps.identity import setup as setup_views
 from apps.identity import views as identity_views
@@ -68,6 +68,17 @@ urlpatterns = [
         name="mfa-recovery-codes",
     ),
     path("logout/", identity_views.logout_view, name="logout"),
+    # Organisation settings and the "add a thing" screens
+    path("settings/", org_views.organization_settings_view, name="org-settings"),
+    path(
+        "settings/styles/<uuid:style_id>/ranked/",
+        org_views.style_toggle_ranked_view,
+        name="style-toggle-ranked",
+    ),
+    path("settings/dojos/new/", org_views.dojo_create_view, name="dojo-create"),
+    path("settings/dojos/<uuid:dojo_id>/", org_views.dojo_edit_view, name="dojo-edit"),
+    path("settings/instructors/new/", org_views.instructor_create_view, name="instructor-create"),
+    path("students/new/", org_views.student_create_view, name="student-create"),
     path("students/", student_views.student_list_view, name="student-list"),
     path(
         "students/segments/save/",

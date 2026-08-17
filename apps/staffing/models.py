@@ -32,6 +32,17 @@ class InstructorProfile(TenantScopedModel):
         related_name="instructor_profile",
     )
     bio = models.TextField(_("bio"), blank=True)
+    #: Which arts this person teaches. ⚠ Descriptive for now — nothing refuses a
+    #: grading or a class assignment on the strength of it. The control that
+    #: *does* bite is ``max_grading_rank`` below. If style should ever constrain
+    #: who may teach or grade what, this is the field it would read, and that is
+    #: a deliberate decision rather than something to slide in.
+    styles = models.ManyToManyField(
+        "ranks.Style",
+        blank=True,
+        related_name="instructors",
+        verbose_name=_("styles taught"),
+    )
     pay_type = models.CharField(
         _("pay type"),
         max_length=16,

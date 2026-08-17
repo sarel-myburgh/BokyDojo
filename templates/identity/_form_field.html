@@ -1,0 +1,7 @@
+{% comment %}One labelled field with its errors and help text.{% endcomment %}
+<div class="mb-4">
+  <label for="{{ field.id_for_label }}" class="eyebrow mb-1 block">{{ field.label }}</label>
+  {{ field }}
+  {% if field.help_text %}<p class="mt-1 text-xs text-gray-500">{{ field.help_text }}</p>{% endif %}
+  {% if field.errors %}<p class="mt-1 text-xs text-red-700">{{ field.errors|join:" " }}</p>{% endif %}
+</div>

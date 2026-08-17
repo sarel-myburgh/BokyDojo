@@ -22,10 +22,16 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
 # TODO 0.1.4 / SEC 2.4 — refuse to boot on an unsafe configuration.
+# Explicit rather than inherited, and read from the environment so that an
+# attempt to switch it off is a *loud* boot failure from the guard below rather
+# than a silent inheritance question.
+MFA_ENFORCEMENT_ENABLED = env_bool("DJANGO_MFA_ENFORCEMENT", True)
+
 assert_safe_production_config(
     secret_key=SECRET_KEY,
     debug=DEBUG,
     allowed_hosts=ALLOWED_HOSTS,
     field_encryption_keys=env("DJANGO_FIELD_ENCRYPTION_KEYS", ""),
     shared_cache_url=env("REDIS_URL", ""),
+    mfa_enforced=MFA_ENFORCEMENT_ENABLED,
 )

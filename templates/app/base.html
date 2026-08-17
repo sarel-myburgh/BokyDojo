@@ -24,6 +24,7 @@
         <a href="{% url 'import-wizard' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Import" %}</a>
         <a href="{% url 'timesheet' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Timesheet" %}</a>
         <a href="{% url 'attendance-summary' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Reports" %}</a>
+        <a href="{% url 'org-settings' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Settings" %}</a>
         <a href="{% url 'mfa-setup' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Security" %}</a>
       </nav>
       <form method="post" action="{% url 'logout' %}" class="ml-auto">

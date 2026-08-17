@@ -57,3 +57,31 @@ def test_rejects_empty_allowed_hosts():
 def test_rejects_wildcard_allowed_hosts():
     with pytest.raises(UnsafeConfiguration, match=r"\*"):
         assert_safe_production_config(secret_key=GOOD_KEY, debug=False, allowed_hosts=["*"])
+
+
+def test_production_refuses_to_start_with_mfa_enforcement_off():
+    """⚠ dev.py turns enforcement off so a demo login needs no authenticator app.
+
+    That switch must never reach a real deployment: without it every privileged
+    account is one password away from the medical and safeguarding data, which is
+    exactly what 0.6.2 exists to prevent. The guard is the thing standing between
+    "convenient for testing" and "shipped".
+    """
+    with pytest.raises(UnsafeConfiguration) as excinfo:
+        assert_safe_production_config(
+            secret_key="x" * 60,
+            debug=False,
+            allowed_hosts=["dojo.example.com"],
+            mfa_enforced=False,
+        )
+
+    assert "MFA_ENFORCEMENT_ENABLED" in str(excinfo.value)
+
+
+def test_production_is_happy_when_mfa_is_enforced():
+    assert_safe_production_config(
+        secret_key="x" * 60,
+        debug=False,
+        allowed_hosts=["dojo.example.com"],
+        mfa_enforced=True,
+    )

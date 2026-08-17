@@ -311,6 +311,9 @@ class Command(BaseCommand):
             self.stdout.write("Seeding dojos...")
             dojos = self._create_dojos(orgs)
 
+            self.stdout.write("Tagging dojos with the styles they teach...")
+            self._assign_dojo_styles(dojos)
+
             self.stdout.write("Seeding people and roles...")
             self._create_people(dojos)
 
@@ -1148,6 +1151,34 @@ class Command(BaseCommand):
                     )
                     made += 1
         self.stdout.write(f"  {made} demo student photo(s) with recorded consent.")
+
+    def _assign_dojo_styles(self, dojos: dict) -> None:
+        """What each dojo teaches — plan §4.4.
+
+        ⚠ Without this every dojo teaches nothing, enrolling a student creates no
+        style track, and the whole rank side of the demo is reachable only
+        because `_create_rank_tracks` writes tracks directly. That is the seed
+        papering over a gap rather than exercising the feature.
+
+        One unranked style per organisation on purpose: a demo where every art
+        grades cannot show what an unranked one looks like, and "unranked" is a
+        first-class choice rather than a missing ladder.
+        """
+        from apps.core.relations import set_scoped_m2m
+
+        for org, org_dojos in dojos.items():
+            styles = list(Style.objects.filter(organization=org))
+            conditioning, _created = Style.objects.get_or_create(
+                organization=org,
+                name="Conditioning",
+                defaults={"is_ranked": False},
+            )
+            for index, dojo in enumerate(org_dojos):
+                # Every dojo runs the graded art; the first also runs the
+                # unranked one, so both states are visible side by side.
+                taught = list(styles) + ([conditioning] if index == 0 else [])
+                set_scoped_m2m(dojo, "styles", taught, organization_id=org.pk)
+        self.stdout.write("  Dojo styles assigned (one unranked style per organisation).")
 
     def _create_instructor_pay(self, dojos: dict) -> None:
         """Pay details and drafted timesheets — TODO 1.9.1/1.9.2, read by 1.9.4.

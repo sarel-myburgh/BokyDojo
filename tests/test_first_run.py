@@ -53,7 +53,11 @@ def test_empty_installation_offers_setup(client):
     assert b"Create installation" in setup.content
 
 
-def test_setup_creates_org_dojo_owner_and_mandatory_admin_role(client):
+def test_setup_creates_org_dojo_owner_and_mandatory_admin_role(client, settings):
+    # ⚠ Asserts that the very first owner account is forced to enrol MFA, so it
+    # has to run with enforcement on. test.py turns it off for everybody else's
+    # convenience; without this the assertion silently tests nothing.
+    settings.MFA_ENFORCEMENT_ENABLED = True
     response = client.post(reverse("first-run"), payload())
 
     assert response.status_code == 302

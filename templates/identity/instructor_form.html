@@ -1,0 +1,50 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Add an instructor" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<p class="text-sm mb-2">
+  <a href="{% url 'org-settings' %}" class="eyebrow hover:text-gray-900">&larr; {% translate "Organisation settings" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Add an instructor" %}</h1>
+<p class="text-sm text-gray-500 mb-6">
+  {% translate "Creates their sign-in, their role, their assignment to a dojo and their pay details." %}
+</p>
+
+<form method="post" class="panel px-5 py-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  {% for field in form %}
+    {% if field.name != "styles" and field.name != "is_head_instructor" %}
+      {% include "identity/_form_field.html" with field=field %}
+    {% endif %}
+  {% endfor %}
+
+  <label class="mb-4 flex items-center gap-2 text-sm">
+    {{ form.is_head_instructor }} {% translate "Head instructor at this dojo" %}
+  </label>
+
+  <fieldset class="mb-4 border-t border-gray-200 pt-4">
+    <legend class="eyebrow mb-2">{% translate "Styles they teach" %}</legend>
+    <div class="space-y-2">
+      {% for choice in form.styles %}
+        <label class="flex items-center gap-2 text-sm">{{ choice.tag }} {{ choice.choice_label }}</label>
+      {% empty %}
+        <p class="text-sm text-gray-500">{% translate "No styles exist yet." %}</p>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <div class="mb-4 border-l-2 border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+    {% translate "They will not be able to sign in until they set a password. Send them the 'forgot password' link from the sign-in page." %}
+  </div>
+
+  <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+    {% translate "Add instructor" %}
+  </button>
+</form>
+{% endblock %}

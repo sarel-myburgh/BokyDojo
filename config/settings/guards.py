@@ -41,8 +41,20 @@ def assert_safe_production_config(
     allowed_hosts: list[str],
     field_encryption_keys: str | None = None,
     shared_cache_url: str | None = None,
+    mfa_enforced: bool | None = None,
 ) -> None:
     problems: list[str] = []
+
+    # ⚠ dev.py turns enforcement off so a demo login does not need an
+    # authenticator app. That switch must never reach a real deployment: without
+    # it, every privileged account is a password away from the medical and
+    # safeguarding data, which is precisely what 0.6.2 exists to prevent.
+    if mfa_enforced is not None and not mfa_enforced:
+        problems.append(
+            "MFA_ENFORCEMENT_ENABLED is off. Multi-factor authentication is "
+            "mandatory for privileged roles (SEC 2.4); this setting exists for "
+            "local testing only."
+        )
 
     # Rate limiting and lockout state live in the cache. With per-process
     # LocMemCache and multiple Gunicorn workers, failures split across workers

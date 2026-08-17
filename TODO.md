@@ -441,7 +441,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1329 passing, 52 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1358 passing, 55 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -1066,6 +1066,58 @@ OUTPUT
   and `Document` are now cleared, and consent joins rank awards as append-only
   data the disposable demo reset may hard-delete. **A clear list is only ever
   exercised against data a previous run left behind; run the seed twice.**
+- 🆕 **Styles, and the screens that let a dojo set itself up.** Asked for after
+  the first live look: there was no way to add a student, an instructor, a dojo
+  or a style — everything could be read and almost nothing created, which in
+  practice meant the Django admin or the seed.
+  - **`/settings/`** — organisation settings: styles (add, mark graded or
+    unranked) and dojos (list, add, edit). Plus `/students/new/` and
+    `/settings/instructors/new/`.
+  - **A style can be unranked.** Boxing, conditioning, open mat. ⚠ An unranked
+    style still gives a student a **track** — "Emma trains boxing here" is worth
+    knowing — it simply carries no ladder and no rank. `StudentStyleTrack.ladder`
+    is now nullable for exactly this.
+  - **Styles tag a dojo and an instructor.** Enrolling a student at a dojo gives
+    them a track per style that dojo teaches, through `enrol_student`, so it
+    happens on every path including the importer. Emma at Sen Sok (Goju Ryu) and
+    Urban Village (boxing) ends up with two tracks and two independent rank
+    histories, without anybody creating either.
+  - ⚠ **Instructor styles are descriptive only.** Nothing refuses a grading or a
+    class on the strength of them; `max_grading_rank` is still the control that
+    bites. If style should ever constrain who may teach or grade what, that is a
+    deliberate decision, not a slide.
+  - ⚠ **A ladder is chosen only when it can be known** — a style with one ladder,
+    or an age that decides between junior and adult (`ranks.junior_ladder_max_age`,
+    default 14). Otherwise the track is created with **no ladder**, because
+    putting an eight-year-old on the adult ladder is invisible until a grading.
+    A ladder is filled in later once a birthday is added — a gap closed, not a
+    decision reversed.
+  - ⚠ **Editing a dojo backfills existing members.** Adding boxing to a dojo
+    would otherwise apply only to people who join afterwards.
+  - ⚠ **A graded style with ladders cannot be marked unranked** — it would orphan
+    the ladders and leave awards pointing at a style that claims not to grade.
+  - ⚠⚠ **`instance.styles.set()` does not work on this codebase's models**, and
+    neither does `form.save_m2m()`, and neither does a `ModelForm` with an M2M in
+    `Meta.fields`. All three read the target through its `ScopedManager`, which
+    refuses without an actor — the same trap as `session.attendance_records`, now
+    hit three separate ways in one feature. `apps/core/relations.py` is the
+    sanctioned route: it goes through the auto-created *through* model, which has
+    no scoping of its own. ⚠ **It is also the only cross-organisation check there
+    is** — `same_organization_fields` understands foreign keys, and an M2M is
+    neither side's column, so nothing at the database level stops a row pairing
+    this org's dojo with another org's style.
+  - **Eighth seed gap**: every dojo taught nothing, so enrolling created no
+    tracks and the rank side of the demo only worked because the seed wrote
+    tracks directly — the seed papering over a hole rather than exercising the
+    feature. Dojos are now tagged, and each organisation gets one deliberately
+    unranked style so both states are visible side by side.
+  - 23 tests in `tests/test_org_settings.py`, built around the Emma example.
+- ⚠ **Known gap, and it is the obvious next thing: there is no UI for rank
+  ladders or ranks.** A newly added graded style has no belts, so
+  `is_ranked = True` is a promise the app cannot yet keep — the settings screen
+  says so in amber rather than hiding it. Only the seeded Shotokan ladders exist,
+  from `create_shotokan_ladders`. Adding a style called "Goju Ryu" today gives
+  you a track with no ladder and no way to grade anybody in it.
 - **Best next tasks in Phase 1**, in dependency order:
   - Then the `1.7.x` kiosk (12 tasks, none started). `D1` should be settled
     before starting it, since it is what decides whether the kiosk is wanted.

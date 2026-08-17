@@ -30,6 +30,16 @@ class Style(TenantScopedModel):
         related_name="styles",
     )
     name = models.CharField(_("name"), max_length=100)
+    #: ⚠ Not every martial art grades. Boxing, and plenty of clubs' fitness or
+    #: sparring classes, have no belts at all — and an unranked style must not be
+    #: forced to invent a ladder just to be recorded. An unranked style still
+    #: produces a StudentStyleTrack, because "Emma trains boxing here" is worth
+    #: knowing; that track simply carries no ladder and no rank.
+    is_ranked = models.BooleanField(
+        _("uses ranks"),
+        default=True,
+        help_text=_("Turn off for arts with no grading, such as boxing or fitness classes."),
+    )
 
     class Meta:
         verbose_name = _("style")
@@ -175,7 +185,18 @@ class StudentStyleTrack(TenantScopedModel):
         related_name="style_tracks",
     )
     style = models.ForeignKey(Style, on_delete=models.PROTECT, related_name="tracks")
-    ladder = models.ForeignKey(RankLadder, on_delete=models.PROTECT, related_name="tracks")
+    #: ⚠ Null for an unranked style, and for a ranked one whose ladder cannot yet
+    #: be chosen — a style with both an adult and a junior ladder and a student
+    #: whose date of birth is unknown. A track without a ladder records that the
+    #: person trains the art; it cannot be promoted until somebody says which
+    #: ladder they are on, which is the honest state rather than a guess.
+    ladder = models.ForeignKey(
+        RankLadder,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="tracks",
+    )
     #: Denormalised from the latest RankAward for query speed (task 1.2.5
     #: recomputes it on write). Null means "enrolled but not yet graded" —
     #: a white belt who has not had their first grading.

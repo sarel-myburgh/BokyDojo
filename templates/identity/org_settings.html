@@ -1,0 +1,143 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% comment %}
+  Organisation settings — styles and dojos.
+
+  Styles come first because everything hangs off them: a dojo teaches styles,
+  enrolling a student gives them a track per style, and a track is what carries
+  a rank. This is the screen somebody opens on day one.
+{% endcomment %}
+
+{% block title %}{% translate "Organisation settings" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold tracking-tight mb-1">{{ organization.name }}</h1>
+<p class="text-sm text-gray-500 mb-8">{% translate "Organisation settings" %}</p>
+
+{# -- styles ---------------------------------------------------------------- #}
+<div class="flex items-center gap-2 mb-1">
+  <span class="seal" aria-hidden="true"></span>
+  <h2 class="text-base font-bold tracking-tight">{% translate "Styles" %}</h2>
+</div>
+<p class="mb-4 text-sm text-gray-500">
+  {% translate "The arts this organisation teaches. A dojo is tagged with the ones it runs, and enrolling a student there records them as training each one." %}
+</p>
+
+{% if styles %}
+  <div class="table-wrap panel mb-4">
+    <table class="w-full text-sm">
+      <thead class="border-b border-gray-200 text-left">
+        <tr>
+          <th class="eyebrow px-3 py-2">{% translate "Style" %}</th>
+          <th class="eyebrow px-3 py-2">{% translate "Ranks" %}</th>
+          <th class="eyebrow px-3 py-2">{% translate "Ladders" %}</th>
+          <th class="eyebrow px-3 py-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for row in styles %}
+          <tr>
+            <td class="px-3 py-2 font-medium">{{ row.style.name }}</td>
+            <td class="px-3 py-2">
+              {% if row.style.is_ranked %}
+                <span class="eyebrow text-gray-700">{% translate "graded" %}</span>
+              {% else %}
+                <span class="eyebrow text-gray-400">{% translate "unranked" %}</span>
+              {% endif %}
+            </td>
+            <td class="px-3 py-2 text-gray-500">
+              {% if row.style.is_ranked %}
+                {% for ladder in row.ladders %}{{ ladder.name }}{% if not forloop.last %}, {% endif %}{% empty %}
+                  <span class="text-amber-700">{% translate "no belts defined — nobody can be graded in this style yet" %}</span>
+                {% endfor %}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td class="px-3 py-2 text-right">
+              <form method="post" action="{% url 'style-toggle-ranked' row.style.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="eyebrow text-gray-500 underline hover:text-gray-900">
+                  {% if row.style.is_ranked %}{% translate "mark unranked" %}{% else %}{% translate "mark graded" %}{% endif %}
+                </button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="mb-4 border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500">
+    {% translate "No styles yet. Add the first one below." %}
+  </p>
+{% endif %}
+
+<form method="post" class="panel mb-10 px-5 py-4">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="add-style">
+  <p class="eyebrow mb-3">{% translate "Add a style" %}</p>
+  {% if style_form.non_field_errors %}
+    <div class="mb-3 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">
+      {{ style_form.non_field_errors }}
+    </div>
+  {% endif %}
+  <div class="mb-1">
+    {{ style_form.name }}
+  </div>
+  {% if style_form.name.errors %}
+    <p class="mb-2 text-xs text-red-700">{{ style_form.name.errors|join:" " }}</p>
+  {% endif %}
+  <label class="mb-3 mt-2 flex items-center gap-2 text-sm">
+    {{ style_form.is_ranked }} {% translate "This style uses ranks" %}
+  </label>
+  <p class="mb-4 text-xs text-gray-500">
+    {% translate "Leave unticked for arts with no grading — boxing, conditioning, open mat. Students still get a record that they train it; they simply have no belt." %}
+  </p>
+  <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+    {% translate "Add style" %}
+  </button>
+</form>
+
+{# -- dojos ----------------------------------------------------------------- #}
+<div class="flex items-center gap-2 mb-1">
+  <span class="seal" aria-hidden="true"></span>
+  <h2 class="text-base font-bold tracking-tight">{% translate "Dojos" %}</h2>
+  <a href="{% url 'dojo-create' %}" class="eyebrow ml-auto text-crimson-600 hover:underline">
+    {% translate "Add a dojo" %}
+  </a>
+</div>
+<p class="mb-4 text-sm text-gray-500">
+  {% translate "Each dojo teaches some of the styles above." %}
+</p>
+
+<div class="panel divide-y divide-gray-200">
+  {% for row in dojos %}
+    <a href="{% url 'dojo-edit' row.dojo.pk %}" class="flex items-start gap-4 px-4 py-3 active:bg-gray-50">
+      <span class="min-w-0 flex-1">
+        <span class="block truncate font-medium">{{ row.dojo.name }}</span>
+        <span class="block text-sm text-gray-500">
+          {% if row.styles %}
+            {% for style in row.styles %}{{ style.name }}{% if not style.is_ranked %} <span class="text-gray-400">({% translate "unranked" %})</span>{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}
+          {% else %}
+            <span class="text-amber-700">{% translate "no styles set — members here get no style track" %}</span>
+          {% endif %}
+        </span>
+      </span>
+      <span class="eyebrow shrink-0 text-gray-400">{{ row.dojo.timezone }}</span>
+    </a>
+  {% empty %}
+    <p class="px-4 py-6 text-center text-sm text-gray-500">{% translate "No dojos yet." %}</p>
+  {% endfor %}
+</div>
+
+<div class="mt-8 flex flex-wrap gap-2">
+  <a href="{% url 'student-create' %}" class="border border-gray-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 active:bg-gray-100">
+    {% translate "Add a student" %}
+  </a>
+  <a href="{% url 'instructor-create' %}" class="border border-gray-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 active:bg-gray-100">
+    {% translate "Add an instructor" %}
+  </a>
+</div>
+{% endblock %}

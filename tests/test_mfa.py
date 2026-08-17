@@ -25,6 +25,22 @@ from apps.identity.models import (
 )
 
 pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture(autouse=True)
+def _enforce_mfa(settings):
+    """⚠ This module tests MFA, so it must run with MFA as it ships.
+
+    ``config/settings/test.py`` turns enforcement off so that every *other*
+    test's admin login is not routed through an enrolment screen. That is
+    convenient and it is also why these tests passed for the wrong reason for a
+    while: the login view checked ``user_requires_mfa`` directly and ignored the
+    setting, so enforcement here was accidental rather than configured. Now the
+    predicate honours the switch and this fixture states the assumption out loud.
+    """
+    settings.MFA_ENFORCEMENT_ENABLED = True
+
+
 PASSWORD = "correct-horse-battery"
 
 
@@ -204,8 +220,7 @@ def test_mfa_failures_are_rate_limited():
     assert client.post(reverse("mfa-challenge"), {"code": "000000"}).status_code == 429
 
 
-def test_privilege_promotion_forces_step_up_on_an_existing_session(settings):
-    settings.MFA_ENFORCEMENT_ENABLED = True
+def test_privilege_promotion_forces_step_up_on_an_existing_session():
     user, assignment = make_user(role=Role.INSTRUCTOR)
     client = Client()
     assert password_login(client, user).url == reverse("today")

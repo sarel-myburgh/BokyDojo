@@ -252,6 +252,20 @@ CLASS_TYPE_TAGS = register(
     )
 )
 
+JUNIOR_LADDER_MAX_AGE = register(
+    SettingDefinition(
+        key="ranks.junior_ladder_max_age",
+        default=14,
+        choices=tuple(range(8, 19)),
+        scopes=(Scope.ORG,),
+        description=(
+            "Below this age a student joining a style with both a junior and an "
+            "adult ladder is put on the junior one. Only consulted when a style "
+            "actually has both; a style with a single ladder uses it regardless."
+        ),
+    )
+)
+
 CONSENT_SELF_AGE = register(
     SettingDefinition(
         key="consent.minimum_self_consent_age",

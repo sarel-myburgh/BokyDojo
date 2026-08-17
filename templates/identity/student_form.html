@@ -1,0 +1,25 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Add a student" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<p class="text-sm mb-2">
+  <a href="{% url 'student-list' %}" class="eyebrow hover:text-gray-900">&larr; {% translate "Students" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Add a student" %}</h1>
+<p class="text-sm text-gray-500 mb-6">
+  {% translate "Just enough to put them on the roll. Guardians, medical details and consent are on their page afterwards." %}
+</p>
+
+<form method="post" class="panel px-5 py-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {% for field in form %}{% include "identity/_form_field.html" with field=field %}{% endfor %}
+  <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+    {% translate "Add student" %}
+  </button>
+</form>
+{% endblock %}

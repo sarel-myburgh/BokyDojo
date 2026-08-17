@@ -1,0 +1,52 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% if is_new %}{% translate "Add a dojo" %}{% else %}{{ dojo.name }}{% endif %} — DojoMaster{% endblock %}
+
+{% block content %}
+<p class="text-sm mb-2">
+  <a href="{% url 'org-settings' %}" class="eyebrow hover:text-gray-900">&larr; {% translate "Organisation settings" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-6">
+  {% if is_new %}{% translate "Add a dojo" %}{% else %}{{ dojo.name }}{% endif %}
+</h1>
+
+<form method="post" class="panel px-5 py-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  {% for field in form %}
+    {% if field.name != "styles" %}
+      {% include "identity/_form_field.html" with field=field %}
+    {% endif %}
+  {% endfor %}
+
+  {% comment %}
+    Styles get their own block: they are the field that actually changes what
+    happens to members, not just another text box.
+  {% endcomment %}
+  <fieldset class="mb-4 border-t border-gray-200 pt-4">
+    <legend class="eyebrow mb-1">{% translate "Styles taught here" %}</legend>
+    <p class="mb-3 text-xs text-gray-500">{{ form.styles.help_text }}</p>
+    {% if form.styles.field.queryset %}
+      <div class="space-y-2">
+        {% for choice in form.styles %}
+          <label class="flex items-center gap-2 text-sm">{{ choice.tag }} {{ choice.choice_label }}</label>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-sm text-amber-700">
+        {% translate "No styles exist yet." %}
+        <a href="{% url 'org-settings' %}" class="underline">{% translate "Add one first" %}</a>.
+      </p>
+    {% endif %}
+    {% if form.styles.errors %}<p class="mt-1 text-xs text-red-700">{{ form.styles.errors|join:" " }}</p>{% endif %}
+  </fieldset>
+
+  <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+    {% if is_new %}{% translate "Create dojo" %}{% else %}{% translate "Save" %}{% endif %}
+  </button>
+</form>
+{% endblock %}
