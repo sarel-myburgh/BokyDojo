@@ -441,7 +441,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1186 passing, 47 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1236 passing, 52 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -805,12 +805,78 @@ OUTPUT
   `kata`+`grading_preparation`. A demo where every class counts toward
   everything cannot demonstrate "of which at least 10 kata"; the counts now come
   out meaningfully uneven (446 kata, 507 kihon, 66 grading_preparation).
+- **Import has an engine — `1.10.2`, `1.10.3` done; `1.10.1`/`1.10.7` are UI
+  debt only.** New app `apps/imports/`. Chosen before the kiosk because import
+  is on the critical path to the pilot (`1.12.1` is impossible without it) while
+  the kiosk sits behind `D1`, which is still an *assumption*, and duplicates a
+  capture path that already works.
+  - **`ImportedRecord` maps source key → created row**, in its own table rather
+    than an `external_id` column on Person and everything else. Import is not a
+    property of a student; it is a property of how that student arrived. Five
+    importers share one mechanism and the domain models stay clean.
+  - ⚠ **A dry run takes the same code path as a real one** and rolls back. A
+    separate "validate" pass is a dry run that lies: it drifts with every change
+    and cannot see the failures that only appear on write — a unique constraint,
+    a `save()` refusing a value, a second row in the same file colliding with
+    the first. The tests assert against the **database afterwards**, not the
+    reported counts, because "12 created" while having actually created them is
+    the failure worth catching.
+  - ⚠ **The `ImportRun` is written outside the rolled-back transaction**, or a
+    dry run rolls back the very report the operator is meant to read.
+  - ⚠ **Each row runs in its own savepoint, and the suite cannot prove it.**
+    On PostgreSQL a failed statement poisons the transaction and every later row
+    fails; SQLite tolerates it. Tests run on SQLite, production on PostgreSQL —
+    verified by deleting the savepoint and watching
+    `test_one_bad_row_does_not_stop_the_others` **pass anyway**. Guarded by a
+    source-structure assertion instead, which is weaker and is the strongest
+    thing available here. Running the suite against PostgreSQL (`5.2.6`) is the
+    real fix, and that test should then be replaced by a behavioural one.
+  - ⚠ **Blank cells never erase.** A partial re-import — a corrected phone
+    column only — must not wipe every address it did not carry.
+  - ⚠ **Identity is the whole problem.** With `external_id` mapped the key is
+    reliable; without it the key is name + date of birth, which is a heuristic
+    that collapses two real students sharing both. Case-folded (not lowered, so
+    ß and dotted-I fold correctly) so a re-export with different capitalisation
+    is not a new student. Guardians key on email where present, which is what
+    makes two siblings share one parent Person instead of two.
+  - ⚠ **`%m/%d/%Y` is deliberately not accepted.** `03/04/2015` is ambiguous and
+    guessing turns a March birthday into an April one silently; the error names
+    the problem and tells the operator to use ISO.
+  - ⚠ **A blank line mid-file defeats `csv.Sniffer`** — found by running a
+    realistic export, not by testing. It sniffs any *prefix* of the file
+    correctly and returns "Could not determine delimiter" for the whole sample,
+    because a row with no delimiters fails its consistency check. The comma
+    fallback then parsed a semicolon file as a **single column** and the import
+    confidently reported four rows whose only field was the whole line. The
+    sample now skips blank lines and the fallback counts candidates in the
+    header. Excel produces those blank lines constantly.
+  - ⚠ **CSV cannot be sniffed for type**, so `apps.core.uploads.validate_upload`
+    (magic bytes, for images and PDFs) is deliberately not reused. Validation is
+    by decoding and parsing: size cap, row cap, `utf-8-sig` then `cp1252`.
+  - Gated on **both** `PERSON_CREATE` and `PERSON_EDIT`: a re-import updates, so
+    create-only rights would otherwise overwrite people through the importer
+    that the actor could not touch through the student screens.
+  - `manage.py import_csv` acts **as a named person**, not as the system actor,
+    and its permissions are checked rather than bypassed. Defaults to a dry run;
+    writing needs `--commit`, spelled out.
+  - 38 tests in `tests/test_imports.py`, checked against six broken variants
+    (dry run writing for real, no idempotency lookup, blank cells erasing,
+    guardian keyed per student, fallback key not case-folded, savepoint removed).
+  - Verified end to end against seeded data with a deliberately nasty file (BOM,
+    semicolons, a 31-February date, a blank line, siblings): first run 3 created
+    / 1 errored, second run **0 created / 3 updated**, one guardian Person with
+    two links.
 - **Best next tasks in Phase 1**, in dependency order:
-  - The `1.7.x` kiosk (12 tasks, none started) and `1.10.x` import (7 tasks,
-    none started) are all that remain before the `1.12` exit gate, which `D10`
-    still blocks. Scheduling still has **no editing UI** — `1.4.5`'s move/split
-    and `1.4.8`'s assignment are service-level, and the calendar is deliberately
-    read-only.
+  - **The import web wizard** (`1.10.1` + `1.10.7`) — one screen serving both:
+    upload → map columns → preview the dry run → commit → download the report.
+    The engine underneath is done and tested.
+  - Then `1.10.4` attendance and `1.10.5` rank history — both reference students,
+    so they needed `1.10.3` first — and `1.10.6` competitor presets.
+  - Then the `1.7.x` kiosk (12 tasks, none started). `D1` should be settled
+    before starting it, since it is what decides whether the kiosk is wanted.
+  - `D10` still blocks the `1.12` exit gate regardless of code. Scheduling still
+    has **no editing UI** — `1.4.5`'s move/split and `1.4.8`'s assignment are
+    service-level, and the calendar is deliberately read-only.
   - Notes are **create-only** — no edit, no delete, no soft-delete. That was a
     scope decision, not an oversight, but a typo in a pinned note currently
     cannot be fixed from the UI. Decide whether notes are append-only evidence
@@ -1156,13 +1222,13 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `1.9.4` `[DS]` Weekly timesheet view for the instructor
 
 ### 1.10 Import (acquisition tooling)
-- [ ] `1.10.1` `[DS]` Generic CSV importer: upload → column mapping → preview → dry run `§12.10`
-- [ ] `1.10.2` ⚠ Idempotent re-import (fix and re-run, don't duplicate)
-- [ ] `1.10.3` `[DS]` Import students + guardians
+- [ ] `1.10.1` `[DS]` Generic CSV importer: upload → column mapping → preview → dry run `§12.10` *(engine, mapping, preview and dry run done and usable via `manage.py import_csv`; the **web wizard** is what remains)*
+- [x] `1.10.2` ⚠ Idempotent re-import (fix and re-run, don't duplicate)
+- [x] `1.10.3` `[DS]` Import students + guardians
 - [ ] `1.10.4` `[DS]` Import historical attendance
 - [ ] `1.10.5` `[DS]` Import rank history
 - [ ] `1.10.6` `[DS]` Named presets for common competitor export formats
-- [ ] `1.10.7` `[DS]` Import report: created / updated / skipped / errored, downloadable
+- [ ] `1.10.7` `[DS]` Import report: created / updated / skipped / errored, downloadable *(report built and written to CSV by `--report`; **downloadable from the browser** waits on the wizard)*
 
 ### 1.11 Core reports
 - [x] `1.11.1` `[DS]` Attendance summary by dojo / class / period

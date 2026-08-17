@@ -43,6 +43,7 @@ from apps.identity.models import (
     TransferRecord,
     User,
 )
+from apps.imports.models import ImportedRecord, ImportRun
 from apps.ranks.models import Rank, RankAward, RankLadder, StudentStyleTrack, Style
 from apps.ranks.seeding import create_shotokan_ladders
 from apps.scheduling.materialise import materialise_sessions
@@ -364,6 +365,11 @@ class Command(BaseCommand):
         a separate, deliberate command.
         """
         ordered_models = [
+            # ⚠ Import bookkeeping first. Left behind, ImportedRecord rows point
+            # at people the clear has just deleted, and the next import treats a
+            # brand-new roster as an update of ghosts.
+            ImportRun,
+            ImportedRecord,
             Note,
             SessionInstructor,
             TemplateInstructor,
