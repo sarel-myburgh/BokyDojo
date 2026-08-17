@@ -103,6 +103,35 @@ class ClassTemplate(TenantScopedModel):
             return obj.ladder.style.organization_id
         return TenantScopedModel._organization_of(obj)
 
+    def check_counts_toward(self) -> None:
+        """Refuse a class type this organisation has not declared — TODO 1.4.10.
+
+        ⚠ Enforced in ``save()`` like ``check_same_organization``, for the same
+        reason: most writes are service code, the seed and fixtures, none of
+        which call ``full_clean()``. An unvalidated tag is not a cosmetic
+        problem — grading eligibility is written against these words, and a tag
+        nothing matches fails silently and late.
+        """
+        from .class_types import validate_tags
+
+        # A template with no tags is the ordinary case and needs no vocabulary
+        # lookup, which keeps the common save free of an extra query.
+        if not self.counts_toward:
+            if self.counts_toward is None:
+                self.counts_toward = []
+            return
+        self.counts_toward = validate_tags(
+            self.counts_toward, organization_id=self.dojo.organization_id
+        )
+
+    def save(self, *args, **kwargs):
+        self.check_counts_toward()
+        return super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        self.check_counts_toward()
+
 
 class ClosurePeriod(TenantScopedModel):
     """Dates on which no sessions should exist — plan §12.2.

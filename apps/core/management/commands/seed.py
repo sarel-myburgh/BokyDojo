@@ -891,11 +891,35 @@ class Command(BaseCommand):
 
     def _create_class_templates(self, dojos: dict) -> None:
         """A believable weekly timetable per dojo — TODO 1.4.1."""
+        # ⚠ The fourth column is counts_toward (TODO 1.4.10). Without it the
+        # tags, their validation and 3.6.2's eligibility rules are all invisible
+        # in the demo — every template would carry an empty list and the feature
+        # would look like a column nobody uses. The tags differ per class on
+        # purpose: a vocabulary where every class counts toward everything cannot
+        # demonstrate a rule like "of which at least 10 kata".
         timetable = [
-            ("Little Dragons (4-7)", "FREQ=WEEKLY;BYDAY=TU,TH", time(16, 0), 45),
-            ("Juniors (8-13)", "FREQ=WEEKLY;BYDAY=MO,WE,FR", time(17, 0), 60),
-            ("Adults", "FREQ=WEEKLY;BYDAY=MO,WE,FR", time(18, 30), 90),
-            ("Saturday all grades", "FREQ=WEEKLY;BYDAY=SA", time(9, 0), 90),
+            ("Little Dragons (4-7)", "FREQ=WEEKLY;BYDAY=TU,TH", time(16, 0), 45, ["kihon"]),
+            (
+                "Juniors (8-13)",
+                "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+                time(17, 0),
+                60,
+                ["kihon", "kata"],
+            ),
+            (
+                "Adults",
+                "FREQ=WEEKLY;BYDAY=MO,WE,FR",
+                time(18, 30),
+                90,
+                ["kihon", "kata", "kumite", "conditioning"],
+            ),
+            (
+                "Saturday all grades",
+                "FREQ=WEEKLY;BYDAY=SA",
+                time(9, 0),
+                90,
+                ["kata", "grading_preparation"],
+            ),
         ]
         assigned = 0
         for org, org_dojos in dojos.items():
@@ -910,7 +934,7 @@ class Command(BaseCommand):
                         role_assignments__role__in=[Role.INSTRUCTOR, Role.DOJO_ADMIN],
                     ).distinct()
                 )
-                for name, rrule, start, duration in timetable:
+                for name, rrule, start, duration, counts_toward in timetable:
                     template, created = ClassTemplate.objects.get_or_create(
                         dojo=dojo,
                         name=name,
@@ -920,6 +944,7 @@ class Command(BaseCommand):
                             "duration_minutes": duration,
                             "room": "Main hall",
                             "capacity": 30,
+                            "counts_toward": counts_toward,
                             # Backdated so the seed has history to report on.
                             "active_from": date.today() - timedelta(days=HISTORY_DAYS),
                         },

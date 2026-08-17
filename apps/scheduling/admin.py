@@ -22,6 +22,7 @@ class ClassTemplateAdmin(ScopedModelAdmin):
         "rrule",
         "start_time",
         "duration_minutes",
+        "counts_toward",
         "active_from",
         "active_to",
     )

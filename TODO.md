@@ -441,7 +441,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1159 passing, 47 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1186 passing, 47 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -754,12 +754,63 @@ OUTPUT
   showing one has already said the dojo is shut; ad-hoc closures are nouns
   ("Floor resurfacing") and this matches them. One line, no migration, covered
   by `test_the_closure_reason_is_the_holidays_name`.
+- **`1.4.10` is done — Phase 1 scheduling (`1.4`) is now complete.** The field
+  existed with a migration and nothing else: no vocabulary, no validation, no
+  way to read it back, and one test asserting it defaults to `[]`.
+  `apps/scheduling/class_types.py` is the sanctioned entry point.
+  - **The vocabulary is per organisation, in the settings hierarchy**
+    (`scheduling.class_type_tags`), not an enum in code. `kata`/`kihon`/`kumite`
+    are karate words; a BJJ club replaces the list wholesale. ⚠ **Organisation
+    scope only, deliberately** — if a dojo could override it, the rule "≥10
+    kata" would mean different things at two dojos in one organisation and a
+    transferring student would gain or lose progress with no record of why.
+  - ⚠ **Tags are refused, never normalised.** A template tagged `Kata` against a
+    rule naming `kata` matches **nothing**, silently, and surfaces months later
+    as a student wrongly held back from a grading. Coercing the case would make
+    them agree by luck while hiding that somebody has two names for one thing.
+    A case variant is rejected with a message naming the tag that does exist,
+    so the author sees a typo rather than a system fault.
+  - ⚠ **`JSONField.__contains` is a Postgres-only trap and was the whole design
+    fork.** Tests and dev run on **SQLite**, production on **PostgreSQL**;
+    `filter(counts_toward__contains=[tag])` raises
+    `NotSupportedError: contains lookup is not supported on this database
+    backend`. Verified, not assumed. `icontains` against the serialised JSON is
+    worse — a substring match, so `kata` finds `kata_advanced`. Templates are
+    filtered **in Python** and sessions by `template_id__in`, which is portable
+    and cheap because templates are inherently few (one per weekly slot per
+    dojo). If a deployment ever grows enough templates for that to hurt, the fix
+    is a join table, **not** a JSON lookup.
+  - ⚠ **A one-off session counts toward nothing.** `ClassSession.template` is
+    null for ad-hoc classes and the tags live on the template, so an ad-hoc kata
+    seminar contributes to no eligibility rule. Recorded, not fixed — `3.6.2`
+    must either exclude them by design or give `ClassSession` its own override.
+  - ⚠ **Changing the vocabulary does not retag existing templates.** Removing a
+    tag that is in use leaves those rows untouched and readable, but the next
+    save of that template fails validation. Nothing currently prevents the
+    removal. Worth a guard before an admin UI for the vocabulary exists.
+  - `SettingDefinition` gained an optional `validator` hook, because `choices`
+    asks "is the value one of these", which is the wrong question for a
+    list-valued setting — without it the vocabulary had no validation at all.
+    It also runs against the declared `default` in `__post_init__`, so a broken
+    default fails at import rather than on first read.
+  - Validation is enforced in `save()`, like `check_same_organization` and for
+    the same reason: the seed, fixtures and every service write skip
+    `full_clean()` — which a tenant-scoped model cannot call anyway.
+  - 26 tests in `tests/test_class_types.py`, checked against five broken
+    variants (case silently normalised, `save()` no longer validating,
+    substring tag matching, vocabulary allowed at dojo scope, declared default
+    never validated).
+- **The seed now tags its timetable**, differently per class — Little Dragons
+  `kihon`, Juniors `kihon`+`kata`, Adults four tags, Saturday
+  `kata`+`grading_preparation`. A demo where every class counts toward
+  everything cannot demonstrate "of which at least 10 kata"; the counts now come
+  out meaningfully uneven (446 kata, 507 kihon, 66 grading_preparation).
 - **Best next tasks in Phase 1**, in dependency order:
-  - `1.4.10` (`counts_toward[]` tags, which `3.6.2`'s eligibility engine needs),
-    then the `1.7.x` kiosk (12 tasks, none started) and `1.10.x` import (7
-    tasks, none started). Scheduling still has **no editing UI** — `1.4.5`'s
-    move/split and `1.4.8`'s assignment are service-level, and the calendar is
-    deliberately read-only.
+  - The `1.7.x` kiosk (12 tasks, none started) and `1.10.x` import (7 tasks,
+    none started) are all that remain before the `1.12` exit gate, which `D10`
+    still blocks. Scheduling still has **no editing UI** — `1.4.5`'s move/split
+    and `1.4.8`'s assignment are service-level, and the calendar is deliberately
+    read-only.
   - Notes are **create-only** — no edit, no delete, no soft-delete. That was a
     scope decision, not an oversight, but a typo in a pinned note currently
     cannot be fixed from the UI. Decide whether notes are append-only evidence
@@ -1059,7 +1110,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.4.7` `[DS]` Cancel session + reason + notification hook
 - [x] `1.4.8` `[DS]` Substitute instructor assignment *(service; no UI until `1.4.9`)*
 - [x] `1.4.9` `[DS]` Calendar views: week/month, per dojo, filtered by instructor
-- [ ] `1.4.10` `ClassTemplate.counts_toward[]` tags — which class types count for which eligibility rules `§2 item 23`
+- [x] `1.4.10` `ClassTemplate.counts_toward[]` tags — which class types count for which eligibility rules `§2 item 23`
 
 ### 1.5 Attendance — core
 - [x] `1.5.1` ⚠ `AttendanceRecord` with `client_generated_id`, idempotent upsert `§4.5`

@@ -18,6 +18,7 @@ fail loudly rather than silently resolve to a default nobody chose.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -61,6 +62,11 @@ class SettingDefinition:
     choices: tuple[Any, ...] | None = None
     #: Least strict → most strict. Required when resolution is STRICTEST.
     strictness: tuple[Any, ...] | None = None
+    #: Extra validation for values ``choices`` cannot express — a list-valued
+    #: setting, a range, a shape. Raises ``InvalidSettingValue``. Without this a
+    #: setting whose value is a *collection* has no validation at all: ``choices``
+    #: asks "is the value one of these", which is the wrong question for a list.
+    validator: Callable[[Any], None] | None = None
     description: str = ""
 
     def __post_init__(self):
@@ -71,6 +77,10 @@ class SettingDefinition:
         for scope in self.scopes:
             if scope not in Scope.ORDER:
                 raise ValueError(f"{self.key}: unknown scope {scope!r}")
+        # A default that its own validator rejects is a bug that must surface at
+        # import time, not the first time somebody happens to read the setting.
+        if self.validator is not None:
+            self.validator(self.default)
 
     def validate(self, value: Any, scope_type: str) -> None:
         if scope_type not in self.scopes:
@@ -80,6 +90,8 @@ class SettingDefinition:
             )
         if self.choices is not None and value not in self.choices:
             raise InvalidSettingValue(f"{self.key}: {value!r} is not one of {self.choices}")
+        if self.validator is not None:
+            self.validator(value)
 
     def strictness_of(self, value: Any) -> int:
         try:
@@ -174,6 +186,69 @@ SESSION_GENERATION_HORIZON_DAYS = register(
         default=90,
         scopes=(Scope.ORG, Scope.DOJO),
         description="How far ahead recurring class sessions are materialised.",
+    )
+)
+
+#: Longest a single tag may be. Long enough for "grading_preparation", short
+#: enough that a runaway paste is refused rather than stored.
+MAX_CLASS_TYPE_TAG_LENGTH = 50
+
+
+def validate_class_type_vocabulary(value: Any) -> None:
+    """The organisation's list of class-type tags — TODO 1.4.10.
+
+    ⚠ Tags must be lower-case and whitespace-free. This is not tidiness: plan §2
+    item 23 wants rules like "40 classes, of which ≥10 kata", and a rule naming
+    ``kata`` against a class tagged ``Kata`` matches **nothing**. The failure is
+    silent and surfaces months later as a student wrongly held back from a
+    grading. Normalising quietly would be worse still — it would make the two
+    agree by luck, and hide that somebody has two names for one thing.
+
+    ``.lower()`` is identity for scripts without case, so Khmer and Chinese tags
+    pass through unchanged.
+    """
+    if not isinstance(value, list | tuple):
+        raise InvalidSettingValue(
+            f"class type vocabulary must be a list of tags, got {type(value).__name__}"
+        )
+    seen: set[str] = set()
+    for tag in value:
+        if not isinstance(tag, str):
+            raise InvalidSettingValue(f"class type tag must be a string, got {tag!r}")
+        if not tag:
+            raise InvalidSettingValue("class type tag must not be empty")
+        if tag != tag.strip():
+            raise InvalidSettingValue(f"class type tag {tag!r} has leading or trailing whitespace")
+        if tag != tag.lower():
+            raise InvalidSettingValue(f"class type tag {tag!r} must be lower-case")
+        if any(character.isspace() for character in tag):
+            raise InvalidSettingValue(f"class type tag {tag!r} must not contain whitespace")
+        if len(tag) > MAX_CLASS_TYPE_TAG_LENGTH:
+            raise InvalidSettingValue(
+                f"class type tag {tag!r} exceeds {MAX_CLASS_TYPE_TAG_LENGTH} characters"
+            )
+        if tag in seen:
+            raise InvalidSettingValue(f"class type tag {tag!r} is listed twice")
+        seen.add(tag)
+
+
+CLASS_TYPE_TAGS = register(
+    SettingDefinition(
+        key="scheduling.class_type_tags",
+        default=["kata", "kihon", "kumite", "conditioning", "grading_preparation"],
+        # ⚠ Organisation scope only, deliberately. Grading eligibility is written
+        # against these words, so if a dojo could invent its own the same rule
+        # ("≥10 kata") would mean different things at different dojos in one
+        # organisation — and a student transferring between them would gain or
+        # lose progress with no record of why.
+        scopes=(Scope.ORG,),
+        validator=validate_class_type_vocabulary,
+        description=(
+            "Tags a class may count toward, for grading eligibility rules such as "
+            "'40 classes since the last grading, of which at least 10 kata' "
+            "(plan §2 item 23). The default is a karate vocabulary; an "
+            "organisation teaching BJJ or Judo should replace it wholesale."
+        ),
     )
 )
 
