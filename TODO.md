@@ -2,7 +2,14 @@
 
 Working checklist for the whole project. Designed so **any agent can pick up mid-stream** without the original conversation.
 
-**Read first:** [project_plan.md](project_plan.md) · [security_and_compliance.md](security_and_compliance.md) · [competitive_analysis.md](competitive_analysis.md)
+**Read first:** [project_plan.md](project_plan.md) · `security_and_compliance.md` · `competitive_analysis.md`
+
+> ⚠ The last two, and `security_review_2026-07-26.md`, are **deliberately not in
+> this repository** — the remote is public and the review carries unremediated
+> findings with working reproductions. They live beside your checkout and are
+> listed in `.git/info/exclude` (local-only, so the filenames are not published
+> in `.gitignore` either). `SEC §` references below still point at
+> `security_and_compliance.md`; keep your copy to hand.
 
 ---
 

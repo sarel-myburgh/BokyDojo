@@ -65,9 +65,13 @@ tests/        — pytest test suite
 ## Documentation
 
 - [Project Plan](project_plan.md) — full feature spec and domain model
-- [Security & Compliance](security_and_compliance.md) — threat model, controls, pentest scope
-- [Competitive Analysis](competitive_analysis.md) — market research
 - [Contributing](CONTRIBUTING.md) — conventions and development guide
+
+The threat model and control list (`security_and_compliance.md`), the adversarial
+security review, and the competitor research are maintained outside this
+repository. The review documents unremediated findings with working
+reproductions, so it is not published alongside the code it describes; ask if you
+need it for an audit.
 
 ## Licence
 
