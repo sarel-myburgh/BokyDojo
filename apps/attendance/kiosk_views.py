@@ -38,7 +38,7 @@ from apps.scheduling.models import ClassSession
 
 from . import kiosk
 from .models import AttendanceRecord
-from .services import mark_attendance, session_roster
+from .services import complete_session, mark_attendance, session_roster
 
 #: Throttle scope for the "let me out" password.
 KIOSK_EXIT_SCOPE = "kiosk-exit"
@@ -152,6 +152,11 @@ def kiosk_mark_view(request, session_id) -> JsonResponse:
         method=AttendanceRecord.Method.SELF,
         client_generated_id=request.POST.get("client_generated_id", "")[:64],
     )
+    # ⚠ A class checked in entirely on the door is still a class that was
+    # taught. Without this it stays SCHEDULED for ever and 1.9.3 never drafts a
+    # timesheet line for whoever ran it.
+    complete_session(session, actor=actor)
+
     return JsonResponse(
         {
             "student_id": str(entry.student.pk),

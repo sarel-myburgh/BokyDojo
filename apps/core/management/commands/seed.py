@@ -23,6 +23,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 
 from apps.attendance.models import AttendanceRecord
+from apps.core.models import Document
 from apps.core.notes import Note
 from apps.core.scoping import Actor, allow_unscoped
 from apps.identity.models import (
@@ -56,6 +57,7 @@ from apps.scheduling.models import (
     SessionInstructor,
     TemplateInstructor,
 )
+from apps.staffing.models import InstructorProfile, TimeEntry
 
 #: How far back the demo generates classes and attendance. Long enough for the
 #: reports and the drop-off list to be interesting, short enough to seed in
@@ -333,6 +335,9 @@ class Command(BaseCommand):
             self.stdout.write("Seeding attendance history...")
             self._create_attendance(sessions)
 
+            self.stdout.write("Seeding instructor pay and timesheets...")
+            self._create_instructor_pay(dojos)
+
             self._report_logins()
 
         self.stdout.write(self.style.SUCCESS("Done! Seed data created."))
@@ -371,6 +376,8 @@ class Command(BaseCommand):
             # ⚠ Import bookkeeping first. Left behind, ImportedRecord rows point
             # at people the clear has just deleted, and the next import treats a
             # brand-new roster as an update of ghosts.
+            TimeEntry,
+            InstructorProfile,
             ImportRun,
             ImportedRecord,
             Note,
@@ -392,6 +399,12 @@ class Command(BaseCommand):
             InstructorAssignment,
             RoleAssignment,
             User,
+            # ⚠ Before Person, which they PROTECT. Consent records only started
+            # appearing when the seed began granting photo consent, so the first
+            # `--clear` after that change worked and the *second* one failed —
+            # the clear list is only exercised against data a previous run left.
+            ConsentRecord,
+            Document,
             Person,
             Rank,
             RankLadder,
@@ -401,9 +414,12 @@ class Command(BaseCommand):
         ]
         for model in ordered_models:
             queryset = model.objects.all()
-            if model is RankAward:
-                # The disposable demo reset is the only sanctioned hard-delete
-                # path for append-only award history.
+            if model in (RankAward, ConsentRecord):
+                # ⚠ Both are append-only by design — award history (1.2.6) and
+                # consent evidence (1.1.6) refuse ordinary deletion, and should.
+                # Wiping a disposable demo database is the only sanctioned
+                # hard-delete path for either, and it exists here and nowhere
+                # else.
                 queryset._raw_delete(queryset.db)
                 continue
             hard_delete = getattr(queryset, "hard_delete", None)
@@ -1132,6 +1148,64 @@ class Command(BaseCommand):
                     )
                     made += 1
         self.stdout.write(f"  {made} demo student photo(s) with recorded consent.")
+
+    def _create_instructor_pay(self, dojos: dict) -> None:
+        """Pay details and drafted timesheets — TODO 1.9.1/1.9.2, read by 1.9.4.
+
+        ⚠ Seventh feature found dark. `InstructorProfile` and `TimeEntry` were
+        both ticked and the demo had zero rows of either, so the timesheet screen
+        rendered an empty week for every instructor and the examiner ceiling
+        (which lives on this profile) was never exercised either.
+
+        The drafts are made through the same service the roster uses, so what the
+        demo shows is what a real week produces — not fixtures shaped to look
+        tidy.
+        """
+        from apps.staffing.models import InstructorProfile
+        from apps.staffing.timesheets import draft_for_session
+
+        system = Actor.system()
+        profiles = 0
+        for org, org_dojos in dojos.items():
+            for dojo in org_dojos:
+                people = Person.objects.filter(
+                    organization=org,
+                    role_assignments__dojo=dojo,
+                    role_assignments__role__in=[Role.INSTRUCTOR, Role.DOJO_ADMIN],
+                ).distinct()
+                for index, person in enumerate(people):
+                    if InstructorProfile.objects.filter(person=person).exists():
+                        continue
+                    # A mix, because a demo where everybody is paid the same way
+                    # cannot show that the field matters.
+                    pay_type, rate = [
+                        (InstructorProfile.PayType.PER_CLASS, 1500),
+                        (InstructorProfile.PayType.HOURLY, 1200),
+                        (InstructorProfile.PayType.VOLUNTEER, 0),
+                    ][index % 3]
+                    InstructorProfile.objects.create(
+                        person=person,
+                        pay_type=pay_type,
+                        pay_rate_minor_units=rate,
+                        pay_currency="USD",
+                        employment_started_on=date.today() - timedelta(days=365),
+                    )
+                    profiles += 1
+
+        # Draft against classes that already have attendance, which is what the
+        # roster would have done as each was marked.
+        drafted = 0
+        recent = (
+            ClassSession.objects.unscoped("seeding timesheets across all demo tenants")
+            .filter(status=ClassSession.Status.COMPLETED)
+            .select_related("dojo", "dojo__organization")
+            .order_by("-starts_at")[:120]
+        )
+        for session in recent:
+            drafted += len(draft_for_session(session, actor=system))
+        self.stdout.write(
+            f"  {profiles} instructor pay profile(s), {drafted} drafted time entr(ies)."
+        )
 
     def _materialise(self) -> list:
         """Generate sessions across the demo window — TODO 1.4.2.

@@ -322,12 +322,35 @@ def mark_session(
         updated += int(not was_created)
 
     # "Completed" means attendance has been taken, which is what the catch-up
-    # flow (TODO 1.5.6) will look for. A cancelled session stays cancelled.
-    if statuses and session.status == ClassSession.Status.SCHEDULED:
-        session.status = ClassSession.Status.COMPLETED
-        session.save(update_fields=["status", "updated_at"])
+    # flow (TODO 1.5.6) looks for. A cancelled session stays cancelled.
+    if statuses:
+        complete_session(session, actor=actor)
 
     return {"created": created, "updated": updated}
+
+
+def complete_session(session, *, actor) -> bool:
+    """Mark a class taught, and draft its timesheet lines — TODO 1.5.6, 1.9.3.
+
+    Returns True if the session transitioned. A cancelled session stays
+    cancelled; a completed one is not completed twice.
+
+    ⚠ One place, called by every path that means "a class was just marked": the
+    roster save, the offline sync, and the kiosk. The kiosk originally did not
+    complete its sessions at all, so a class checked in entirely on the door
+    stayed SCHEDULED for ever and never produced a timesheet line.
+
+    ⚠ Deliberately **not** called by the importer. Historical attendance is a
+    record of the past, not a payroll event — see apps/staffing/timesheets.py.
+    """
+    from apps.staffing.timesheets import draft_for_session
+
+    if session.status != ClassSession.Status.SCHEDULED:
+        return False
+    session.status = ClassSession.Status.COMPLETED
+    session.save(update_fields=["status", "updated_at"])
+    draft_for_session(session, actor=actor)
+    return True
 
 
 def attendance_version(record: AttendanceRecord | None) -> str:
@@ -447,7 +470,6 @@ def sync_session_marks(
             }
         )
 
-    if applied_any and session.status == ClassSession.Status.SCHEDULED:
-        session.status = ClassSession.Status.COMPLETED
-        session.save(update_fields=["status", "updated_at"])
+    if applied_any:
+        complete_session(session, actor=actor)
     return results

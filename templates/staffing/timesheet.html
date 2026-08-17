@@ -1,0 +1,99 @@
+{% extends "app/base.html" %}
+{% load i18n tz %}
+
+{% comment %}
+  Weekly timesheet — TODO 1.9.4.
+
+  Read-only on purpose: 3.7.1 adds submit/approve/reject. This answers one
+  question — "what have I taught this week" — for somebody standing up, on a
+  phone, at the end of the month.
+
+  Each class shows its own dojo's wall-clock time, because an instructor covering
+  at a second dojo in another country still taught at 18:30 their time.
+{% endcomment %}
+
+{% block title %}{% translate "My timesheet" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "My timesheet" %}</h1>
+<p class="text-sm text-gray-500 mb-6">
+  {{ first|date:"j M" }} – {{ last|date:"j M Y" }}
+</p>
+
+<nav class="mb-6 flex items-center gap-2 text-sm" aria-label="{% translate 'Change week' %}">
+  {% url 'timesheet' as base %}
+  <a href="{{ base }}?date={{ previous|date:'Y-m-d' }}"
+     class="border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 active:bg-gray-100">
+    <span aria-hidden="true">←</span><span class="sr-only">{% translate "Previous week" %}</span>
+  </a>
+  <a href="{{ base }}" class="border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 active:bg-gray-100">
+    {% translate "This week" %}
+  </a>
+  <a href="{{ base }}?date={{ next|date:'Y-m-d' }}"
+     class="border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 active:bg-gray-100">
+    <span aria-hidden="true">→</span><span class="sr-only">{% translate "Next week" %}</span>
+  </a>
+</nav>
+
+{# The headline number: hours. Unadorned, because it is the thing worth reading first. #}
+<div class="panel mb-6 border-l-2 border-l-crimson-600 px-5 py-4">
+  <p class="eyebrow mb-1">{% translate "Hours this week" %}</p>
+  <p class="text-4xl font-bold tabular-nums tracking-tight">{{ summary.hours }}</p>
+  <p class="mt-1 text-sm text-gray-500">
+    {% blocktranslate count counter=summary.classes %}{{ counter }} class{% plural %}{{ counter }} classes{% endblocktranslate %}
+  </p>
+  {% if summary.unpriced %}
+    <p class="mt-3 border-l-2 border-amber-500 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+      {% blocktranslate count counter=summary.unpriced %}
+        {{ counter }} entry has no pay rate recorded — ask an admin to set up your pay details.
+      {% plural %}
+        {{ counter }} entries have no pay rate recorded — ask an admin to set up your pay details.
+      {% endblocktranslate %}
+    </p>
+  {% endif %}
+</div>
+
+<div class="panel divide-y divide-gray-200">
+  {% for day in days %}
+    <section>
+      <h2 class="flex items-baseline gap-2 px-4 pt-3 pb-1">
+        <span class="text-sm font-bold tracking-tight {% if day.is_today %}text-crimson-700{% endif %}">
+          {{ day.date|date:"l" }}
+        </span>
+        <span class="eyebrow text-gray-500">{{ day.date|date:"j M" }}</span>
+        {% if day.minutes %}
+          <span class="eyebrow ml-auto tabular-nums text-gray-500">{{ day.minutes }} min</span>
+        {% endif %}
+      </h2>
+
+      {% if day.entries %}
+        <ul class="pb-2">
+          {% for entry in day.entries %}
+            <li class="flex items-start gap-4 px-4 py-3">
+              <span class="w-12 shrink-0 text-base font-semibold tabular-nums">
+                {% timezone entry.dojo.timezone %}{{ entry.started_at|time:"H:i" }}{% endtimezone %}
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate font-medium">{{ entry.get_category_display }}</span>
+                <span class="block text-sm text-gray-500">{{ entry.dojo.name }}</span>
+              </span>
+              <span class="shrink-0 text-right">
+                <span class="block text-sm font-medium tabular-nums">{{ entry.minutes }} min</span>
+                <span class="eyebrow {% if entry.status == 'approved' %}text-green-700{% else %}text-gray-400{% endif %}">
+                  {{ entry.get_status_display }}
+                </span>
+              </span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="px-4 pb-3 text-sm text-gray-400">{% translate "Nothing recorded." %}</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+</div>
+
+<p class="mt-4 text-xs text-gray-500">
+  {% translate "Entries are drafted automatically when a class's attendance is taken. Submitting and approving timesheets comes later; for now, tell an admin if something here is wrong." %}
+</p>
+{% endblock %}

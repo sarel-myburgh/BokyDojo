@@ -441,7 +441,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1313 passing, 52 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1329 passing, 52 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -1028,6 +1028,44 @@ OUTPUT
   - 22 tests in `tests/test_kiosk.py`, checked against four broken variants (lock
     not blocking, any student markable, exit without a password, a GET able to
     lock the device).
+- **`1.9.3`/`1.9.4` are done — Phase 1 has no code left in it.** A draft time
+  entry appears the moment a class's attendance is taken, and `/timesheet/` shows
+  the instructor their week.
+  - ⚠ **Completion happens in one place now.** `complete_session()` is called by
+    the roster save, the offline sync **and the kiosk** — the kiosk originally
+    completed nothing, so a class checked in entirely on the door stayed
+    `SCHEDULED` for ever and drafted no timesheet line. That was a gap I
+    introduced with `1.7` and found only when wiring `1.9.3` to it.
+  - ⚠ **The importer deliberately does not draft.** Historical attendance is a
+    record of the past, not a payroll event; two years of imported registers
+    would manufacture thousands of draft lines for classes taught by people who
+    have since left. Pinned by `test_the_importer_does_not_draft_timesheets`.
+  - ⚠ **Who is paid comes from `SessionInstructor`, never the template** — the
+    entire reason `1.4.8` split them. A substitute is paid for the class they
+    covered and the person covered for is not.
+  - ⚠ **An existing entry is never rewritten.** A late offline sync or a
+    corrected roster re-enters this code; resetting would discard an
+    instructor's correction or reopen an approved line.
+  - ⚠ **`TimeEntry.minutes` is derived**, recomputed in `save()` from
+    `started_at`/`ended_at` whenever the latter is set (`1.9.2`). Assigning
+    `minutes` directly is silently discarded — my first test did exactly that
+    and failed for the right reason. **Any future edit screen must edit the
+    times**, not the total.
+  - The rate is snapshotted at draft time, so February is not revalued when a
+    rate changes in March. An instructor with no `InstructorProfile` still gets
+    hours — the time was worked whether or not pay is configured — but no amount
+    is invented, and the screen says so.
+- ⚠⚠ **Seventh seed gap, plus a bug the seed only shows on the *second* run.**
+  `InstructorProfile` and `TimeEntry` were both ticked with zero rows in the
+  demo, so the timesheet rendered an empty week for everybody. The seed now
+  creates a mix of pay types and drafts against completed classes through the
+  real service (9 profiles, 120 entries).
+  ⚠ Worse: the photo consent added with `1.7` **broke `seed --clear`** —
+  `ConsentRecord` PROTECTs `Person` and was not in the clear list, so the first
+  reset after that change worked and every one after it failed. `ConsentRecord`
+  and `Document` are now cleared, and consent joins rank awards as append-only
+  data the disposable demo reset may hard-delete. **A clear list is only ever
+  exercised against data a previous run left behind; run the seed twice.**
 - **Best next tasks in Phase 1**, in dependency order:
   - Then the `1.7.x` kiosk (12 tasks, none started). `D1` should be settled
     before starting it, since it is what decides whether the kiosk is wanted.
@@ -1397,8 +1435,8 @@ Apply to every task, including delegated ones. Violating these is the most likel
 ### 1.9 Instructor time (basic)
 - [x] `1.9.1` `[DS]` `InstructorProfile` — pay type, rate, currency `§4.2`
 - [x] `1.9.2` `[DS]` `TimeEntry` model + `pay_rate_snapshot` `§4.8`
-- [ ] `1.9.3` `[DS]` Auto-draft entry when a session's attendance is completed
-- [ ] `1.9.4` `[DS]` Weekly timesheet view for the instructor
+- [x] `1.9.3` `[DS]` Auto-draft entry when a session's attendance is completed
+- [x] `1.9.4` `[DS]` Weekly timesheet view for the instructor
 
 ### 1.10 Import (acquisition tooling)
 - [x] `1.10.1` `[DS]` Generic CSV importer: upload → column mapping → preview → dry run `§12.10`

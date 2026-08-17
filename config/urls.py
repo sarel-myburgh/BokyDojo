@@ -14,6 +14,7 @@ from apps.identity import views as identity_views
 from apps.imports import views as import_views
 from apps.ranks import views as rank_views
 from apps.scheduling import views as scheduling_views
+from apps.staffing import views as staffing_views
 
 
 def healthz(request):
@@ -183,6 +184,8 @@ urlpatterns = [
         attendance_views.attendance_sync_view,
         name="attendance-sync",
     ),
+    # Instructor time — TODO 1.9.4
+    path("timesheet/", staffing_views.timesheet_view, name="timesheet"),
     # Reports — TODO 1.11.1/1.11.2/1.11.3/1.11.4
     path(
         "reports/attendance/",
