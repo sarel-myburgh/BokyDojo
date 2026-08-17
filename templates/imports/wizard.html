@@ -1,0 +1,232 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% comment %}
+  Import wizard — TODO 1.10.1 / 1.10.7.
+
+  One template, three states, driven by `step`: choose a file, map its columns,
+  read the result. They share a page because the operator is doing one job, and
+  because the mapping has to stay on screen next to the outcome that mapping
+  produced.
+
+  ⚠ The Commit button only ever appears beside a dry run's counts. There is no
+  path from upload straight to writing, deliberately — the preview's promise is
+  that it ran the real code, and it is worth nothing if it can be skipped.
+
+  No inline script: the CSP is strict-nonce, and everything here is a form.
+{% endcomment %}
+
+{% block title %}{% translate "Import students" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Import students" %}</h1>
+<p class="text-sm text-gray-500 mb-6">
+  {% translate "Upload a spreadsheet exported from your old system. Nothing is written until you have seen what it would do." %}
+</p>
+
+{# -- progress -------------------------------------------------------------- #}
+<ol class="mb-8 flex items-center gap-2 text-xs">
+  {% with s=step|default:"upload" %}
+  <li class="eyebrow {% if s == 'upload' %}text-crimson-700{% else %}text-gray-400{% endif %}">1. {% translate "File" %}</li>
+  <li class="text-gray-300" aria-hidden="true">→</li>
+  <li class="eyebrow {% if s == 'map' %}text-crimson-700{% else %}text-gray-400{% endif %}">2. {% translate "Columns" %}</li>
+  <li class="text-gray-300" aria-hidden="true">→</li>
+  <li class="eyebrow {% if s == 'result' %}text-crimson-700{% else %}text-gray-400{% endif %}">3. {% translate "Result" %}</li>
+  {% endwith %}
+</ol>
+
+{% if not step %}
+  {# -- step 1: the file --------------------------------------------------- #}
+  {% if dojos %}
+    <form method="post" enctype="multipart/form-data" class="panel px-5 py-5">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="upload">
+
+      <label for="dojo" class="eyebrow block mb-1">{% translate "Import into" %}</label>
+      <select id="dojo" name="dojo" required class="mb-4 w-full border border-gray-300 bg-white px-3 py-2 text-sm">
+        {% for choice in dojos %}
+          <option value="{{ choice.pk }}">{{ choice.name }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="file" class="eyebrow block mb-1">{% translate "CSV file" %}</label>
+      <input type="file" id="file" name="file" accept=".csv,text/csv" required
+             class="mb-1 w-full border border-gray-300 bg-white px-3 py-2 text-sm">
+      <p class="mb-4 text-xs text-gray-500">
+        {% translate "Comma, semicolon or tab separated. Exports from Excel are fine, including UTF-8 with a byte-order mark." %}
+      </p>
+
+      <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+        {% translate "Read the file" %}
+      </button>
+    </form>
+
+    <div class="mt-6 border-l-2 border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+      <p class="mb-1 font-medium">{% translate "Dates must be unambiguous." %}</p>
+      <p>
+        {% translate "Use YYYY-MM-DD. Day/month/year is also read. Month/day/year is refused, because 03/04/2015 cannot be told apart from the other order and guessing would move a birthday by a month." %}
+      </p>
+    </div>
+  {% else %}
+    <p class="border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
+      {% translate "You do not have permission to import into any dojo." %}
+    </p>
+  {% endif %}
+
+{% elif step == "map" %}
+  {# -- step 2: the columns ------------------------------------------------ #}
+  <p class="mb-4 text-sm">
+    <span class="font-medium">{{ filename }}</span>
+    <span class="text-gray-500">— {% blocktranslate count counter=row_count %}{{ counter }} row{% plural %}{{ counter }} rows{% endblocktranslate %}, {{ dojo.name }}</span>
+  </p>
+  <p class="mb-5 text-sm text-gray-500">
+    {% translate "We have guessed these from your column names. Check them — a wrong guess here is a wrong record later. Columns left unmapped are ignored." %}
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="dojo" value="{{ dojo.pk }}">
+
+    <div class="table-wrap panel mb-5">
+      <table class="w-full text-sm">
+        <thead class="border-b border-gray-200 text-left">
+          <tr>
+            <th class="eyebrow px-3 py-2">{% translate "Column in your file" %}</th>
+            <th class="eyebrow px-3 py-2">{% translate "Imports as" %}</th>
+            <th class="eyebrow px-3 py-2">{% translate "First rows" %}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for column in columns %}
+            <tr>
+              <td class="px-3 py-2 align-top font-medium">{{ column.header }}</td>
+              <td class="px-3 py-2 align-top">
+                <label class="sr-only" for="map-{{ forloop.counter }}">{{ column.header }}</label>
+                <select id="map-{{ forloop.counter }}" name="map:{{ column.header }}"
+                        class="w-full border border-gray-300 bg-white px-2 py-1 text-sm">
+                  <option value="">{% translate "— ignore —" %}</option>
+                  {% for field in fields %}
+                    <option value="{{ field }}" {% if column.guess == field %}selected{% endif %}>{{ field }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td class="px-3 py-2 align-top text-xs text-gray-500">
+                {% for value in column.samples %}
+                  <span class="block truncate">{{ value|default:"—" }}</span>
+                {% endfor %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="mb-4 text-xs text-gray-500">
+      {% blocktranslate with names=required_fields|join:", " %}Required: {{ names }}.{% endblocktranslate %}
+    </p>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button type="submit" name="action" value="preview"
+              class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+        {% translate "Preview — writes nothing" %}
+      </button>
+      <a href="{% url 'import-wizard' %}" class="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-gray-500 underline hover:text-gray-900">
+        {% translate "Start over" %}
+      </a>
+    </div>
+  </form>
+
+{% elif step == "result" %}
+  {# -- step 3: what happened, or what would ------------------------------- #}
+  {% if run.is_dry_run %}
+    <div class="mb-5 border-l-2 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <p class="font-medium">{% translate "Nothing has been written." %}</p>
+      <p>{% translate "This is what importing the file would do. The import really ran and was then rolled back, so these numbers are not an estimate." %}</p>
+    </div>
+  {% endif %}
+
+  <div class="panel mb-5 grid grid-cols-2 gap-px overflow-hidden bg-gray-200 sm:grid-cols-4">
+    <div class="bg-white px-4 py-3">
+      <p class="eyebrow mb-1">{% translate "Created" %}</p>
+      <p class="text-2xl font-bold tabular-nums">{{ run.created_count }}</p>
+    </div>
+    <div class="bg-white px-4 py-3">
+      <p class="eyebrow mb-1">{% translate "Updated" %}</p>
+      <p class="text-2xl font-bold tabular-nums">{{ run.updated_count }}</p>
+    </div>
+    <div class="bg-white px-4 py-3">
+      <p class="eyebrow mb-1">{% translate "Skipped" %}</p>
+      <p class="text-2xl font-bold tabular-nums text-gray-500">{{ run.skipped_count }}</p>
+    </div>
+    <div class="bg-white px-4 py-3">
+      <p class="eyebrow mb-1">{% translate "Errors" %}</p>
+      <p class="text-2xl font-bold tabular-nums {% if run.error_count %}text-red-700{% else %}text-gray-500{% endif %}">{{ run.error_count }}</p>
+    </div>
+  </div>
+
+  {% if run.error_count or run.skipped_count %}
+    <h2 class="mb-2 text-base font-bold tracking-tight">{% translate "Rows needing attention" %}</h2>
+    <p class="mb-3 text-sm text-gray-500">
+      {% translate "Row numbers match your spreadsheet, counting the header as row 1." %}
+    </p>
+    <div class="table-wrap panel mb-5">
+      <table class="w-full text-sm">
+        <thead class="border-b border-gray-200 text-left">
+          <tr>
+            <th class="eyebrow px-3 py-2">{% translate "Row" %}</th>
+            <th class="eyebrow px-3 py-2">{% translate "Outcome" %}</th>
+            <th class="eyebrow px-3 py-2">{% translate "Why" %}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for outcome in outcomes %}
+            {% if outcome.outcome == "error" or outcome.outcome == "skipped" %}
+              <tr>
+                <td class="px-3 py-2 tabular-nums">{{ outcome.row_number }}</td>
+                <td class="px-3 py-2">
+                  <span class="eyebrow {% if outcome.outcome == 'error' %}text-red-700{% else %}text-gray-500{% endif %}">{{ outcome.outcome }}</span>
+                </td>
+                <td class="px-3 py-2 text-gray-600">{{ outcome.detail }}</td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if outcomes_truncated %}
+      <p class="mb-5 text-xs text-gray-500">
+        {% blocktranslate %}Showing the first 200 rows. Download the report for all of them.{% endblocktranslate %}
+      </p>
+    {% endif %}
+  {% endif %}
+
+  <div class="flex flex-wrap items-center gap-2">
+    {% if run.is_dry_run %}
+      <form method="post" class="contents">
+        {% csrf_token %}
+        <input type="hidden" name="dojo" value="{{ dojo.pk }}">
+        {% for source, target in mapping.items %}
+          <input type="hidden" name="map:{{ source }}" value="{{ target }}">
+        {% endfor %}
+        <button type="submit" name="action" value="commit"
+                class="bg-crimson-600 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-crimson-700">
+          {% translate "Import for real" %}
+        </button>
+      </form>
+    {% endif %}
+    <a href="{% url 'import-report' run.pk %}"
+       class="border border-gray-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-600 active:bg-gray-100">
+      {% translate "Download report" %}
+    </a>
+    <a href="{% url 'import-wizard' %}" class="px-3 py-2 text-xs font-semibold uppercase tracking-widest text-gray-500 underline hover:text-gray-900">
+      {% if run.is_dry_run %}{% translate "Start over" %}{% else %}{% translate "Import another file" %}{% endif %}
+    </a>
+  </div>
+
+  {% if not run.is_dry_run %}
+    <p class="mt-5 text-sm text-gray-500">
+      {% translate "Re-importing a corrected copy of this file will update these students rather than duplicating them." %}
+    </p>
+  {% endif %}
+{% endif %}
+{% endblock %}

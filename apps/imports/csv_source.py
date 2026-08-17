@@ -16,6 +16,7 @@ their file has no name column when it plainly does.
 from __future__ import annotations
 
 import csv
+import dataclasses
 import io
 
 from django.core.exceptions import ValidationError
@@ -88,8 +89,24 @@ def delimiter_of(text: str) -> str:
     return best if counts[best] else ","
 
 
-def read_table(raw: bytes) -> tuple[list[str], list[dict[str, str]]]:
-    """Return ``(headers, rows)``, rows keyed by header.
+@dataclasses.dataclass(frozen=True)
+class SourceRow:
+    """One data row, and where it actually sits in the operator's file.
+
+    ⚠ ``line_number`` is the **physical** line, not the index among data rows.
+    Blank lines are skipped when building this list, so the two diverge the
+    moment a file contains one — and Excel adds them freely. Reporting the index
+    instead sends somebody to fix row 4 and they find an empty line, while the
+    row that actually failed is on line 5. Found by running a realistic export,
+    not by a test.
+    """
+
+    line_number: int
+    values: dict[str, str]
+
+
+def read_table(raw: bytes) -> tuple[list[str], list[SourceRow]]:
+    """Return ``(headers, rows)``, each row keyed by header and carrying its line.
 
     Headers are stripped of surrounding whitespace; values are not touched here,
     because trimming is a per-field decision the importer makes (a trailing space
@@ -117,7 +134,7 @@ def read_table(raw: bytes) -> tuple[list[str], list[dict[str, str]]]:
             % {"names": ", ".join(sorted(duplicates))}
         )
 
-    rows: list[dict[str, str]] = []
+    rows: list[SourceRow] = []
     for values in reader:
         if not any(value.strip() for value in values):
             continue  # a blank line, which Excel adds freely at the end
@@ -129,7 +146,15 @@ def read_table(raw: bytes) -> tuple[list[str], list[dict[str, str]]]:
         # zip stops at the shorter side, so a short row simply lacks those keys
         # and a long one loses its extras — both are reported per row by the
         # importer rather than failing the whole file.
-        rows.append(dict(zip(headers, values, strict=False)))
+        #
+        # reader.line_num counts physical lines and accounts for newlines inside
+        # quoted fields, which a running counter here would get wrong.
+        rows.append(
+            SourceRow(
+                line_number=reader.line_num,
+                values=dict(zip(headers, values, strict=False)),
+            )
+        )
 
     if not rows:
         raise CsvRejected(_("That file has a header row but no data."))

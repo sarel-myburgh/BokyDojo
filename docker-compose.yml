@@ -64,6 +64,16 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      # Static only, read-only. Without this Caddy's /static/* handler roots at a
+      # path that does not exist in its container, every stylesheet and script
+      # 404s in production, and the service worker's cache.addAll rejects on
+      # install — which silently kills the 1.6.x offline queue.
+      - static:/app/staticfiles:ro
+      # ⚠ The `media` volume is deliberately NOT mounted here, and mounting it is
+      # a data breach rather than a fix. See the Caddyfile: MEDIA_ROOT holds
+      # consent documents, medical attachments and photographs of children, all
+      # of which Django serves through permission-checked, audited views. A
+      # file_server over them answers to nobody.
     depends_on:
       - web
     restart: unless-stopped

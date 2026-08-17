@@ -165,12 +165,13 @@ def run(
     results: list[RowResult] = []
 
     def process_all() -> None:
-        for offset, raw_row in enumerate(rows):
-            # +2: the header occupies spreadsheet row 1, so the first data row
-            # is row 2. Operators read these numbers against their own file.
-            row_number = offset + 2
+        for source_row in rows:
+            # ⚠ The row's own physical line, not its index among data rows. A
+            # blank line anywhere above it makes those two differ, and the
+            # operator reads this number against their own spreadsheet.
+            row_number = source_row.line_number
             try:
-                row = apply_mapping(raw_row, mapping)
+                row = apply_mapping(source_row.values, mapping)
                 source_key = importer.natural_key(row)
                 if not source_key:
                     results.append(

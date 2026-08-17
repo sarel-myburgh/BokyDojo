@@ -123,7 +123,7 @@ def test_a_utf8_bom_does_not_corrupt_the_first_header():
     headers, rows = csv_source.read_table(raw)
 
     assert headers[0] == "First name"
-    assert rows[0]["First name"] == "Bopha"
+    assert rows[0].values["First name"] == "Bopha"
 
 
 def test_a_cp1252_export_is_read_rather_than_refused():
@@ -131,7 +131,7 @@ def test_a_cp1252_export_is_read_rather_than_refused():
 
     _headers, rows = csv_source.read_table(raw)
 
-    assert rows[0]["First name"] == "René"
+    assert rows[0].values["First name"] == "René"
 
 
 def test_semicolon_delimited_european_export_is_understood():
@@ -140,7 +140,7 @@ def test_semicolon_delimited_european_export_is_understood():
     headers, rows = csv_source.read_table(raw)
 
     assert headers == ["First name", "Last name"]
-    assert rows[0]["Last name"] == "Chan"
+    assert rows[0].values["Last name"] == "Chan"
 
 
 def test_a_blank_line_mid_file_does_not_break_delimiter_detection():
@@ -158,7 +158,7 @@ def test_a_blank_line_mid_file_does_not_break_delimiter_detection():
 
     assert headers == ["First name", "Last name", "City"]
     assert len(rows) == 2
-    assert rows[1]["City"] == "Siem Reap"
+    assert rows[1].values["City"] == "Siem Reap"
 
 
 def test_delimiter_detection_falls_back_to_counting_the_header():
@@ -472,6 +472,23 @@ def test_row_numbers_match_the_spreadsheet(actor, dojo):
     run = do_import(actor, dojo)
 
     assert [outcome["row_number"] for outcome in run.outcomes] == [2, 3]
+
+
+def test_a_blank_line_does_not_shift_the_reported_row_numbers(actor, dojo):
+    """⚠ The bug that only running it found.
+
+    Blank lines are skipped when building the row list, so the index among data
+    rows stops matching the line in the file. The report and the wizard both
+    promise these numbers match the operator's spreadsheet; reporting the index
+    sends them to a blank line while the row that failed is further down.
+    """
+    text = "Student ID,First name,DOB\r\nS1,Bopha,2015-03-04\r\n\r\nS2,Sokha,rubbish\r\n"
+    mapping = {"Student ID": "external_id", "First name": "given_name", "DOB": "date_of_birth"}
+
+    run = do_import(actor, dojo, text=text, mapping=mapping)
+
+    failed = next(o for o in run.outcomes if o["outcome"] == "error")
+    assert failed["row_number"] == 4, "Sokha is on line 4 of the file, not line 3"
 
 
 # -- scoping and permission ---------------------------------------------------

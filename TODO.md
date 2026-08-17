@@ -441,7 +441,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1236 passing, 52 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1263 passing, 52 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -866,12 +866,65 @@ OUTPUT
     semicolons, a 31-February date, a blank line, siblings): first run 3 created
     / 1 errored, second run **0 created / 3 updated**, one guardian Person with
     two links.
+- 🔒 **Two deployment findings, neither reachable from the Python suite.** Found
+  while deciding where to stage an uploaded roster. `tests/test_deployment_config.py`
+  now guards both; they are text assertions over config, which is weak, and the
+  alternative was no test at all.
+  1. ⚠ **Static files 404 in a compose deployment.** Caddy's `handle /static/*`
+     roots at `/app/staticfiles`, and the caddy service **never mounted that
+     volume** — its only mounts were the Caddyfile and its own data. There is no
+     WhiteNoise and Django does not serve static with `DEBUG=False`, so
+     production ships unstyled *and* the service worker's `cache.addAll` rejects
+     on install, silently killing the `1.6.x` offline queue. This is the same
+     failure already recorded at the Django layer, at the deployment layer.
+     Fixed by mounting `static:/app/staticfiles:ro`.
+  2. ⚠ **`handle /media/*` was a loaded gun.** It served `/app/media` with a bare
+     `file_server`. It was **not** exploitable as shipped — caddy had no media
+     mount either, so it 404ed — but the obvious fix for finding 1 is to add
+     *both* volumes, and that one keystroke turns `MEDIA_ROOT` into a public,
+     unauthenticated file server for consent documents, medical attachments and
+     photographs of children. Django serves every one of those through
+     permission-checked, audited views; a `file_server` answers to nobody, and
+     it would make `1.1.14`'s "revocation immediately blocks direct document
+     reads" untrue for anyone who ever learned a UUID. The handler is removed
+     and both files carry a comment saying why it must not come back. If Django
+     is ever too slow at serving files, the answer is an internal redirect where
+     the app still authorises each request — never a public root.
+- **The import wizard is done — `1.10.1` and `1.10.7` ticked.** `/imports/`:
+  upload → map → preview → commit → download the report.
+  - ⚠ **There is no path from upload straight to writing.** The preview's whole
+    promise is that it ran the real code and rolled it back, and it is worth
+    nothing if it can be skipped. `test_there_is_no_path_from_upload_straight_to_writing`
+    is the load-bearing test in that file.
+  - **Columns are guessed, never decided.** `guessing.py` matched 6 of 7 headers
+    from a Gymdesk-shaped export (`Member ID`, `First Name`, `Surname`,
+    `D.O.B.`, `Parent Email`, `Relationship`) and correctly ignored `Notes`.
+    Every guess is an editable select shown beside the operator's own first
+    rows. ⚠ Each field is claimed at most once and exact matches beat loose
+    ones — the mapping validator refuses two columns claiming one field, so a
+    greedy guesser would hand the operator an error before they touched
+    anything.
+  - The staged upload lives under `MEDIA_ROOT` with a name this code generates,
+    is tied to the session *and* re-checked against its organisation, expires
+    after two hours, and is deleted the moment the import commits. That is only
+    safe because of the media finding above.
+  - ⚠ **Row numbers were wrong and only running it showed that.** Blank lines
+    are skipped when building the row list, so the index among data rows stopped
+    matching the line in the file: a failing row on line 5 was reported as row 4,
+    and the operator opening their spreadsheet to fix it would find a blank line.
+    Both the wizard and the report promise these numbers match the spreadsheet.
+    `csv_source.SourceRow` now carries `reader.line_num` — the physical line,
+    which also handles newlines inside quoted fields.
+  - The report download goes through `csv_report_response`, so it is audited and
+    formula-neutralised — which matters more here than on any other export,
+    because every value in it came out of somebody else's file.
+  - 19 tests in `tests/test_import_wizard.py`. ⚠ One of them documents a trap
+    worth remembering: `b"\x00\x01\x02"` is **valid UTF-8** and cp1252 takes it
+    too, so it does not test a decode failure at all — `0x81`/`0x8d` do.
 - **Best next tasks in Phase 1**, in dependency order:
-  - **The import web wizard** (`1.10.1` + `1.10.7`) — one screen serving both:
-    upload → map columns → preview the dry run → commit → download the report.
-    The engine underneath is done and tested.
-  - Then `1.10.4` attendance and `1.10.5` rank history — both reference students,
-    so they needed `1.10.3` first — and `1.10.6` competitor presets.
+  - `1.10.4` attendance and `1.10.5` rank history — both reference students, so
+    they needed `1.10.3` first — and `1.10.6` competitor presets, for which
+    `guessing.SYNONYMS` is the groundwork.
   - Then the `1.7.x` kiosk (12 tasks, none started). `D1` should be settled
     before starting it, since it is what decides whether the kiosk is wanted.
   - `D10` still blocks the `1.12` exit gate regardless of code. Scheduling still
@@ -1222,13 +1275,13 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `1.9.4` `[DS]` Weekly timesheet view for the instructor
 
 ### 1.10 Import (acquisition tooling)
-- [ ] `1.10.1` `[DS]` Generic CSV importer: upload → column mapping → preview → dry run `§12.10` *(engine, mapping, preview and dry run done and usable via `manage.py import_csv`; the **web wizard** is what remains)*
+- [x] `1.10.1` `[DS]` Generic CSV importer: upload → column mapping → preview → dry run `§12.10`
 - [x] `1.10.2` ⚠ Idempotent re-import (fix and re-run, don't duplicate)
 - [x] `1.10.3` `[DS]` Import students + guardians
 - [ ] `1.10.4` `[DS]` Import historical attendance
 - [ ] `1.10.5` `[DS]` Import rank history
 - [ ] `1.10.6` `[DS]` Named presets for common competitor export formats
-- [ ] `1.10.7` `[DS]` Import report: created / updated / skipped / errored, downloadable *(report built and written to CSV by `--report`; **downloadable from the browser** waits on the wizard)*
+- [x] `1.10.7` `[DS]` Import report: created / updated / skipped / errored, downloadable
 
 ### 1.11 Core reports
 - [x] `1.11.1` `[DS]` Attendance summary by dojo / class / period

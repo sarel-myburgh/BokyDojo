@@ -19,11 +19,25 @@
         file_server
     }
 
-    # Serve media files
-    handle /media/* {
-        root * /app/media
-        file_server
-    }
+    # ⚠ There is deliberately NO /media/* file_server here, and adding one back
+    # is a data breach rather than an optimisation.
+    #
+    # Everything under MEDIA_ROOT is uploaded personal data: consent documents,
+    # signed waivers, medical attachments and photographs of children. Django
+    # serves all of it through permission-checked, audited views
+    # (document_download_view, student_photo_view) which enforce role, dojo
+    # scope and — for photographs — current consent.
+    #
+    # A file_server on this path bypasses every one of those. It would mean that
+    # anyone holding a document's UUID, which travels in browser history,
+    # referrer headers, server logs and shared links, could fetch the file
+    # unauthenticated and for ever — including after consent was revoked or the
+    # member left. That makes the 1.1.14 claim "revocation immediately blocks
+    # direct document reads" untrue.
+    #
+    # If Django proves too slow at serving files, the answer is an internal
+    # redirect (Caddy `handle` + `internal`, or X-Accel-Redirect) where the app
+    # still authorises every request — not a public root.
 
     # Security headers
     header {

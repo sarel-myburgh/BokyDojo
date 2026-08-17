@@ -10,6 +10,7 @@ from apps.identity import consent_views, guardian_views, photo_views, student_vi
 from apps.identity import password_reset as password_reset_views
 from apps.identity import setup as setup_views
 from apps.identity import views as identity_views
+from apps.imports import views as import_views
 from apps.ranks import views as rank_views
 from apps.scheduling import views as scheduling_views
 
@@ -150,6 +151,13 @@ urlpatterns = [
         "documents/<uuid:document_id>/download/",
         consent_views.document_download_view,
         name="document-download",
+    ),
+    # Imports — TODO 1.10.1/1.10.7
+    path("imports/", import_views.import_wizard_view, name="import-wizard"),
+    path(
+        "imports/<uuid:run_id>/report.csv",
+        import_views.import_report_view,
+        name="import-report",
     ),
     # Scheduling — TODO 1.4.9
     path("calendar/", scheduling_views.calendar_view, name="calendar"),
