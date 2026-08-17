@@ -26,11 +26,27 @@ from apps.core.reports import csv_report_response
 from apps.identity.models import Dojo
 from apps.identity.permissions import ROLE_ACTIONS, Action, PermissionDenied
 
-from . import csv_source, engine, guessing, staging
-from .models import ImportRun
+from . import csv_source, engine, guessing, presets, staging
+from .attendance import AttendanceImporter, require_attendance_import_permission
+from .models import ImportKind, ImportRun
+from .ranks import RankImporter, require_rank_import_permission
 from .students import StudentImporter, require_import_permission
 
-IMPORTERS = {"students": StudentImporter}
+#: kind → (importer class, permission check). The permission differs per kind
+#: because the powers differ: attendance needs the retroactive edit right, rank
+#: history needs RANK_AWARD, and neither is implied by being allowed to create
+#: people.
+IMPORTERS = {
+    ImportKind.STUDENTS: (StudentImporter, require_import_permission),
+    ImportKind.ATTENDANCE: (AttendanceImporter, require_attendance_import_permission),
+    ImportKind.RANKS: (RankImporter, require_rank_import_permission),
+}
+
+
+def _kind_of(request) -> str:
+    raw = request.POST.get("kind") or request.GET.get("kind") or ImportKind.STUDENTS
+    return raw if raw in IMPORTERS else ImportKind.STUDENTS
+
 
 #: How many of the operator's own rows to show beside the mapping controls.
 #: Enough to recognise a mis-mapped column, few enough to stay on one screen.
@@ -41,7 +57,7 @@ def _holds_anywhere(actor, action: str) -> bool:
     return any(action in ROLE_ACTIONS.get(role, set()) for role, _scope, _dojo in actor.roles)
 
 
-def _importable_dojos(actor):
+def _importable_dojos(actor, check=require_import_permission):
     """Dojos this actor may actually import into.
 
     ⚠ Filtered by the same permission the import itself requires, not merely by
@@ -51,14 +67,14 @@ def _importable_dojos(actor):
     allowed = []
     for dojo in Dojo.objects.for_actor(actor).select_related("organization").order_by("name"):
         try:
-            require_import_permission(actor, dojo)
+            check(actor, dojo)
         except PermissionDenied:
             continue
         allowed.append(dojo)
     return allowed
 
 
-def _resolve_dojo(actor, raw):
+def _resolve_dojo(actor, raw, check=require_import_permission):
     if not raw:
         return None
     try:
@@ -68,7 +84,7 @@ def _resolve_dojo(actor, raw):
     dojo = Dojo.objects.for_actor(actor).select_related("organization").filter(pk=dojo_id).first()
     if dojo is None:
         raise Http404("no such dojo")
-    require_import_permission(actor, dojo)
+    check(actor, dojo)
     return dojo
 
 
@@ -108,13 +124,21 @@ def import_wizard_view(request) -> HttpResponse:
     if not _holds_anywhere(actor, Action.PERSON_CREATE):
         raise PermissionDenied(action=Action.PERSON_CREATE, actor=actor)
 
-    dojos = _importable_dojos(actor)
-    importer = StudentImporter()
+    kind = _kind_of(request)
+    importer_class, permission_check = IMPORTERS[kind]
+    importer = importer_class()
+    dojos = _importable_dojos(actor, permission_check)
     context = {
         "dojos": dojos,
+        "kind": kind,
+        "kinds": [
+            {"value": value, "label": label, "selected": value == kind}
+            for value, label in ImportKind.choices
+        ],
         "fields": sorted(importer.fields),
         "required_fields": sorted(field for field, req in importer.fields.items() if req),
         "preview_rows": PREVIEW_ROWS,
+        "presets": presets.for_kind(kind),
     }
 
     if request.method == "GET":
@@ -125,9 +149,9 @@ def import_wizard_view(request) -> HttpResponse:
 
     # -- step 1: a file arrives ---------------------------------------------
     if action == "upload":
-        dojo = _resolve_dojo(actor, request.POST.get("dojo"))
+        dojo = _resolve_dojo(actor, request.POST.get("dojo"), permission_check)
         if dojo is None:
-            messages.error(request, _("Choose which dojo these students belong to."))
+            messages.error(request, _("Choose which dojo this file belongs to."))
             return render(request, "imports/wizard.html", context)
 
         uploaded = request.FILES.get("file")
@@ -151,8 +175,24 @@ def import_wizard_view(request) -> HttpResponse:
             filename=uploaded.name,
             organization_id=dojo.organization_id,
         )
-        guessed = guessing.guess(headers, importer.fields)
+        chosen = presets.by_key(request.POST.get("preset") or "")
+        detected = chosen or presets.detect(headers, kind)
+        if detected is not None and detected.fingerprint:
+            guessed = detected.mapping_for(headers)
+        else:
+            detected = None
+            # The kind's baseline column knowledge. For attendance and ranks this
+            # is the only thing that knows what "Class" or "Belt" mean — the
+            # name-based guesser only carries student fields.
+            baseline = presets.generic_for(kind)
+            guessed = baseline.mapping_for(headers) if baseline else {}
+        # Whatever is still unmapped gets guessed by name, so an export with an
+        # extra or oddly-spelled column is not silently dropped.
+        for header, field in guessing.guess(headers, importer.fields).items():
+            if header not in guessed and field not in guessed.values():
+                guessed[header] = field
         context.update(
+            detected_preset=detected,
             step="map",
             dojo=dojo,
             headers=headers,
@@ -165,7 +205,7 @@ def import_wizard_view(request) -> HttpResponse:
 
     # -- steps 2 and 3: preview, then commit --------------------------------
     if action in ("preview", "commit"):
-        dojo = _resolve_dojo(actor, request.POST.get("dojo"))
+        dojo = _resolve_dojo(actor, request.POST.get("dojo"), permission_check)
         if dojo is None:
             raise Http404("no dojo")
 

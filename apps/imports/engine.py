@@ -71,6 +71,21 @@ class Importer:
     #: field name → required?
     fields: dict[str, bool] = {}
 
+    def prepare(self, rows, mapping: dict[str, str]):
+        """Reorder or filter rows before they are applied. Identity by default.
+
+        ⚠ Receives the mapping, because rows at this point are still keyed by the
+        *source file's* column names. An implementation that read importer field
+        names here would silently match nothing and sort nothing — which is
+        exactly what the first version of the rank importer did.
+
+        ⚠ Reordering is safe because each row carries its own line number and the
+        engine sorts outcomes back into file order before storing them. Rank
+        history needs this: the promotion service is forward-only, so a file
+        listing newest-first would reject everything after the first row.
+        """
+        return rows
+
     def natural_key(self, row: dict[str, str]) -> str:
         """A stable identity for this row, for idempotent re-import."""
         raise NotImplementedError
@@ -163,6 +178,9 @@ def run(
 
     organization_id = dojo.organization_id
     results: list[RowResult] = []
+    # An importer may need a different application order from the file's. The
+    # report is put back into file order at the end.
+    rows = importer.prepare(list(rows), mapping)
 
     def process_all() -> None:
         for source_row in rows:
@@ -226,6 +244,10 @@ def run(
                 raise _RollBackDryRun
     except _RollBackDryRun:
         pass
+
+    # ⚠ Back into the operator's order. They read this against their own file,
+    # and an importer that reordered internally must not reorder the report.
+    results.sort(key=lambda result: result.row_number)
 
     tally = {
         outcome: sum(1 for result in results if result.outcome == outcome)

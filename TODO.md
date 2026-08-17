@@ -441,7 +441,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1263 passing, 52 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1289 passing, 52 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -921,10 +921,65 @@ OUTPUT
   - 19 tests in `tests/test_import_wizard.py`. ⚠ One of them documents a trap
     worth remembering: `b"\x00\x01\x02"` is **valid UTF-8** and cp1252 takes it
     too, so it does not test a decode failure at all — `0x81`/`0x8d` do.
+- **`1.10` is complete — attendance, rank history and presets all landed.**
+  ⚠ **Import is now the only Phase 1 block finished end to end; the `1.7.x`
+  kiosk is all that remains.**
+  - ⚠ **Both new importers go through the existing service, not the tables.**
+    Attendance calls `mark_attendance` — which is why an imported row carries
+    `Method.IMPORT`, gets the enrolment/visiting rule, the row lock and the
+    retroactive permission check, and is idempotent for free through
+    `client_generated_id`. Rank history calls `promote_student`, which owns the
+    forward-only chronology, the derived current rank, the examiner ceiling and
+    the strict audit. A second, quieter set of rules for the most consequential
+    record the system keeps was never an option.
+  - ⚠ **Sessions are never invented.** A row naming a class on a date with no
+    session is an error. Attendance is evidence *about* a class; a class conjured
+    from an attendance file is evidence of nothing and would corrupt every report
+    built on session counts.
+  - ⚠ **Ambiguity is refused three times over**: two students of the same name,
+    two classes on the same day with no class column, and one rank name on two
+    ladders. Two students called Sokha Chan is ordinary in a dojo of two hundred,
+    and attaching a grading to the wrong child is not recoverable downstream.
+  - ⚠ **The session is matched on the dojo's own local date**, the same trap
+    `1.4.9` exists for: a 06:00 Phnom Penh class is 23:00 the previous day in
+    UTC, and matching on the stored date files Tuesday's register against Monday.
+  - ⚠ **Rank rows are sorted chronologically before being applied**, because the
+    promotion service is forward-only and most systems export newest-first. The
+    `prepare()` hook does it; the report is sorted back into file order, since
+    `SourceRow` carries the operator's line number separately.
+    ⚠ **The first version of that sort silently did nothing** — `prepare()` runs
+    *before* the mapping, so it was reading `awarded_on` off rows still keyed by
+    the file's own column names. It now takes the mapping. A hook that reads
+    importer field names from a raw row matches nothing and sorts nothing.
+  - ⚠ **An examiner ceiling constrains what can be imported.** That is the
+    control working: someone who may not award a 3rd dan must not be able to
+    award one by uploading it. An org admin with no `InstructorProfile` has no
+    ceiling, which is the ordinary migration case.
+  - ⚠ **Re-importing rank history reports `skipped`, not `updated`.** Awards are
+    append-only, so a re-import cannot rewrite one, and saying "updated" would
+    be a lie about what happened.
+  - ⚠ **Presets are honest about being unverified.** `1.10.6` asks for presets
+    for "the main competitors' export formats"; no real export from any of them
+    was available, so the Gymdesk and Zen Planner entries are built from ordinary
+    column names, carry `verified = False`, and the wizard labels them as a
+    starting point. **They should not be considered done for a given product
+    until somebody runs a genuine export through one and sets `verified = True`.**
+    Shipping a preset that is trusted and guessed is worse than shipping none.
+  - ⚠ **Nothing guessed attendance or rank columns at first** — found by walking
+    the wizard, not by a test. The name-based guesser only knows student fields,
+    so an attendance file arrived with only "Status" mapped. The fingerprint-less
+    generic presets hold that knowledge and are now applied as each kind's
+    baseline, topped up by the name guesser.
+  - 22 tests in `tests/test_import_history.py`, checked against five broken
+    variants. ⚠ One "survivor" turned out to be **my mutation script failing to
+    match the source**, not a weak test — a mutation harness that silently
+    no-ops gives exactly the false confidence a test passing for the wrong
+    reason does. Check the mutation applied before believing it survived.
+  - Walked end to end in the running app: a Gymdesk-shaped student file, then
+    attendance against a real past session resolved by local date and class name,
+    then a newest-first grading history — 2/2/2 created, Rithy's current rank
+    correctly the later award.
 - **Best next tasks in Phase 1**, in dependency order:
-  - `1.10.4` attendance and `1.10.5` rank history — both reference students, so
-    they needed `1.10.3` first — and `1.10.6` competitor presets, for which
-    `guessing.SYNONYMS` is the groundwork.
   - Then the `1.7.x` kiosk (12 tasks, none started). `D1` should be settled
     before starting it, since it is what decides whether the kiosk is wanted.
   - `D10` still blocks the `1.12` exit gate regardless of code. Scheduling still
@@ -1278,9 +1333,9 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.10.1` `[DS]` Generic CSV importer: upload → column mapping → preview → dry run `§12.10`
 - [x] `1.10.2` ⚠ Idempotent re-import (fix and re-run, don't duplicate)
 - [x] `1.10.3` `[DS]` Import students + guardians
-- [ ] `1.10.4` `[DS]` Import historical attendance
-- [ ] `1.10.5` `[DS]` Import rank history
-- [ ] `1.10.6` `[DS]` Named presets for common competitor export formats
+- [x] `1.10.4` `[DS]` Import historical attendance
+- [x] `1.10.5` `[DS]` Import rank history
+- [x] `1.10.6` `[DS]` Named presets for common competitor export formats
 - [x] `1.10.7` `[DS]` Import report: created / updated / skipped / errored, downloadable
 
 ### 1.11 Core reports

@@ -19,7 +19,7 @@
 {% block title %}{% translate "Import students" %} — DojoMaster{% endblock %}
 
 {% block content %}
-<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Import students" %}</h1>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Import" %}</h1>
 <p class="text-sm text-gray-500 mb-6">
   {% translate "Upload a spreadsheet exported from your old system. Nothing is written until you have seen what it would do." %}
 </p>
@@ -41,6 +41,29 @@
     <form method="post" enctype="multipart/form-data" class="panel px-5 py-5">
       {% csrf_token %}
       <input type="hidden" name="action" value="upload">
+
+      <label for="kind" class="eyebrow block mb-1">{% translate "What is in the file" %}</label>
+      <select id="kind" name="kind" class="mb-1 w-full border border-gray-300 bg-white px-3 py-2 text-sm">
+        {% for choice in kinds %}
+          <option value="{{ choice.value }}" {% if choice.selected %}selected{% endif %}>{{ choice.label }}</option>
+        {% endfor %}
+      </select>
+      <p class="mb-4 text-xs text-gray-500">
+        {% translate "Students first — attendance and grading history both refer to students that must already exist." %}
+      </p>
+
+      {% if presets %}
+        <label for="preset" class="eyebrow block mb-1">{% translate "Came from" %}</label>
+        <select id="preset" name="preset" class="mb-1 w-full border border-gray-300 bg-white px-3 py-2 text-sm">
+          <option value="">{% translate "Detect automatically" %}</option>
+          {% for preset in presets %}
+            <option value="{{ preset.key }}">{{ preset.label }}{% if not preset.verified %} — {% translate "unverified" %}{% endif %}</option>
+          {% endfor %}
+        </select>
+        <p class="mb-4 text-xs text-gray-500">
+          {% translate "Presets marked unverified were built from ordinary column names, not from a real export of that product. Check the mapping on the next screen either way." %}
+        </p>
+      {% endif %}
 
       <label for="dojo" class="eyebrow block mb-1">{% translate "Import into" %}</label>
       <select id="dojo" name="dojo" required class="mb-4 w-full border border-gray-300 bg-white px-3 py-2 text-sm">
@@ -86,6 +109,16 @@
   <form method="post">
     {% csrf_token %}
     <input type="hidden" name="dojo" value="{{ dojo.pk }}">
+    <input type="hidden" name="kind" value="{{ kind }}">
+
+    {% if detected_preset %}
+      <div class="mb-4 border-l-2 {% if detected_preset.verified %}border-gray-400 bg-gray-50 text-gray-600{% else %}border-amber-500 bg-amber-50 text-amber-900{% endif %} px-4 py-3 text-sm">
+        {% blocktranslate with name=detected_preset.label %}Recognised as: {{ name }}.{% endblocktranslate %}
+        {% if not detected_preset.verified %}
+          {% translate "This preset has not been checked against a real export from that product, so treat it as a starting point and confirm the columns below." %}
+        {% endif %}
+      </div>
+    {% endif %}
 
     <div class="table-wrap panel mb-5">
       <table class="w-full text-sm">
@@ -205,6 +238,7 @@
       <form method="post" class="contents">
         {% csrf_token %}
         <input type="hidden" name="dojo" value="{{ dojo.pk }}">
+        <input type="hidden" name="kind" value="{{ kind }}">
         {% for source, target in mapping.items %}
           <input type="hidden" name="map:{{ source }}" value="{{ target }}">
         {% endfor %}

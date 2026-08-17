@@ -19,9 +19,15 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.core.scoping import Actor, allow_unscoped
 from apps.identity.models import Dojo, Person, RoleAssignment
 from apps.imports import csv_source, engine
+from apps.imports.attendance import AttendanceImporter, require_attendance_import_permission
+from apps.imports.ranks import RankImporter, require_rank_import_permission
 from apps.imports.students import StudentImporter, require_import_permission
 
-IMPORTERS = {"students": StudentImporter}
+IMPORTERS = {
+    "students": (StudentImporter, require_import_permission),
+    "attendance": (AttendanceImporter, require_attendance_import_permission),
+    "ranks": (RankImporter, require_rank_import_permission),
+}
 
 
 class Command(BaseCommand):
@@ -90,13 +96,14 @@ class Command(BaseCommand):
             else frozenset(a.dojo_id for a in assignments if a.dojo_id),
             roles=frozenset((a.role, a.scope_type, a.dojo_id) for a in assignments),
         )
-        require_import_permission(actor, dojo)
+        importer_class, permission_check = IMPORTERS[options["kind"]]
+        permission_check(actor, dojo)
 
         headers, rows = csv_source.read_table(path.read_bytes())
         self.stdout.write(f"{len(rows)} data row(s), columns: {', '.join(headers)}")
 
         import_run = engine.run(
-            importer=IMPORTERS[options["kind"]](),
+            importer=importer_class(),
             rows=rows,
             mapping=mapping,
             actor=actor,
