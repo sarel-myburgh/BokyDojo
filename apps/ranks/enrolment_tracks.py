@@ -15,6 +15,12 @@ same art at two dojos would lose their grade history the moment one enrolment
 closed. Ending a track is a deliberate act (`StudentStyleTrack.Status.ENDED`),
 and it stays that way.
 
+⚠ **One track per (student, style), so the first enrolment decides the belts.**
+Somebody training Goju Ryu at two dojos that use different syllabuses holds one
+Goju Ryu grade, not two — which is right, because a grade is a grade — but it
+means the ladder they are on is whichever dojo enrolled them first. Moving them
+is a deliberate act on their record, not something re-enrolling silently redoes.
+
 ⚠ **A track with no ladder is a real, honest state.** Unranked styles never get
 one. Ranked styles get one only when it can be *known* — a style with a single
 ladder, or an age that decides between the junior and adult ladders. Guessing
@@ -39,8 +45,13 @@ def junior_age_limit(organization_id) -> int:
     return int(resolve(JUNIOR_LADDER_MAX_AGE.key, ScopeChain(organization_id=organization_id)))
 
 
-def choose_ladder(style: Style, *, student, organization_id) -> RankLadder | None:
+def choose_ladder(style: Style, *, student, organization_id, dojo=None) -> RankLadder | None:
     """The ladder this student belongs on for this style, or None if unknowable.
+
+    ⚠ The dojo's own belts win over the organisation's. Clubs under one
+    federation genuinely run different syllabuses for the same art, and the point
+    of the dojo-scoped ladder is that enrolling at Sen Sok puts you on Sen Sok's
+    belts without anybody choosing.
 
     ⚠ Returns None rather than picking. A style with both an adult and a junior
     ladder and a student whose birthday nobody recorded has no right answer, and
@@ -49,7 +60,12 @@ def choose_ladder(style: Style, *, student, organization_id) -> RankLadder | Non
     if not style.is_ranked:
         return None
 
-    ladders = list(RankLadder.objects.for_organization(organization_id).filter(style=style))
+    all_ladders = list(RankLadder.objects.for_organization(organization_id).filter(style=style))
+    # The dojo's own belts if it has defined any; otherwise the organisation's.
+    ladders = [ladder for ladder in all_ladders if dojo is not None and ladder.dojo_id == dojo.pk]
+    if not ladders:
+        ladders = [ladder for ladder in all_ladders if ladder.dojo_id is None]
+
     if not ladders:
         return None
     if len(ladders) == 1:
@@ -75,6 +91,7 @@ def ensure_track(
     actor: Actor,
     organization_id,
     started_on: datetime.date | None = None,
+    dojo=None,
 ) -> tuple[StudentStyleTrack, bool]:
     """Give this student a track for this style if they have not got one.
 
@@ -92,7 +109,9 @@ def ensure_track(
         # student whose birthday is added later should stop being stuck without
         # one, and that is a gap being closed rather than a decision reversed.
         if existing.ladder_id is None and style.is_ranked:
-            ladder = choose_ladder(style, student=student, organization_id=organization_id)
+            ladder = choose_ladder(
+                style, student=student, organization_id=organization_id, dojo=dojo
+            )
             if ladder is not None:
                 existing.ladder = ladder
                 existing.save(update_fields=["ladder", "updated_at"])
@@ -101,7 +120,7 @@ def ensure_track(
     track = StudentStyleTrack(
         student=student,
         style=style,
-        ladder=choose_ladder(style, student=student, organization_id=organization_id),
+        ladder=choose_ladder(style, student=student, organization_id=organization_id, dojo=dojo),
         started_on=started_on or datetime.date.today(),
     )
     track.save()
@@ -133,6 +152,7 @@ def sync_tracks_for_enrolment(enrollment, *, actor: Actor) -> list[StudentStyleT
             actor=actor,
             organization_id=organization_id,
             started_on=enrollment.started_on,
+            dojo=dojo,
         )
         if was_created:
             created.append(track)

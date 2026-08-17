@@ -441,7 +441,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1358 passing, 55 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1374 passing, 56 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -1112,12 +1112,42 @@ OUTPUT
     feature. Dojos are now tagged, and each organisation gets one deliberately
     unranked style so both states are visible side by side.
   - 23 tests in `tests/test_org_settings.py`, built around the Emma example.
-- ⚠ **Known gap, and it is the obvious next thing: there is no UI for rank
-  ladders or ranks.** A newly added graded style has no belts, so
-  `is_ranked = True` is a promise the app cannot yet keep — the settings screen
-  says so in amber rather than hiding it. Only the seeded Shotokan ladders exist,
-  from `create_shotokan_ladders`. Adding a style called "Goju Ryu" today gives
-  you a track with no ladder and no way to grade anybody in it.
+- 🆕 **Belts are editable, and a dojo can run its own.** `/settings/styles/<id>/`
+  lists a style's sets of belts; `/settings/ladders/<id>/` edits the grades in
+  one — name, colour, stripes, minimum months, minimum classes, minimum age.
+  - ⚠⚠ **`unique(style, applies_to)` was wrong and had to go.** It allowed
+    exactly one adult and one junior ladder per style for the whole
+    organisation, so "two instructors in the same style follow different belts"
+    — an ordinary fact about federated clubs — was **unrepresentable**.
+    `RankLadder.dojo` is now a nullable FK: null is the organisation's default,
+    a dojo that names its own belts uses those, and enrolling there puts a
+    student on them with nobody choosing. Decided with the user, 2026-08-17.
+  - ⚠ **Two partial unique constraints, not one.** SQL does not treat NULLs as
+    equal, so a single `unique(style, dojo, applies_to)` would cheerfully allow
+    two organisation-wide adult ladders for one style — the exact ambiguity the
+    constraint exists to stop. One constraint `WHERE dojo IS NULL`, one `WHERE
+    dojo IS NOT NULL`.
+  - ⚠ **`tests/test_cross_org_integrity.py` caught the missing guard.** Adding
+    `dojo` made `RankLadder` reference two organisation-bearing records, and the
+    contract test failed before it shipped, exactly as designed.
+    `same_organization_fields = ("style", "dojo")`.
+  - ⚠ **Reordering renumbers in two passes.** `unique(ladder, order)` collides
+    the instant two rows swap; a single pass works right up until somebody
+    actually reorders something, which is the only time the code runs. Verified
+    by deleting the first pass and watching an IntegrityError.
+  - ⚠ **An awarded belt cannot be deleted, and it is checked rather than
+    attempted.** `RankAward.rank` is PROTECT, so without the check the operator
+    gets a 500 instead of "a grade somebody holds is a record, not a setting".
+  - ⚠ **One track per (student, style), so the first enrolment decides the
+    belts.** Somebody training Goju Ryu at two dojos with different syllabuses
+    holds one Goju Ryu grade, not two — right, because a grade is a grade — but
+    the ladder is whichever dojo enrolled them first. Moving them is deliberate.
+  - Ninth seed gap **avoided rather than found**: one dojo now runs its own
+    four-grade Shotokan syllabus against the organisation's ten, so the feature
+    is visible in the demo instead of looking like an unused column.
+  - 15 tests in `tests/test_ladder_editing.py`, checked against three broken
+    variants (dojo ladder ignored, awarded belt deletable, single-pass
+    renumber) — each failing with precisely the error its comment predicts.
 - **Best next tasks in Phase 1**, in dependency order:
   - Then the `1.7.x` kiosk (12 tasks, none started). `D1` should be settled
     before starting it, since it is what decides whether the kiosk is wanted.

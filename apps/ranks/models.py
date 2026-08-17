@@ -68,11 +68,33 @@ class RankLadder(TenantScopedModel):
         JUNIOR = "junior", _("Junior")
 
     tenant_org_path = "style__organization_id"
+    #: ⚠ Added the moment `dojo` arrived: a ladder now touches two
+    #: organisation-bearing records, so without this a row could pair one
+    #: organisation's style with another's dojo. Scoping decides who may *read* a
+    #: row, never what may be written. tests/test_cross_org_integrity.py caught
+    #: the omission before it shipped, which is exactly what it is for.
+    same_organization_fields = ("style", "dojo")
 
     style = models.ForeignKey(
         Style,
         on_delete=models.CASCADE,
         related_name="ladders",
+    )
+    #: ⚠ Null means "the organisation's default for this style". A dojo that
+    #: names its own belts uses those instead.
+    #:
+    #: Clubs under one federation genuinely differ: two Goju Ryu dojos may run
+    #: eight kyu grades and ten, in different colours, and neither is wrong. The
+    #: model used to forbid it outright — one adult and one junior ladder per
+    #: style, organisation-wide — so the honest answer was unrepresentable.
+    dojo = models.ForeignKey(
+        "identity.Dojo",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="rank_ladders",
+        verbose_name=_("dojo"),
+        help_text=_("Leave empty for the organisation's default belts for this style."),
     )
     name = models.CharField(_("name"), max_length=100)
     applies_to = models.CharField(
@@ -90,14 +112,28 @@ class RankLadder(TenantScopedModel):
                 fields=["style", "name"],
                 name="unique_ladder_name_per_style",
             ),
+            # ⚠ Two partial constraints rather than one over (style, dojo,
+            # applies_to). SQL does not treat NULLs as equal, so a single
+            # constraint would happily allow two organisation-wide adult ladders
+            # for the same style — the exact ambiguity this is meant to prevent.
             models.UniqueConstraint(
                 fields=["style", "applies_to"],
-                name="unique_ladder_applies_to_per_style",
+                condition=models.Q(dojo__isnull=True),
+                name="unique_org_ladder_applies_to_per_style",
+            ),
+            models.UniqueConstraint(
+                fields=["style", "dojo", "applies_to"],
+                condition=models.Q(dojo__isnull=False),
+                name="unique_dojo_ladder_applies_to_per_style",
             ),
         ]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_applies_to_display()})"
+
+    @property
+    def is_organisation_default(self) -> bool:
+        return self.dojo_id is None
 
 
 class Rank(TenantScopedModel):

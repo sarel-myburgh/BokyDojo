@@ -1,0 +1,61 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ style.name }} — DojoMaster{% endblock %}
+
+{% block content %}
+<p class="text-sm mb-2">
+  <a href="{% url 'org-settings' %}" class="eyebrow hover:text-gray-900">&larr; {% translate "Organisation settings" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{{ style.name }}</h1>
+<p class="text-sm text-gray-500 mb-6">
+  {% if style.is_ranked %}
+    {% translate "Graded. Define the belts below." %}
+  {% else %}
+    {% translate "Unranked — this style awards no grades, so it needs no belts." %}
+  {% endif %}
+</p>
+
+{% if style.is_ranked %}
+  <div class="flex items-center gap-2 mb-1">
+    <span class="seal" aria-hidden="true"></span>
+    <h2 class="text-base font-bold tracking-tight">{% translate "Sets of belts" %}</h2>
+  </div>
+  <p class="mb-4 text-sm text-gray-500">
+    {% translate "One set is the organisation's default. A dojo that runs a different syllabus can have its own — students enrolling there are put on it automatically." %}
+  </p>
+
+  <div class="panel divide-y divide-gray-200 mb-6">
+    {% for row in ladders %}
+      <a href="{% url 'ladder-detail' row.ladder.pk %}" class="flex items-start gap-4 px-4 py-3 active:bg-gray-50">
+        <span class="min-w-0 flex-1">
+          <span class="block truncate font-medium">{{ row.ladder.name }}</span>
+          <span class="block text-sm text-gray-500">
+            {{ row.ladder.get_applies_to_display }} ·
+            {% if row.ladder.dojo %}{{ row.ladder.dojo.name }}{% else %}{% translate "all dojos" %}{% endif %}
+          </span>
+        </span>
+        <span class="eyebrow shrink-0 {% if row.rank_count %}text-gray-400{% else %}text-amber-700{% endif %}">
+          {% blocktranslate count counter=row.rank_count %}{{ counter }} belt{% plural %}{{ counter }} belts{% endblocktranslate %}
+        </span>
+      </a>
+    {% empty %}
+      <p class="px-4 py-6 text-center text-sm text-amber-700">
+        {% translate "No belts defined yet — nobody can be graded in this style." %}
+      </p>
+    {% endfor %}
+  </div>
+
+  <form method="post" class="panel px-5 py-4">
+    {% csrf_token %}
+    <p class="eyebrow mb-3">{% translate "Add a set of belts" %}</p>
+    {% if form.non_field_errors %}
+      <div class="mb-3 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {% for field in form %}{% include "identity/_form_field.html" with field=field %}{% endfor %}
+    <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+      {% translate "Add" %}
+    </button>
+  </form>
+{% endif %}
+{% endblock %}

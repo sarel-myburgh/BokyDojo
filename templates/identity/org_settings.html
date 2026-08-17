@@ -38,7 +38,7 @@
       <tbody class="divide-y divide-gray-100">
         {% for row in styles %}
           <tr>
-            <td class="px-3 py-2 font-medium">{{ row.style.name }}</td>
+            <td class="px-3 py-2 font-medium"><a href="{% url 'style-detail' row.style.pk %}" class="underline decoration-gray-300 hover:decoration-gray-900">{{ row.style.name }}</a></td>
             <td class="px-3 py-2">
               {% if row.style.is_ranked %}
                 <span class="eyebrow text-gray-700">{% translate "graded" %}</span>
@@ -49,7 +49,7 @@
             <td class="px-3 py-2 text-gray-500">
               {% if row.style.is_ranked %}
                 {% for ladder in row.ladders %}{{ ladder.name }}{% if not forloop.last %}, {% endif %}{% empty %}
-                  <span class="text-amber-700">{% translate "no belts defined — nobody can be graded in this style yet" %}</span>
+                  <a href="{% url 'style-detail' row.style.pk %}" class="text-amber-700 underline">{% translate "no belts yet — define them" %}</a>
                 {% endfor %}
               {% else %}
                 —

@@ -314,6 +314,9 @@ class Command(BaseCommand):
             self.stdout.write("Tagging dojos with the styles they teach...")
             self._assign_dojo_styles(dojos)
 
+            self.stdout.write("Seeding a dojo-specific belt syllabus...")
+            self._create_dojo_specific_ladder(dojos)
+
             self.stdout.write("Seeding people and roles...")
             self._create_people(dojos)
 
@@ -1179,6 +1182,44 @@ class Command(BaseCommand):
                 taught = list(styles) + ([conditioning] if index == 0 else [])
                 set_scoped_m2m(dojo, "styles", taught, organization_id=org.pk)
         self.stdout.write("  Dojo styles assigned (one unranked style per organisation).")
+
+    def _create_dojo_specific_ladder(self, dojos: dict) -> None:
+        """One dojo that runs its own belts — plan §4.4.
+
+        ⚠ Ninth gap avoided rather than found. Ladders are now dojo-scopable
+        precisely because clubs under one federation disagree about syllabuses,
+        and a demo where every dojo uses the organisation default cannot show
+        that at all — the feature would look like an unused column.
+        """
+        for org, org_dojos in dojos.items():
+            if len(org_dojos) < 2:
+                continue
+            style = Style.objects.filter(organization=org, is_ranked=True).first()
+            if style is None:
+                continue
+            dojo = org_dojos[1]
+            ladder, created = RankLadder.objects.get_or_create(
+                style=style,
+                dojo=dojo,
+                applies_to=RankLadder.AppliesTo.ADULT,
+                defaults={"name": f"{style.name} — {dojo.name} syllabus"},
+            )
+            if created:
+                # Deliberately shorter than the organisation's: the point is that
+                # they genuinely differ, not that they are a copy.
+                for order, (name, colour) in enumerate(
+                    [
+                        ("8th Kyu", "white"),
+                        ("6th Kyu", "green"),
+                        ("4th Kyu", "brown"),
+                        ("1st Dan", "black"),
+                    ],
+                    start=1,
+                ):
+                    Rank.objects.create(ladder=ladder, name=name, order=order, belt_colour=colour)
+                self.stdout.write(
+                    f"  {dojo.name} runs its own {style.name} belts (4 grades, not the org's)."
+                )
 
     def _create_instructor_pay(self, dojos: dict) -> None:
         """Pay details and drafted timesheets — TODO 1.9.1/1.9.2, read by 1.9.4.

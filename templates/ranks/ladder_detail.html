@@ -1,0 +1,112 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% comment %}
+  The belts in one ladder, lowest grade first.
+
+  Reordering is number boxes and a Save button, not drag and drop: the CSP is
+  strict-nonce, this is a rare admin action, and typing 3 works on a phone.
+{% endcomment %}
+
+{% block title %}{{ ladder.name }} — DojoMaster{% endblock %}
+
+{% block content %}
+<p class="text-sm mb-2">
+  <a href="{% url 'style-detail' style.pk %}" class="eyebrow hover:text-gray-900">&larr; {{ style.name }}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{{ ladder.name }}</h1>
+<p class="text-sm text-gray-500 mb-6">
+  {{ ladder.get_applies_to_display }} ·
+  {% if ladder.dojo %}
+    {% blocktranslate with name=ladder.dojo.name %}Used at {{ name }} only{% endblocktranslate %}
+  {% else %}
+    {% translate "The organisation's default for this style" %}
+  {% endif %}
+</p>
+
+{% if ranks %}
+  <form method="post" action="{% url 'rank-reorder' ladder.pk %}">
+    {% csrf_token %}
+    <div class="table-wrap panel mb-3">
+      <table class="w-full text-sm">
+        <thead class="border-b border-gray-200 text-left">
+          <tr>
+            <th class="eyebrow px-3 py-2 w-16">{% translate "Order" %}</th>
+            <th class="eyebrow px-3 py-2">{% translate "Belt" %}</th>
+            <th class="eyebrow px-3 py-2">{% translate "Colour" %}</th>
+            <th class="eyebrow px-3 py-2">{% translate "Minimum wait" %}</th>
+            <th class="eyebrow px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for row in ranks %}
+            <tr>
+              <td class="px-3 py-2">
+                <label class="sr-only" for="order-{{ row.rank.pk }}">{{ row.rank.name }}</label>
+                <input type="number" id="order-{{ row.rank.pk }}" name="order:{{ row.rank.pk }}"
+                       value="{{ row.position }}" min="1"
+                       class="w-16 border border-gray-300 bg-white px-2 py-1 text-sm tabular-nums">
+              </td>
+              <td class="px-3 py-2 font-medium">
+                {{ row.rank.name }}
+                {% if row.rank.stripe_count %}
+                  <span class="text-gray-400">· {{ row.rank.stripe_count }} {% translate "stripe(s)" %}</span>
+                {% endif %}
+              </td>
+              <td class="px-3 py-2 text-gray-500">{{ row.rank.belt_colour|default:"—" }}</td>
+              <td class="px-3 py-2 text-gray-500">
+                {% if row.rank.min_months_at_previous %}
+                  {{ row.rank.min_months_at_previous }} {% translate "months" %}
+                {% else %}—{% endif %}
+              </td>
+              <td class="px-3 py-2 text-right">
+                {% if row.is_awarded %}
+                  <span class="eyebrow text-gray-400" title="{% translate 'Somebody holds this grade' %}">{% translate "in use" %}</span>
+                {% else %}
+                  <button type="submit" form="delete-{{ row.rank.pk }}"
+                          class="eyebrow text-gray-500 underline hover:text-red-700">{% translate "remove" %}</button>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <button type="submit" class="mb-8 border border-gray-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 active:bg-gray-100">
+      {% translate "Save order" %}
+    </button>
+  </form>
+
+  {% comment %}
+    Delete forms live outside the reorder form — nesting forms is invalid HTML
+    and browsers drop the inner one silently.
+  {% endcomment %}
+  {% for row in ranks %}
+    {% if not row.is_awarded %}
+      <form id="delete-{{ row.rank.pk }}" method="post"
+            action="{% url 'rank-delete' ladder.pk row.rank.pk %}" class="hidden">
+        {% csrf_token %}
+      </form>
+    {% endif %}
+  {% endfor %}
+{% else %}
+  <p class="mb-8 border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
+    {% translate "No belts yet. Add the lowest grade first." %}
+  </p>
+{% endif %}
+
+<form method="post" class="panel px-5 py-4">
+  {% csrf_token %}
+  <p class="eyebrow mb-1">{% translate "Add a belt" %}</p>
+  <p class="mb-4 text-xs text-gray-500">
+    {% translate "Added at the end. Add them from the lowest grade upwards, or fix the order afterwards." %}
+  </p>
+  {% if form.non_field_errors %}
+    <div class="mb-3 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {% for field in form %}{% include "identity/_form_field.html" with field=field %}{% endfor %}
+  <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+    {% translate "Add belt" %}
+  </button>
+</form>
+{% endblock %}

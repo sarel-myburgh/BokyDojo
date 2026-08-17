@@ -12,6 +12,7 @@ from apps.identity import password_reset as password_reset_views
 from apps.identity import setup as setup_views
 from apps.identity import views as identity_views
 from apps.imports import views as import_views
+from apps.ranks import ladder_views
 from apps.ranks import views as rank_views
 from apps.scheduling import views as scheduling_views
 from apps.staffing import views as staffing_views
@@ -74,6 +75,22 @@ urlpatterns = [
         "settings/styles/<uuid:style_id>/ranked/",
         org_views.style_toggle_ranked_view,
         name="style-toggle-ranked",
+    ),
+    path("settings/styles/<uuid:style_id>/", ladder_views.style_detail_view, name="style-detail"),
+    path(
+        "settings/ladders/<uuid:ladder_id>/",
+        ladder_views.ladder_detail_view,
+        name="ladder-detail",
+    ),
+    path(
+        "settings/ladders/<uuid:ladder_id>/order/",
+        ladder_views.rank_reorder_view,
+        name="rank-reorder",
+    ),
+    path(
+        "settings/ladders/<uuid:ladder_id>/belts/<uuid:rank_id>/delete/",
+        ladder_views.rank_delete_view,
+        name="rank-delete",
     ),
     path("settings/dojos/new/", org_views.dojo_create_view, name="dojo-create"),
     path("settings/dojos/<uuid:dojo_id>/", org_views.dojo_edit_view, name="dojo-edit"),
