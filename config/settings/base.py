@@ -67,6 +67,10 @@ MIDDLEWARE = [
     # Must follow the audit context — it reads request.actor to decide which
     # timezone to render this request's dates in.
     "apps.core.timezones.ActiveTimezoneMiddleware",
+    # While a check-in is running the device may be in a student's hands, so this
+    # session may reach nothing but the kiosk. Must follow authentication; it is
+    # about who holds the phone, which no permission check can answer.
+    "apps.attendance.kiosk.KioskLockMiddleware",
     # Turns a refused action into a 403 instead of a 500. Last, so it sees
     # exceptions from everything above it.
     "apps.core.http.PermissionDeniedMiddleware",

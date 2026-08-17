@@ -441,7 +441,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1289 passing, 52 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1313 passing, 52 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -979,6 +979,55 @@ OUTPUT
     attendance against a real past session resolved by local date and class name,
     then a newest-first grading history — 2/2/2 created, Rithy's current rank
     correctly the later award.
+- **`1.7` check-in is built, and `D1` decided its shape.** `/sessions/<id>/check-in/`
+  — a full-screen grid of faces opened from the roster the instructor is already
+  on. Tap a face, the tile goes green, the queue moves.
+  - ⚠ **The plan's kiosk and this one are different products.** §13.2 designs an
+    unattended tablet by the door: device token, PINs, lockout, revocation. Every
+    one of those follows from the device being *shared and unwatched*. The
+    decided scenario is the instructor's own phone, carried, supervised — so the
+    feature is a quarter of the size and the dropped tasks are recorded as
+    dropped, with the reason, rather than silently unticked.
+  - ⚠ **The real risk is not authentication, it is handing over an unlocked
+    phone.** The instructor is signed in with every right they hold, and a
+    nine-year-old with the device would otherwise be two taps from a medical
+    alert. `KioskLockMiddleware` locks the *session* to the grid: every other
+    view redirects back. Leaving needs the instructor's password, throttled with
+    the login policy, because "are you the instructor" cannot be answered by the
+    session — the session is what is being protected.
+  - ⚠ **The grid extends `base.html`, not `app/base.html`.** The signed-in shell
+    carries a nav bar to students, reports and account security; on this screen
+    that is a route out of the cage. Tested, not assumed.
+  - ⚠ **Marks go through `mark_attendance`** — the fourth path after the roster,
+    the offline endpoint and the importer. The posted student id is client data
+    and is checked against *this session's* roster, or the screen becomes a way
+    to mark anyone in the organisation.
+  - ⚠ **A green tile that recorded nothing is the failure this must not have.**
+    The JS distinguishes a network error (stay queued, retry — the point of the
+    offline queue) from a 4xx (never going to succeed: too old to mark
+    retroactively, not on the roster). A 4xx reverts the tile and says so.
+    Found by tapping a past class in the running app, where an instructor
+    correctly lacks `ATTENDANCE_EDIT_RETROACTIVE` and the tile went green anyway.
+  - The roster and the kiosk now share **one** IndexedDB queue
+    (`static/js/attendance-queue.js`, extracted from `roster.js`). Two stores
+    would mean an instructor who used both offline watching half their marks
+    sync.
+  - ⚠⚠ **Sixth feature found dark in the seed, and this one hid the whole
+    point.** No student had a photo, so every tile fell back to the initial-letter
+    variant — the demo showed the *fallback* and none of the feature. The seed now
+    records real photo consent through the consent service and stores a
+    placeholder image for four students in five (`80` photos), leaving the fifth
+    to demonstrate `1.7.9`. ⚠ The images are flat coloured squares bearing an
+    initial, **not** generated faces: a convincing synthetic photograph of a child
+    is not something this seed should produce under any justification.
+    **Ranks, notes, safeguarding, teaching, closures, now photos.**
+  - ⚠ **I shipped the multi-line `{# #}` bug again**, twice, in the kiosk
+    template — and `test_pages_contain_no_leaked_template_comments` did not catch
+    it because that test *enumerates URLs* and did not know the page existed. The
+    kiosk is now in its list. **Add every new page to it.**
+  - 22 tests in `tests/test_kiosk.py`, checked against four broken variants (lock
+    not blocking, any student markable, exit without a password, a GET able to
+    lock the device).
 - **Best next tasks in Phase 1**, in dependency order:
   - Then the `1.7.x` kiosk (12 tasks, none started). `D1` should be settled
     before starting it, since it is what decides whether the kiosk is wanted.
@@ -1304,18 +1353,40 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [ ] `1.6.6` Target: 20-student class marked in under 30 seconds `§11 risks`
 
 ### 1.7 Attendance — kiosk
-- [ ] `1.7.1` ⚠ Device token auth (not a user session), per dojo, revocable, device list with last-seen `SEC §2.7`
-- [ ] `1.7.2` ⚠ Roster scope: only sessions starting within ±X minutes, no other PII
-- [ ] `1.7.3` `[DS]` `kiosk_display_mode` — `photo_grid` `§13.2`
-- [ ] `1.7.4` `[DS]` `kiosk_display_mode` — `name_list` (searchable)
-- [ ] `1.7.5` `[DS]` Instructor can switch mode live at the kiosk without an admin
-- [ ] `1.7.6` `pin_policy` ∈ `off | optional | required`, resolved via the settings hierarchy
-- [ ] `1.7.7` ⚠ Per-student PIN override; **stricter of class and student wins**
-- [ ] `1.7.8` ⚠ PINs hashed, rate-limited, lockout, admin reset
-- [ ] `1.7.9` No-consent students fall back to name entry automatically `§13.2`
-- [ ] `1.7.10` `[DS]` Confirmation screen auto-returns to grid; no lingering roster
+> ⚠ **Rescoped by `D1` (2026-08-17).** The plan's §13.2 kiosk is an unattended
+> tablet by the door, and every device token, PIN and lockout task below follows
+> from the device being *shared and unwatched*. The decided scenario is the
+> **instructor's own phone or tablet, carried, supervised**. Their session is the
+> authentication and their presence is the control, so those tasks are dropped
+> rather than deferred — they solve a problem this deployment does not have.
+> ⚠ **If a permanently-mounted kiosk is ever wanted, `1.7.1`/`1.7.12` come back.**
+
+- [x] `1.7.1` ~~Device token auth~~ — **dropped by `D1`.** The instructor is signed
+      in and holding the device; a long-lived token on a shared tablet would be
+      strictly worse. Replaced by `KioskLockMiddleware`, which locks the *session*
+      to the grid — the real risk is handing over an unlocked phone, which no
+      token addresses.
+- [x] `1.7.2` ⚠ Roster scope: only this session's roster, no PII beyond first name
+      and photo. *(The ±X-minute window was for a wall tablet choosing its own
+      class; here the instructor opens check-in from the class they are already on.)*
+- [x] `1.7.3` `[DS]` `photo_grid` — the only mode `§13.2`
+- [x] `1.7.4` ~~`name_list` (searchable)~~ — **dropped by `D1`.** One grid; students
+      without photo consent get a name tile in it (`1.7.9`), which covers the same
+      need without a second screen.
+- [x] `1.7.5` ~~Live mode switching~~ — **dropped by `D1`.** There is one mode.
+- [x] `1.7.6` ~~`pin_policy`~~ — **dropped by `D1`.**
+- [x] `1.7.7` ~~Per-student PIN override~~ — **dropped by `D1`.**
+- [x] `1.7.8` ~~PINs hashed, rate-limited, lockout~~ — **dropped by `D1`.** §13.2
+      itself calls PINs "a convenience control, not a security boundary";
+      supervision is the control instead, and it is a better one.
+- [x] `1.7.9` No-consent students fall back to a name tile in the same grid `§13.2`
+- [x] `1.7.10` `[DS]` No lingering roster: the grid is the only screen, and the
+      session cannot reach anything else until the instructor's password ends it
 - [ ] `1.7.11` `[DS]` Printable QR student cards as a secondary check-in path `§12.8`
-- [ ] `1.7.12` ⚠ Test: revoked device token is cut off immediately
+      *(deferred — not needed for the tap-your-face flow; revisit if a dojo wants
+      cards)*
+- [x] `1.7.12` ⚠ Test: a locked session cannot reach any other screen
+      *(replaces the revoked-token test, which has no meaning without tokens)*
 
 ### 1.8 Notes
 - [x] `1.8.1` `[DS]` `Note` — polymorphic subject, visibility levels, pinned `§4.7`
@@ -1624,7 +1695,7 @@ Full plan in `SEC §7`. Nothing launches until this passes. **Nothing here is de
 
 Mirrors `§10`. Tick when answered, and record the answer inline.
 
-- [ ] `D1` Attendance capture — roster only, or kiosk too? *(assumed: both, roster first)* — affects `1.7`
+- [x] `D1` Attendance capture — roster only, or kiosk too? — **DECIDED 2026-08-17: both.** Not a wall-mounted kiosk: the **instructor's own phone or tablet**, carried, students queue and tap their face, attendance is supervised, device does not stay out. This removes device tokens and PINs from `1.7` entirely — see the rescoped list.
 - [ ] `D2` Booking — drop-in or reserved with capacity? — blocks `4.3.12`
 - [ ] `D3` Payroll — calculate amounts or report hours only? — blocks `3.7.2`
 - [x] `D4` Recurring billing — **decided: invoice + reminder + parent pays**

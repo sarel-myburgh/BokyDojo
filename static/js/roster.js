@@ -1,50 +1,7 @@
 "use strict";
 
 import { createSyncManager } from "./attendance-sync.js";
-
-function openQueue() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open("dojomaster-attendance", 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore("queue", { keyPath: "id" });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-const store = {
-  async list() {
-    const database = await openQueue();
-    return new Promise((resolve, reject) => {
-      const request = database.transaction("queue").objectStore("queue").getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  },
-  async put(item) {
-    const database = await openQueue();
-    return new Promise((resolve, reject) => {
-      const request = database
-        .transaction("queue", "readwrite")
-        .objectStore("queue")
-        .put(item);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  },
-  async remove(id) {
-    const database = await openQueue();
-    return new Promise((resolve, reject) => {
-      const request = database
-        .transaction("queue", "readwrite")
-        .objectStore("queue")
-        .delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  },
-};
+import { store } from "./attendance-queue.js";
 
 function csrfToken(form) {
   return form.querySelector("[name=csrfmiddlewaretoken]").value;

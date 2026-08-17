@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% load i18n static tz %}
+
+{% comment %}
+  Check-in grid — TODO 1.7, decision D1.
+
+  ⚠ This extends base.html, NOT app/base.html, and that is the point. The signed-in
+  shell carries a nav bar to students, reports and account security. This screen
+  is handed to a queue of children; it must have no way out except the password
+  box at the bottom.
+
+  Tiles are large because they are tapped by a seven-year-old holding a gi bag,
+  in a hall, in a hurry. Two columns on a phone, more as the screen allows.
+{% endcomment %}
+
+{% block title %}{% translate "Check in" %} — {{ session }}{% endblock %}
+
+{% block body %}
+<div class="min-h-screen bg-gray-50">
+  <header class="sticky top-0 z-10 bg-white">
+    <div class="mx-auto flex max-w-4xl flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3">
+      <h1 class="text-lg font-bold tracking-tight">
+        {% if session.template %}{{ session.template.name }}{% else %}{% translate "Class" %}{% endif %}
+      </h1>
+      <p class="eyebrow text-gray-500">
+        {% timezone session.local_zone %}{{ session.starts_at|date:"H:i" }}{% endtimezone %} · {{ session.dojo.name }}
+      </p>
+      <p id="kiosk-status" class="eyebrow ml-auto text-gray-500" role="status" aria-live="polite"></p>
+    </div>
+    <div class="obi" aria-hidden="true"></div>
+  </header>
+
+  <main class="mx-auto w-full max-w-4xl px-4 py-5">
+    {% if messages %}
+      {% for message in messages %}
+        <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-4 py-3 text-sm text-red-900">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <p class="mb-4 text-center text-base font-medium text-gray-600">{% translate "Tap your photo" %}</p>
+
+    {% if tiles %}
+      <form id="kiosk-grid"
+            data-mark-url="{% url 'kiosk-mark' session.pk %}"
+            class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+        {% csrf_token %}
+        {% for tile in tiles %}
+          {% comment %}
+            A button, not a div: focusable, announced, and it works with a
+            stylus, a keyboard or a switch device.
+          {% endcomment %}
+          <button type="button"
+                  class="kiosk-tile relative flex aspect-square flex-col items-center justify-center gap-2 border-2 bg-white p-2 text-center
+                         {% if tile.checked_in %}border-green-700{% else %}border-gray-200{% endif %}"
+                  data-student-id="{{ tile.student_id }}"
+                  data-checked="{{ tile.checked_in|yesno:'1,0' }}"
+                  aria-pressed="{{ tile.checked_in|yesno:'true,false' }}">
+            {% if tile.has_photo %}
+              <img src="{% url 'student-photo' tile.student_id %}" alt=""
+                   class="h-20 w-20 object-cover sm:h-24 sm:w-24" loading="lazy">
+            {% else %}
+              {% comment %}
+                ⚠ 1.7.9 — no photo consent, so a name tile in the same grid.
+                Not a separate search screen: nobody should have to be told in
+                front of the queue why their face is missing.
+              {% endcomment %}
+              <span class="flex h-20 w-20 items-center justify-center bg-gray-100 text-2xl font-bold text-gray-400 sm:h-24 sm:w-24"
+                    aria-hidden="true">{{ tile.name|slice:":1" }}</span>
+            {% endif %}
+            <span class="w-full truncate text-sm font-semibold">{{ tile.name }}</span>
+            <span class="kiosk-check eyebrow text-green-700 {% if not tile.checked_in %}invisible{% endif %}">
+              {% translate "in" %}
+            </span>
+          </button>
+        {% endfor %}
+      </form>
+    {% else %}
+      <p class="border border-dashed border-gray-300 px-4 py-10 text-center text-sm text-gray-500">
+        {% translate "Nobody is enrolled at this dojo yet." %}
+      </p>
+    {% endif %}
+
+    {# -- the only way out ------------------------------------------------- #}
+    <form method="post" action="{% url 'kiosk-exit' session.pk %}"
+          class="mt-10 border-t border-gray-200 pt-5">
+      {% csrf_token %}
+      <label for="password" class="eyebrow mb-1 block text-gray-500">
+        {% translate "Instructor password to finish" %}
+      </label>
+      <div class="flex flex-wrap gap-2">
+        <input type="password" id="password" name="password" autocomplete="current-password"
+               class="min-w-0 flex-1 border border-gray-300 bg-white px-3 py-2 text-sm">
+        <button type="submit"
+                class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+          {% translate "Finish" %}
+        </button>
+      </div>
+      <p class="mt-2 text-xs text-gray-500">
+        {% translate "Check-in stays open until you finish, so the device can be passed around safely." %}
+      </p>
+    </form>
+  </main>
+</div>
+<script type="module" src="{% static 'js/kiosk.js' %}"></script>
+{% endblock %}

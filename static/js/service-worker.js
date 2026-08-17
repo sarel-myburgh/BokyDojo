@@ -8,6 +8,8 @@ const SHELL = [
   "/static/js/pwa.js",
   "/static/js/roster.js",
   "/static/js/attendance-sync.js",
+  "/static/js/attendance-queue.js",
+  "/static/js/kiosk.js",
   "/static/js/offline.js",
   "/static/manifest.webmanifest",
   "/static/icons/dojomaster-192.png",

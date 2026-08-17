@@ -34,6 +34,21 @@
   {% endif %}
 </div>
 
+{% comment %}
+  Hand-around check-in — TODO 1.7. A POST, so the lock is never applied by a
+  stray link or a prefetch.
+{% endcomment %}
+<form method="post" action="{% url 'kiosk' session.pk %}" class="mb-5">
+  {% csrf_token %}
+  <button type="submit"
+          class="w-full border-2 border-gray-900 bg-white px-4 py-3 text-sm font-semibold uppercase tracking-widest active:bg-gray-100">
+    {% translate "Let students check themselves in" %}
+  </button>
+  <p class="mt-2 text-xs text-gray-500">
+    {% translate "Opens a full-screen grid of faces and locks this device to it, so you can pass it down the line. Your password ends it." %}
+  </p>
+</form>
+
 {% if not entries %}
   <p class="border border-dashed border-gray-300 px-4 py-10 text-center text-sm text-gray-500">
     {% translate "Nobody is enrolled at this dojo yet." %}

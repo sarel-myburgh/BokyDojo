@@ -5,6 +5,7 @@ from django.urls import path
 from django.views.decorators.cache import never_cache
 from django.views.generic import RedirectView, TemplateView
 
+from apps.attendance import kiosk_views
 from apps.attendance import views as attendance_views
 from apps.identity import consent_views, guardian_views, photo_views, student_views
 from apps.identity import password_reset as password_reset_views
@@ -165,6 +166,18 @@ urlpatterns = [
     path("today/", attendance_views.today_view, name="today"),
     path("attendance/catch-up/", attendance_views.catch_up_view, name="catch-up"),
     path("sessions/<uuid:session_id>/roster/", attendance_views.roster_view, name="roster"),
+    # Kiosk / hand-around check-in — TODO 1.7, decision D1
+    path("sessions/<uuid:session_id>/check-in/", kiosk_views.kiosk_view, name="kiosk"),
+    path(
+        "sessions/<uuid:session_id>/check-in/mark/",
+        kiosk_views.kiosk_mark_view,
+        name="kiosk-mark",
+    ),
+    path(
+        "sessions/<uuid:session_id>/check-in/finish/",
+        kiosk_views.kiosk_exit_view,
+        name="kiosk-exit",
+    ),
     path(
         "api/attendance/sessions/<uuid:session_id>/sync/",
         attendance_views.attendance_sync_view,

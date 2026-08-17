@@ -321,6 +321,9 @@ class Command(BaseCommand):
             self.stdout.write("Seeding class templates...")
             self._create_class_templates(dojos)
 
+            self.stdout.write("Seeding photo consent and demo photos...")
+            self._create_student_photos(dojos)
+
             self.stdout.write("Seeding holidays and closures...")
             self._create_closures(dojos)
 
@@ -1032,6 +1035,103 @@ class Command(BaseCommand):
                 closed_days += 3
 
         self.stdout.write(f"  {closed_days} closed dojo-day(s) across the demo.")
+
+    def _create_student_photos(self, dojos: dict) -> None:
+        """Photo consent and a placeholder image — TODO 1.1.14, exercised by 1.7.
+
+        ⚠ Sixth feature found dark in the seed. The check-in grid's entire point
+        is "tap your face", and with no photos on file every tile fell back to the
+        initial-letter variant — so the demo showed the *fallback* and nothing of
+        the feature. Ranks, notes, safeguarding, teaching, closures, now photos.
+
+        ⚠ The images are flat coloured squares bearing an initial, not generated
+        faces. A convincing synthetic photograph of a child is not something this
+        seed should produce under any justification, and a placeholder that is
+        obviously a placeholder is also more honest about what the demo is.
+
+        Consent is recorded through the real service, so the evidence trail the
+        photo depends on is genuine: a guardian decision at an exact policy
+        version, with capacity and signature, which revocation can later
+        supersede.
+        """
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        try:
+            from PIL import Image, ImageDraw
+        except ImportError:  # pragma: no cover - Pillow is a hard dependency
+            self.stdout.write("  Pillow unavailable; skipping demo photos.")
+            return
+
+        from apps.identity.consent import record_consent
+        from apps.identity.photos import upload_student_photo
+
+        palette = [
+            (198, 78, 66),
+            (74, 111, 165),
+            (96, 140, 96),
+            (176, 137, 68),
+            (128, 96, 150),
+            (86, 130, 140),
+        ]
+        system = Actor.system()
+        made = 0
+        for org, org_dojos in dojos.items():
+            policy = ConsentPolicy.objects.filter(
+                organization=org, consent_type=ConsentRecord.Type.PHOTO, is_active=True
+            ).first()
+            if policy is None:
+                continue
+            for dojo in org_dojos:
+                students = list(
+                    StudentProfile.objects.filter(home_dojo=dojo).select_related("person")[:40]
+                )
+                for index, profile in enumerate(students):
+                    # ⚠ Deliberately not everybody. A demo where every student has
+                    # a photo cannot show the no-consent fallback, which is a real
+                    # state the grid has to render (1.7.9).
+                    if index % 5 == 0:
+                        continue
+                    person = profile.person
+                    signer = (
+                        GuardianLink.objects.filter(student=person)
+                        .select_related("guardian")
+                        .first()
+                    )
+                    granted_by = signer.guardian if signer else person
+                    capacity = (
+                        ConsentRecord.Capacity.GUARDIAN if signer else ConsentRecord.Capacity.SELF
+                    )
+                    record_consent(
+                        person=person,
+                        consent_type=ConsentRecord.Type.PHOTO,
+                        version=policy.version,
+                        granted=True,
+                        granted_by=granted_by,
+                        capacity=capacity,
+                        ip_address="127.0.0.1",
+                        actor=system,
+                        minimum_self_consent_age=18,
+                        signature_name=granted_by.full_name,
+                        policy=policy,
+                    )
+
+                    image = Image.new("RGB", (256, 256), palette[index % len(palette)])
+                    draw = ImageDraw.Draw(image)
+                    initial = (person.given_name or "?")[0].upper()
+                    draw.text((108, 100), initial, fill=(255, 255, 255))
+                    buffer = BytesIO()
+                    image.save(buffer, format="JPEG", quality=70)
+                    upload_student_photo(
+                        profile=profile,
+                        uploaded_file=SimpleUploadedFile(
+                            f"{person.pk}.jpg", buffer.getvalue(), content_type="image/jpeg"
+                        ),
+                        actor=system,
+                    )
+                    made += 1
+        self.stdout.write(f"  {made} demo student photo(s) with recorded consent.")
 
     def _materialise(self) -> list:
         """Generate sessions across the demo window — TODO 1.4.2.
