@@ -434,7 +434,7 @@ OUTPUT
     own finding. Expectations are literal, written from the plan. It agrees with
     the implementation everywhere.
 
-- **Test suite:** 1125 passing, 47 skipped; Ruff lint and format gates clean;
+- **Test suite:** 1159 passing, 47 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
   `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
@@ -690,9 +690,69 @@ OUTPUT
   join into a LEFT JOIN, so rows with **no** related records satisfy the
   `__isnull=True` filter and slip through. Walk the related model directly
   instead of excluding across a reverse relation.
+- **`1.4.9` is done — scheduling has a UI at last.** `/calendar/`, week and
+  month, per dojo, filtered by instructor. `apps/scheduling/calendars.py` holds
+  the data layer; the view is thin and read-only on purpose.
+  - ⚠ **The grid is bucketed by each dojo's own local date, never the
+    viewer's.** A 19:30 class in Phnom Penh is on Tuesday for an org admin
+    reading from London, where that instant is Tuesday lunchtime, *and* from
+    Auckland, where it is already Wednesday. The consequence to accept: on a
+    multi-dojo page two classes in one cell did not necessarily happen at the
+    same time, and the column header is not a single instant. "What happens at
+    each dojo on its own calendar" is the question actually being asked, and a
+    timetable that disagrees with the one on the dojo wall is worse than none.
+  - ⚠ **A calendar test written with the viewer and the dojo in the same
+    timezone passes against every implementation, right or wrong.** The
+    bucketing tests need an org whose `default_timezone` differs from the
+    dojo's, or they prove nothing. Mine were each run against a broken variant
+    first — and the first draft of the week-boundary test **survived** deleting
+    the local-date filter entirely, because the bucketing loop dropped the
+    session anyway. It was rewritten into two tests that each kill their
+    mutation. **Check a calendar test fails against UTC bucketing before
+    trusting it.**
+  - ⚠ `_OFFSET_MARGIN` pads the SQL window by a day either side. A 06:00 Monday
+    class in Phnom Penh happened at 23:00 the *previous* Sunday in UTC, before
+    the unpadded window opens; without the margin every week silently starts
+    late for every dojo east of Greenwich. The exact date test then runs in
+    Python, per row, because SQL cannot apply a per-dojo zone name.
+  - ⚠ Instructors are gathered in one `for_actor` query and hung on the session
+    objects as `.teaching`. `session.session_instructors` is a **scoped reverse
+    relation** and raises `UnscopedAccessError` the moment a template loops it.
+  - Filters that name a record (`dojo`, `instructor`) **404** when they are out
+    of scope; the `date` filter is tolerant and falls back to today. Silently
+    dropping a bad dojo id would *widen* the page to every dojo the actor can
+    see, which is the opposite of what was asked for.
+  - Gated on `DOJO_VIEW`, not `ATTENDANCE_VIEW` — this is what the dojo has on,
+    not attendance data, and it is the one action every staff role holds,
+    including the safeguarding officer.
+  - 31 tests in `tests/test_calendar_views.py`, checked against seven broken
+    variants (viewer-zone bucketing, UTC bucketing, no window padding, no
+    local-date filter, naive `+30 days` month stepping, dropped closure
+    narrowing, ignored instructor filter).
+- ⚠⚠ **Fifth seed gap, and this one hid a whole feature: zero `ClosurePeriod`,
+  zero `Holiday`, zero `HolidayObservance` rows in the entire demo.** All of
+  `1.4.4` — the holiday rework whose entire point is that some dojos teach on a
+  holiday — was invisible, and the calendar's closure display would have looked
+  like dead code. `seed.py` now has `_create_closures`, called **before**
+  materialisation so the generator genuinely skips those dates (it reports
+  `6 skipped for closures`). Two holidays per org, the second observed
+  `closed` at one dojo and `open` at another, plus one ad-hoc non-holiday
+  closure, because otherwise every closure on screen arrives through the
+  holiday table. **That is five features found dark this way — ranks, notes,
+  safeguarding, teaching, and now closures. Assume a ticked feature is
+  unexercised by the seed until checked.**
+- **`HolidayObservance.apply()` now writes the holiday's name as the closure
+  `reason`, not `"Closed for {name}"`.** Found by opening the page: it rendered
+  as "Closed — Closed for Khmer New Year". `reason` is a label and every screen
+  showing one has already said the dojo is shut; ad-hoc closures are nouns
+  ("Floor resurfacing") and this matches them. One line, no migration, covered
+  by `test_the_closure_reason_is_the_holidays_name`.
 - **Best next tasks in Phase 1**, in dependency order:
-  - `1.4.5` / `1.4.8` / `1.4.9` scheduling gaps, then the `1.7.x` kiosk (12
-    tasks, none started) and `1.10.x` import (7 tasks, none started).
+  - `1.4.10` (`counts_toward[]` tags, which `3.6.2`'s eligibility engine needs),
+    then the `1.7.x` kiosk (12 tasks, none started) and `1.10.x` import (7
+    tasks, none started). Scheduling still has **no editing UI** — `1.4.5`'s
+    move/split and `1.4.8`'s assignment are service-level, and the calendar is
+    deliberately read-only.
   - Notes are **create-only** — no edit, no delete, no soft-delete. That was a
     scope decision, not an oversight, but a typo in a pinned note currently
     cannot be fixed from the UI. Decide whether notes are append-only evidence
@@ -991,7 +1051,7 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.4.6` `[DS]` Ad-hoc one-off sessions (no template)
 - [x] `1.4.7` `[DS]` Cancel session + reason + notification hook
 - [x] `1.4.8` `[DS]` Substitute instructor assignment *(service; no UI until `1.4.9`)*
-- [ ] `1.4.9` `[DS]` Calendar views: week/month, per dojo, filtered by instructor
+- [x] `1.4.9` `[DS]` Calendar views: week/month, per dojo, filtered by instructor
 - [ ] `1.4.10` `ClassTemplate.counts_toward[]` tags — which class types count for which eligibility rules `§2 item 23`
 
 ### 1.5 Attendance — core

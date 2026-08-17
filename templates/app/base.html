@@ -19,6 +19,7 @@
       <nav class="order-3 flex w-full items-center gap-5 overflow-x-auto text-sm sm:order-none sm:w-auto">
         {# tracking + weight carry the active state; colour alone is not enough. #}
         <a href="{% url 'today' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Today" %}</a>
+        <a href="{% url 'calendar' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Timetable" %}</a>
         <a href="{% url 'student-list' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Students" %}</a>
         <a href="{% url 'attendance-summary' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Reports" %}</a>
         <a href="{% url 'mfa-setup' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Security" %}</a>

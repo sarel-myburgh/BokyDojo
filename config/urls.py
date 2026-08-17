@@ -11,6 +11,7 @@ from apps.identity import password_reset as password_reset_views
 from apps.identity import setup as setup_views
 from apps.identity import views as identity_views
 from apps.ranks import views as rank_views
+from apps.scheduling import views as scheduling_views
 
 
 def healthz(request):
@@ -150,6 +151,8 @@ urlpatterns = [
         consent_views.document_download_view,
         name="document-download",
     ),
+    # Scheduling — TODO 1.4.9
+    path("calendar/", scheduling_views.calendar_view, name="calendar"),
     # Attendance — TODO 1.5.2
     path("today/", attendance_views.today_view, name="today"),
     path("attendance/catch-up/", attendance_views.catch_up_view, name="catch-up"),

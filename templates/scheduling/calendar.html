@@ -1,0 +1,213 @@
+{% extends "app/base.html" %}
+{% load i18n tz %}
+
+{% comment %}
+  Timetable — TODO 1.4.9.
+
+  Two shapes of the same data. The week is a list of days, because that is what
+  reads on a phone between classes and it is the view an instructor actually
+  opens. The month is a grid, because planning is a shape-recognition task and a
+  list of thirty days is not a shape.
+
+  ⚠ Every time is wrapped in the timezone tag with session.local_zone. The day
+  it sits under was already decided in the dojo's zone (see calendars.py);
+  printing the clock in anything else would contradict the heading above it.
+
+  No inline script anywhere — the CSP is strict-nonce and every control here is a
+  link or a GET form, which is also why it works with JS off.
+{% endcomment %}
+
+{% block title %}{% translate "Timetable" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Timetable" %}</h1>
+<p class="text-sm text-gray-500 mb-6">
+  {% if page.view == month_view %}
+    {{ page.period_start|date:"F Y" }}
+  {% else %}
+    {{ page.period_start|date:"j M" }} – {{ page.period_end|date:"j M Y" }}
+  {% endif %}
+  ·
+  {% blocktranslate count counter=page.session_count %}{{ counter }} class{% plural %}{{ counter }} classes{% endblocktranslate %}
+</p>
+
+{# -- filters ------------------------------------------------------------- #}
+<form method="get" class="mb-5 flex flex-wrap items-end gap-2">
+  <input type="hidden" name="date" value="{{ page.anchor|date:'Y-m-d' }}">
+  <div>
+    <label for="view" class="eyebrow block mb-1">{% translate "Show" %}</label>
+    <select id="view" name="view" class="border border-gray-300 bg-white px-3 py-2 text-sm">
+      <option value="{{ week_view }}" {% if page.view == week_view %}selected{% endif %}>{% translate "Week" %}</option>
+      <option value="{{ month_view }}" {% if page.view == month_view %}selected{% endif %}>{% translate "Month" %}</option>
+    </select>
+  </div>
+  <div>
+    <label for="dojo" class="eyebrow block mb-1">{% translate "Dojo" %}</label>
+    <select id="dojo" name="dojo" class="border border-gray-300 bg-white px-3 py-2 text-sm">
+      <option value="">{% translate "All dojos" %}</option>
+      {% for choice in dojo_choices %}
+        <option value="{{ choice.pk }}" {% if dojo and dojo.pk == choice.pk %}selected{% endif %}>{{ choice.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="instructor" class="eyebrow block mb-1">{% translate "Instructor" %}</label>
+    <select id="instructor" name="instructor" class="border border-gray-300 bg-white px-3 py-2 text-sm">
+      <option value="">{% translate "Anyone" %}</option>
+      {% for choice in instructor_choices %}
+        <option value="{{ choice.pk }}" {% if instructor and instructor.pk == choice.pk %}selected{% endif %}>{{ choice.full_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+    {% translate "Apply" %}
+  </button>
+  {% if dojo or instructor %}
+    <a href="?view={{ page.view }}&amp;date={{ page.anchor|date:'Y-m-d' }}"
+       class="px-2 py-2 text-xs font-semibold uppercase tracking-widest text-gray-500 underline hover:text-gray-900">
+      {% translate "Clear" %}
+    </a>
+  {% endif %}
+</form>
+
+{# -- period navigation --------------------------------------------------- #}
+<nav class="mb-6 flex items-center gap-2 text-sm" aria-label="{% translate 'Change period' %}">
+  {% url 'calendar' as calendar_url %}
+  <a href="{{ calendar_url }}?view={{ page.view }}&amp;date={{ page.previous|date:'Y-m-d' }}{% if dojo %}&amp;dojo={{ dojo.pk }}{% endif %}{% if instructor %}&amp;instructor={{ instructor.pk }}{% endif %}"
+     class="border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 active:bg-gray-100">
+    <span aria-hidden="true">←</span>
+    <span class="sr-only">{% if page.view == month_view %}{% translate "Previous month" %}{% else %}{% translate "Previous week" %}{% endif %}</span>
+  </a>
+  <a href="{{ calendar_url }}?view={{ page.view }}{% if dojo %}&amp;dojo={{ dojo.pk }}{% endif %}{% if instructor %}&amp;instructor={{ instructor.pk }}{% endif %}"
+     class="border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 active:bg-gray-100">
+    {% translate "Today" %}
+  </a>
+  <a href="{{ calendar_url }}?view={{ page.view }}&amp;date={{ page.next|date:'Y-m-d' }}{% if dojo %}&amp;dojo={{ dojo.pk }}{% endif %}{% if instructor %}&amp;instructor={{ instructor.pk }}{% endif %}"
+     class="border border-gray-300 bg-white px-3 py-2 font-medium text-gray-700 active:bg-gray-100">
+    <span aria-hidden="true">→</span>
+    <span class="sr-only">{% if page.view == month_view %}{% translate "Next month" %}{% else %}{% translate "Next week" %}{% endif %}</span>
+  </a>
+</nav>
+
+{% if page.view == month_view %}
+  {# -- month grid ------------------------------------------------------- #}
+  {# Names at sm+ and a count below it: the same markup, not two copies of the #}
+  {# grid, so the two never drift apart. #}
+  <div class="panel">
+    <div class="grid grid-cols-7 border-b border-gray-200">
+      {% for day in page.weeks.0 %}
+        <div class="eyebrow px-1 py-2 text-center text-gray-500">{{ day.date|date:"D"|slice:":1" }}<span class="hidden sm:inline">{{ day.date|date:"D"|slice:"1:" }}</span></div>
+      {% endfor %}
+    </div>
+    {% for week in page.weeks %}
+      <div class="grid grid-cols-7 {% if not forloop.last %}border-b border-gray-200{% endif %}">
+        {% for day in week %}
+          <div class="min-h-20 border-r border-gray-100 p-1 last:border-r-0
+                      {% if not day.in_focus %}bg-gray-50 text-gray-400{% endif %}
+                      {% if day.is_closed %}bg-gray-100{% endif %}">
+            <div class="flex items-baseline gap-1">
+              <span class="text-xs tabular-nums {% if day.is_today %}bg-crimson-600 px-1.5 py-0.5 font-bold text-white{% else %}font-medium{% endif %}">
+                {{ day.date|date:"j" }}
+              </span>
+              {% if day.sessions %}
+                <span class="eyebrow sm:hidden {% if day.in_focus %}text-gray-600{% endif %}">{{ day.sessions|length }}</span>
+              {% endif %}
+            </div>
+
+            {% if day.is_closed %}
+              <p class="eyebrow mt-1 hidden truncate text-gray-500 sm:block" title="{{ day.closures.0.reason }}">{{ day.closures.0.reason }}</p>
+            {% endif %}
+
+            <ul class="mt-1 hidden space-y-0.5 sm:block">
+              {% for session in day.sessions %}
+                <li>
+                  <a href="{% url 'roster' session.pk %}"
+                     class="block truncate text-xs hover:underline {% if session.status == 'cancelled' %}text-gray-400 line-through{% endif %}">
+                    <span class="tabular-nums font-medium">{% timezone session.local_zone %}{{ session.starts_at|time:"H:i" }}{% endtimezone %}</span>
+                    {% if session.template %}{{ session.template.name }}{% else %}{% translate "One-off" %}{% endif %}
+                  </a>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+  <p class="mt-2 text-xs text-gray-500 sm:hidden">{% translate "Switch to the week view for class times." %}</p>
+
+{% else %}
+  {# -- week list -------------------------------------------------------- #}
+  <div class="panel divide-y divide-gray-200">
+    {% for day in page.days %}
+      <section>
+        <h2 class="flex items-baseline gap-2 px-4 pt-3 pb-1">
+          <span class="text-sm font-bold tracking-tight {% if day.is_today %}text-crimson-700{% endif %}">
+            {{ day.date|date:"l" }}
+          </span>
+          <span class="eyebrow text-gray-500">{{ day.date|date:"j M" }}</span>
+          {% if day.is_today %}<span class="eyebrow text-crimson-700">{% translate "today" %}</span>{% endif %}
+        </h2>
+
+        {% for closure in day.closures %}
+          <p class="mx-4 mb-2 border-l-2 border-gray-400 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+            {% translate "Closed" %} — {{ closure.reason }}{% if closure.dojo %} <span class="text-gray-500">· {{ closure.dojo.name }}</span>{% endif %}
+          </p>
+        {% endfor %}
+
+        {% if day.sessions %}
+          <ul class="pb-2">
+            {% for session in day.sessions %}
+              <li>
+                <a href="{% url 'roster' session.pk %}" class="flex items-start gap-4 px-4 py-3 active:bg-gray-50">
+                  <span class="w-12 shrink-0 text-base font-semibold tabular-nums">
+                    {% timezone session.local_zone %}{{ session.starts_at|time:"H:i" }}{% endtimezone %}
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate font-medium {% if session.status == 'cancelled' %}text-gray-400 line-through{% endif %}">
+                      {% if session.template %}{{ session.template.name }}{% else %}{% translate "One-off session" %}{% endif %}
+                    </span>
+                    <span class="block text-sm text-gray-500">
+                      {% if not dojo %}{{ session.dojo.name }}{% endif %}{% if session.room %}{% if not dojo %} · {% endif %}{{ session.room }}{% endif %}
+                    </span>
+                    {% if session.teaching %}
+                      <span class="block text-sm text-gray-500">
+                        {% for row in session.teaching %}
+                          {{ row.person.full_name }}{% if row.is_substitute %}
+                            <span class="eyebrow text-amber-700">
+                              {% if row.replaces %}{% blocktranslate with covered=row.replaces.full_name %}covering {{ covered }}{% endblocktranslate %}{% else %}{% translate "substitute" %}{% endif %}
+                            </span>
+                          {% endif %}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                      </span>
+                    {% else %}
+                      {# Nobody assigned is a real, actionable state — 1.9.3 cannot #}
+                      {# draft a timesheet for a class with no teacher on it. #}
+                      <span class="block text-sm text-gray-400">{% translate "No instructor assigned" %}</span>
+                    {% endif %}
+                  </span>
+                  {% if session.status == "cancelled" %}
+                    <span class="eyebrow shrink-0 text-red-700">{% translate "cancelled" %}</span>
+                  {% endif %}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% elif not day.closures %}
+          <p class="px-4 pb-3 text-sm text-gray-400">{% translate "No classes." %}</p>
+        {% endif %}
+      </section>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% if page.session_count == 0 %}
+  <p class="mt-6 border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500">
+    {% if instructor %}
+      {% blocktranslate with name=instructor.full_name %}Nothing scheduled for {{ name }} in this period.{% endblocktranslate %}
+    {% else %}
+      {% translate "Nothing scheduled in this period." %}
+    {% endif %}
+  </p>
+{% endif %}
+{% endblock %}

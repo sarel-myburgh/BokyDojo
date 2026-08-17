@@ -272,7 +272,12 @@ class HolidayObservance(TenantScopedModel):
                     dojo=self.dojo,
                     starts_on=self.holiday.date,
                     ends_on=self.holiday.date,
-                    reason=f"Closed for {self.holiday.name}",
+                    # ⚠ The holiday's name, not "Closed for X". `reason` is a
+                    # label, and every screen that shows one already says the
+                    # dojo is closed — the sentence form rendered as "Closed —
+                    # Closed for Khmer New Year" on the 1.4.9 calendar. Ad-hoc
+                    # closures ("Floor resurfacing") are nouns; this now matches.
+                    reason=self.holiday.name,
                 )
                 self.closure = closure
                 self.save(update_fields=["closure"])

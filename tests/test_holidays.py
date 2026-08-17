@@ -129,6 +129,32 @@ def test_switching_closed_to_open_removes_closure(org, dojo):
     assert not ClosurePeriod.objects.for_organization(org.pk).filter(pk=closure_id).exists()
 
 
+def test_the_closure_reason_is_the_holidays_name(org, dojo):
+    """⚠ A label, not a sentence — TODO 1.4.9.
+
+    ``reason`` is rendered by screens that have already said the dojo is shut, so
+    the sentence form came out as "Closed — Closed for Khmer New Year" on the
+    calendar. Ad-hoc closures are nouns ("Floor resurfacing"); this matches them.
+    """
+    with allow_unscoped("test setup"):
+        holiday = Holiday.objects.create(
+            organization=org,
+            name="Khmer New Year",
+            date=datetime.date(2025, 4, 14),
+        )
+
+    observance = HolidayObservance.objects.create(
+        holiday=holiday,
+        dojo=dojo,
+        observance=HolidayObservance.Observance.CLOSED,
+    )
+    observance.apply()
+    observance.refresh_from_db()
+
+    assert observance.closure.reason == "Khmer New Year"
+    assert "Closed for" not in observance.closure.reason
+
+
 def test_apply_is_idempotent(org, dojo):
     with allow_unscoped("test setup"):
         holiday = Holiday.objects.create(

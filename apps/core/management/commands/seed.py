@@ -50,6 +50,8 @@ from apps.scheduling.models import (
     ClassSession,
     ClassTemplate,
     ClosurePeriod,
+    Holiday,
+    HolidayObservance,
     SessionInstructor,
     TemplateInstructor,
 )
@@ -318,6 +320,9 @@ class Command(BaseCommand):
             self.stdout.write("Seeding class templates...")
             self._create_class_templates(dojos)
 
+            self.stdout.write("Seeding holidays and closures...")
+            self._create_closures(dojos)
+
             self.stdout.write("Materialising sessions...")
             sessions = self._materialise()
 
@@ -365,6 +370,8 @@ class Command(BaseCommand):
             AttendanceRecord,
             ClassSession,
             ClassTemplate,
+            HolidayObservance,
+            Holiday,
             ClosurePeriod,
             TransferRecord,
             Enrollment,
@@ -923,6 +930,77 @@ class Command(BaseCommand):
                         )
                         assigned += 1
         self.stdout.write(f"  Assigned a default instructor to {assigned} template(s).")
+
+    def _create_closures(self, dojos: dict) -> None:
+        """Days the dojo is shut, and why — TODO 1.4.4, read by the calendar (1.4.9).
+
+        ⚠ Called *before* materialisation, so the generator genuinely skips these
+        dates. Seeded afterwards they would leave classes sitting on a closed day
+        and teach the reader that a closure does nothing.
+
+        The second holiday is deliberately observed differently at different
+        dojos. That is the whole point of the `1.4.4` rework — a Holiday is a
+        catalogue entry that closes nothing by itself, and some dojos teach
+        straight through one — and a demo where every dojo agrees demonstrates
+        the old, wrong model just as well as the new one.
+
+        ⚠ Dates are relative to today so the current month always has one in
+        view, which is exactly why the names say "Demo" instead of borrowing a
+        real feast day. A reader who saw "Khmer New Year" against an arbitrary
+        date would be right to believe it and wrong to trust it.
+        """
+        today = date.today()
+        closed_days = 0
+        for org, org_dojos in dojos.items():
+            everywhere = Holiday.objects.create(
+                organization=org,
+                name="Demo public holiday",
+                date=today + timedelta(days=6),
+                source=Holiday.Source.MANUAL,
+            )
+            divided = Holiday.objects.create(
+                organization=org,
+                # ⚠ The name says nothing about closing. A Holiday is a
+                # catalogue entry; whether it shuts a dojo is the observance's
+                # business, and this one is observed two different ways below.
+                name="Demo regional holiday",
+                date=today + timedelta(days=13),
+                source=Holiday.Source.MANUAL,
+            )
+
+            for index, dojo in enumerate(org_dojos):
+                for holiday, observance in (
+                    (everywhere, HolidayObservance.Observance.CLOSED),
+                    (
+                        divided,
+                        HolidayObservance.Observance.CLOSED
+                        if index == 0
+                        else HolidayObservance.Observance.OPEN,
+                    ),
+                ):
+                    row = HolidayObservance.objects.create(
+                        holiday=holiday, dojo=dojo, observance=observance
+                    )
+                    # The sanctioned path: apply() is what creates the linked
+                    # ClosurePeriod, so the demo data is built the way the
+                    # application builds it rather than by writing rows directly.
+                    row.apply()
+                    if observance == HolidayObservance.Observance.CLOSED:
+                        closed_days += 1
+
+            # Not every closure is a holiday. Without one of these the screen
+            # only ever shows closures that arrived through the holiday table.
+            if org_dojos:
+                ClosurePeriod.objects.create(
+                    organization=org,
+                    dojo=org_dojos[0],
+                    starts_on=today + timedelta(days=20),
+                    ends_on=today + timedelta(days=22),
+                    reason="Floor resurfacing",
+                )
+                closed_days += 3
+
+        self.stdout.write(f"  {closed_days} closed dojo-day(s) across the demo.")
 
     def _materialise(self) -> list:
         """Generate sessions across the demo window — TODO 1.4.2.
