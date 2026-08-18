@@ -1,0 +1,13 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "My profile" %} — BokyDojo{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold tracking-tight mb-6">{% translate "My profile" %}</h1>
+{% include "identity/_profile_panels.html" %}
+<p class="text-sm text-gray-500">
+  <a href="{% url 'mfa-setup' %}" class="text-crimson-600 hover:underline">{% translate "Security settings" %}</a>
+  — {% translate "password and two-factor authentication." %}
+</p>
+{% endblock %}

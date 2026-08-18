@@ -92,6 +92,28 @@ def may_read(actor: Actor, document: Document, *, governance_model: str) -> bool
         return False
     if document.organization_id != actor.organization_id:
         return False
+    if document.kind == Document.Kind.PROFILE_PHOTO:
+        # ⚠ No consent record. See Document.Kind.PROFILE_PHOTO: this is a staff
+        # profile picture, not a child's photograph, and whoever may view the
+        # person may see it.
+        if document.subject_person_id is None:
+            return False
+        # ⚠ Your own picture, always. Person carries no dojo, so PERSON_VIEW
+        # below grants only to organisation-scoped roles — without this line an
+        # instructor can upload their own photograph and then be refused it.
+        if actor.person_id is not None and actor.person_id == document.subject_person_id:
+            return True
+        from apps.identity.models import Person
+
+        subject = (
+            Person.objects.for_organization(document.organization_id)
+            .filter(pk=document.subject_person_id)
+            .first()
+        )
+        return subject is not None and can(
+            actor, Action.PERSON_VIEW, subject, governance_model=governance_model
+        )
+
     if document.kind == Document.Kind.PHOTO:
         from apps.identity.models import (
             ConsentPolicy,

@@ -1,0 +1,25 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ person.full_name }} — BokyDojo{% endblock %}
+
+{% block content %}
+<p class="mb-2 text-sm">
+  <a href="{% url 'staff-list' %}" class="text-gray-500 hover:underline">← {% translate "Staff" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-6">{{ person.full_name }}</h1>
+
+{% include "identity/_profile_panels.html" %}
+
+<div class="panel px-5 py-4">
+  <h2 class="mb-3 text-base font-bold tracking-tight">{% translate "Access" %}</h2>
+  <ul class="text-sm">
+    <li class="py-1">
+      <a href="{% url 'staff-roles' person.pk %}" class="text-crimson-600 hover:underline">{% translate "Roles and permissions" %}</a>
+    </li>
+    <li class="py-1">
+      <a href="{% url 'temporary-password' person.pk %}" class="text-crimson-600 hover:underline">{% translate "Issue a temporary password" %}</a>
+    </li>
+  </ul>
+</div>
+{% endblock %}

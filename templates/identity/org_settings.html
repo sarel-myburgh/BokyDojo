@@ -124,7 +124,7 @@
 
   <div class="panel divide-y divide-gray-200">
     {% for row in staff %}
-      <a href="{% url 'staff-roles' row.person.pk %}" class="flex items-start gap-4 px-4 py-3 active:bg-gray-50">
+      <a href="{% url 'person-detail' row.person.pk %}" class="flex items-start gap-4 px-4 py-3 active:bg-gray-50">
         <span class="min-w-0 flex-1">
           <span class="block truncate font-medium">{{ row.person.full_name }}</span>
           <span class="block text-sm text-gray-500">

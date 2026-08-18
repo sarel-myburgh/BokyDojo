@@ -7,7 +7,14 @@ from django.views.generic import RedirectView, TemplateView
 
 from apps.attendance import kiosk_views
 from apps.attendance import views as attendance_views
-from apps.identity import consent_views, guardian_views, org_views, photo_views, student_views
+from apps.identity import (
+    consent_views,
+    guardian_views,
+    org_views,
+    photo_views,
+    profile_views,
+    student_views,
+)
 from apps.identity import password_reset as password_reset_views
 from apps.identity import setup as setup_views
 from apps.identity import views as identity_views
@@ -61,6 +68,8 @@ urlpatterns = [
         password_reset_views.password_reset_complete_view,
         name="password-reset-complete",
     ),
+    path("account/", profile_views.account_view, name="account"),
+    path("account/edit/", profile_views.account_edit_view, name="account-edit"),
     path("account/password/", identity_views.password_change_view, name="password-change"),
     path("login/2fa/", identity_views.mfa_challenge_view, name="mfa-challenge"),
     path("account/security/2fa/", identity_views.mfa_setup_view, name="mfa-setup"),
@@ -99,6 +108,26 @@ urlpatterns = [
     path("settings/people/", org_views.staff_list_view, name="staff-list"),
     path("settings/people/new/", org_views.staff_create_view, name="staff-create"),
     path("settings/people/<uuid:person_id>/roles/", org_views.staff_roles_view, name="staff-roles"),
+    path(
+        "people/<uuid:person_id>/",
+        profile_views.person_detail_view,
+        name="person-detail",
+    ),
+    path(
+        "people/<uuid:person_id>/edit/",
+        profile_views.person_edit_view,
+        name="person-edit",
+    ),
+    path(
+        "people/<uuid:person_id>/picture/",
+        profile_views.profile_photo_view,
+        name="profile-photo",
+    ),
+    path(
+        "people/<uuid:person_id>/picture/upload/",
+        profile_views.profile_photo_upload_view,
+        name="profile-photo-upload",
+    ),
     path(
         "settings/people/<uuid:person_id>/temporary-password/",
         org_views.temporary_password_view,

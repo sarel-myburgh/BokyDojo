@@ -1,0 +1,37 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Edit details" %} — BokyDojo{% endblock %}
+
+{% block content %}
+<p class="mb-2 text-sm">
+  <a href="{{ back_url }}" class="text-gray-500 hover:underline">← {% translate "Back" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Edit details" %}</h1>
+<p class="text-sm text-gray-500 mb-6">{{ person.full_name }}</p>
+
+<form method="post" class="panel px-5 py-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">
+      {{ form.non_field_errors }}
+    </div>
+  {% endif %}
+  {% for field in form %}
+    <div class="mb-4">
+      <label for="{{ field.id_for_label }}" class="eyebrow mb-1 block">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}<p class="mt-1 text-xs text-gray-500">{{ field.help_text }}</p>{% endif %}
+      {% for error in field.errors %}
+        <p class="mt-1 text-xs text-red-700">{{ error }}</p>
+      {% endfor %}
+    </div>
+  {% endfor %}
+  <div class="flex items-center gap-3">
+    <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+      {% translate "Save" %}
+    </button>
+    <a href="{{ back_url }}" class="text-sm text-gray-500 hover:underline">{% translate "Cancel" %}</a>
+  </div>
+</form>
+{% endblock %}

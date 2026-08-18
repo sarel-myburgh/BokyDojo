@@ -25,12 +25,32 @@
         <a href="{% url 'timesheet' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Timesheet" %}</a>
         <a href="{% url 'attendance-summary' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Reports" %}</a>
         <a href="{% url 'org-settings' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Settings" %}</a>
-        <a href="{% url 'mfa-setup' %}" class="shrink-0 font-medium text-gray-700 hover:text-gray-900">{% translate "Security" %}</a>
       </nav>
-      <form method="post" action="{% url 'logout' %}" class="ml-auto">
-        {% csrf_token %}
-        <button type="submit" class="eyebrow hover:text-gray-900">{% translate "Sign out" %}</button>
-      </form>
+
+      {# ⚠ <details>, not a JavaScript dropdown. The CSP is strict-nonce and there #}
+      {# is no inline script anywhere in this project; this opens and closes on   #}
+      {# its own, works with JS off, and is keyboard-operable for free.           #}
+      <details class="profile-menu relative ml-auto">
+        <summary class="flex h-8 w-8 cursor-pointer list-none items-center justify-center bg-gray-100 text-xs font-bold text-gray-600 hover:bg-gray-200"
+                 title="{% translate 'Account' %}">
+          <span class="sr-only">{% translate "Account" %}</span>
+          {# Initials, not the picture. An <img> here would need an onerror #}
+          {# fallback for the common case of no picture, and an inline handler #}
+          {# is exactly what the strict-nonce CSP forbids. The picture is on #}
+          {# the profile page, where we know whether there is one. #}
+          <span aria-hidden="true">{{ user.email|slice:":1"|upper }}</span>
+        </summary>
+        <div class="absolute right-0 z-20 mt-1 w-48 border border-gray-200 bg-white py-1 text-sm shadow-sm">
+          {% if request.actor.person_id %}
+            <a href="{% url 'account' %}" class="block px-4 py-2 hover:bg-gray-50">{% translate "Profile" %}</a>
+          {% endif %}
+          <a href="{% url 'mfa-setup' %}" class="block px-4 py-2 hover:bg-gray-50">{% translate "Security" %}</a>
+          <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="block w-full px-4 py-2 text-left hover:bg-gray-50">{% translate "Sign out" %}</button>
+          </form>
+        </div>
+      </details>
     </div>
     <div class="obi" aria-hidden="true"></div>
   </header>

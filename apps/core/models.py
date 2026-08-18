@@ -257,6 +257,21 @@ class Document(TenantScopedModel):
         IDENTITY = "identity", _("Identity document")
         CERTIFICATE = "certificate", _("Certificate")
         PHOTO = "photo", _("Photograph")
+        #: ⚠ A separate kind from PHOTO, deliberately.
+        #:
+        #: PHOTO is a student photograph and is readable only while an explicit,
+        #: exact-version consent record stands — that framework exists for
+        #: children whose faces appear on the check-in grid. A staff profile
+        #: picture is employment data on a different footing, and an
+        #: administrator adding one for a colleague cannot consent on their
+        #: behalf without fabricating the evidence the consent trail exists to
+        #: be. Forcing it through the same kind would mean either inventing
+        #: consent or refusing the feature.
+        #:
+        #: ⚠ Keeping them apart also means a staff picture can never be picked up
+        #: by anything reading student photographs — the kiosk grid queries
+        #: kind=PHOTO and is untouched by this.
+        PROFILE_PHOTO = "profile_photo", _("Profile picture")
         OTHER = "other", _("Other")
 
     tenant_org_path = "organization_id"

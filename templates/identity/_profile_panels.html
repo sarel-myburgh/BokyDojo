@@ -1,0 +1,106 @@
+{% load i18n %}
+{% comment %}
+  The shared body of every profile screen — plan §3.
+
+  One partial rather than four copies: the administrator's view of somebody and
+  a person's view of themselves show the same facts, and the only thing that
+  differs is where the buttons point. Copies drift.
+{% endcomment %}
+
+<div class="panel mb-6 flex items-center gap-4 px-5 py-4">
+  {% if photo %}
+    <img src="{% url 'profile-photo' person.pk %}" alt=""
+         class="h-16 w-16 shrink-0 object-cover" width="64" height="64">
+  {% else %}
+    <span class="flex h-16 w-16 shrink-0 items-center justify-center bg-gray-100 text-xl font-bold text-gray-400"
+          aria-hidden="true">{{ person.given_name|slice:":1" }}{{ person.family_name|slice:":1" }}</span>
+  {% endif %}
+  <div class="min-w-0 flex-1">
+    <p class="truncate text-lg font-bold tracking-tight">{{ person.full_name }}</p>
+    {% if person.preferred_name %}
+      <p class="text-sm text-gray-500">{% blocktranslate with name=person.preferred_name %}Goes by {{ name }}{% endblocktranslate %}</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if may_edit %}
+  <form method="post" action="{% url 'profile-photo-upload' person.pk %}"
+        enctype="multipart/form-data" class="panel mb-6 px-5 py-4">
+    {% csrf_token %}
+    <p class="eyebrow mb-2">{% translate "Profile picture" %}</p>
+    <div class="flex flex-wrap items-center gap-3">
+      <input type="file" name="photo" accept="image/*" required class="text-sm">
+      <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+        {% translate "Upload" %}
+      </button>
+    </div>
+    <p class="mt-2 text-xs text-gray-500">
+      {% translate "JPEG, PNG, GIF, or WebP. Location data is stripped from the file when it is stored." %}
+    </p>
+  </form>
+{% endif %}
+
+<div class="panel mb-6 px-5 py-4">
+  <div class="mb-3 flex items-baseline gap-2">
+    <h2 class="text-base font-bold tracking-tight">{% translate "Details" %}</h2>
+    {% if may_edit %}
+      <a href="{% if is_self %}{% url 'account-edit' %}{% else %}{% url 'person-edit' person.pk %}{% endif %}"
+         class="eyebrow ml-auto text-crimson-600 hover:underline">{% translate "Edit" %}</a>
+    {% endif %}
+  </div>
+  <dl class="divide-y divide-gray-100 text-sm">
+    <div class="flex gap-4 py-2">
+      <dt class="w-32 shrink-0 text-gray-500">{% translate "Name" %}</dt>
+      <dd class="min-w-0 flex-1">{{ person.full_name }}</dd>
+    </div>
+    <div class="flex gap-4 py-2">
+      <dt class="w-32 shrink-0 text-gray-500">{% translate "Email" %}</dt>
+      <dd class="min-w-0 flex-1 break-words">{{ person.email|default:"—" }}</dd>
+    </div>
+    <div class="flex gap-4 py-2">
+      <dt class="w-32 shrink-0 text-gray-500">{% translate "Phone" %}</dt>
+      <dd class="min-w-0 flex-1">{{ person.phone|default:"—" }}</dd>
+    </div>
+  </dl>
+</div>
+
+{% comment %}
+  ⚠ Dojos and grades are shown, never edited, on any of these screens. Which
+  dojo somebody belongs to and what grade they hold are an administrator's
+  decisions made elsewhere; a field here would be a self-service promotion.
+{% endcomment %}
+<div class="panel mb-6 px-5 py-4">
+  <h2 class="mb-3 text-base font-bold tracking-tight">{% translate "Dojos" %}</h2>
+  {% if dojos %}
+    <ul class="text-sm">
+      {% for dojo in dojos %}<li class="py-1">{{ dojo.name }}</li>{% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-sm text-gray-400">{% translate "Not attached to a dojo." %}</p>
+  {% endif %}
+</div>
+
+<div class="panel mb-6 px-5 py-4">
+  <h2 class="mb-3 text-base font-bold tracking-tight">{% translate "Grades" %}</h2>
+  {% if tracks %}
+    <ul class="divide-y divide-gray-100 text-sm">
+      {% for track in tracks %}
+        <li class="flex items-baseline gap-3 py-2">
+          <span class="font-medium">{{ track.style.name }}</span>
+          <span class="ml-auto text-right">
+            {% if track.style.is_ranked %}
+              {% if track.current_rank %}{{ track.current_rank.name }}{% else %}<span class="text-gray-400">{% translate "Ungraded" %}</span>{% endif %}
+            {% else %}
+              <span class="text-gray-400">{% translate "Unranked style" %}</span>
+            {% endif %}
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="text-sm text-gray-400">{% translate "No grades recorded." %}</p>
+  {% endif %}
+  <p class="mt-3 text-xs text-gray-500">
+    {% translate "Dojos and grades are set by an administrator." %}
+  </p>
+</div>

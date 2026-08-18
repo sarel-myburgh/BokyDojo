@@ -88,3 +88,16 @@
     @apply tabular-nums;
   }
 }
+
+/* The account menu in the header — plan §3.
+   A <details> element rather than a scripted dropdown, because the CSP is
+   strict-nonce and there is no inline script in this project. All this needs is
+   the disclosure triangle gone; the open/close behaviour is the browser's. */
+@layer components {
+  .profile-menu > summary {
+    list-style: none;
+  }
+  .profile-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+}
