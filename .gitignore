@@ -17,14 +17,21 @@ htmlcov/
 .vscode/
 *.log
 
-# Local run configuration. The interpreter path differs between the primary
-# checkout and each agent's worktree, so this cannot be shared.
-.claude/launch.json
-
-# Per-developer tool permissions, not a project decision.
-.claude/settings.local.json
-
-dev.sqlite3
+# ---------------------------------------------------------------------------
+# AI coding-tool state. Per-developer, per-machine, and none of it is a project
+# decision — the interpreter paths differ between checkouts and the preference
+# notes are about a person, not the software.
+#
+# ⚠ Whole directories, not named files. The previous version ignored
+# `.claude/launch.json` and `.claude/settings.local.json` individually, so
+# anything else these tools wrote into those folders was fair game for
+# `git add -A` — which is exactly how `.commandcode/` ended up tracked and
+# public, including a file of inferred notes about how the author likes to work.
+# ---------------------------------------------------------------------------
+.claude/
+.commandcode/
+.aider*
+.cursor/
 
 /backups/
 
@@ -33,3 +40,15 @@ dev.sqlite3
 # forbids a runtime CDN, so a checkout with no Node installed still has to be
 # able to render. Rebuild it with `npm run build:css` after editing any template.
 /node_modules/
+
+# ---------------------------------------------------------------------------
+# OS and editor noise. ⚠ Not hypothetical: this repository has been through a
+# Windows checkout on an NTFS/DrvFs mount (see TODO.md), so Thumbs.db and
+# desktop.ini are live risks rather than boilerplate.
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
