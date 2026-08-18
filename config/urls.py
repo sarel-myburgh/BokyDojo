@@ -61,6 +61,7 @@ urlpatterns = [
         password_reset_views.password_reset_complete_view,
         name="password-reset-complete",
     ),
+    path("account/password/", identity_views.password_change_view, name="password-change"),
     path("login/2fa/", identity_views.mfa_challenge_view, name="mfa-challenge"),
     path("account/security/2fa/", identity_views.mfa_setup_view, name="mfa-setup"),
     path(
@@ -98,6 +99,11 @@ urlpatterns = [
     path("settings/people/", org_views.staff_list_view, name="staff-list"),
     path("settings/people/new/", org_views.staff_create_view, name="staff-create"),
     path("settings/people/<uuid:person_id>/roles/", org_views.staff_roles_view, name="staff-roles"),
+    path(
+        "settings/people/<uuid:person_id>/temporary-password/",
+        org_views.temporary_password_view,
+        name="temporary-password",
+    ),
     path(
         "settings/people/<uuid:person_id>/roles/<uuid:assignment_id>/revoke/",
         org_views.role_revoke_view,

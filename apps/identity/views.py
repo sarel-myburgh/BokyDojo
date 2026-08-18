@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 
+from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -363,3 +365,45 @@ def logout_view(request) -> HttpResponse:
         )
     logout(request)
     return redirect("login")
+
+
+@never_cache
+@csrf_protect
+@login_required
+@require_http_methods(["GET", "POST"])
+def password_change_view(request) -> HttpResponse:
+    """Choose your own password, replacing a temporary one — TODO 0.6.8.
+
+    ⚠ Django's own form, which requires the current password. They have just
+    typed it, so the friction is nil — and it means a session hijacked between
+    sign-in and this screen cannot set a password of its own.
+    """
+    from django.contrib.auth import update_session_auth_hash
+    from django.contrib.auth.forms import PasswordChangeForm
+
+    from apps.identity.passwords import clear_must_change
+
+    form = PasswordChangeForm(request.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.save()
+        clear_must_change(user)
+        # ⚠ Without this, changing the password rotates the session auth hash and
+        # signs the person straight back out — having just proved who they are.
+        update_session_auth_hash(request, user)
+        audit.record(
+            "password_change",
+            actor=request.actor,
+            subject=user.person,
+            note="password chosen by the account holder",
+            strict=True,
+        )
+        messages.success(request, _("Password changed."))
+        # ⚠ Default to "", not None: _safe_target calls .startswith and a plain
+        # visit to this screen carries no ?next=, which was a 500.
+        return redirect(_safe_target(request.GET.get("next", "")) or "today")
+
+    return render(
+        request,
+        "auth/password_change.html",
+        {"form": form, "was_temporary": request.user.must_change_password},
+    )

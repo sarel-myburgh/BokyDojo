@@ -234,6 +234,16 @@ class User(AbstractBaseUser):
 
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     last_password_change = models.DateTimeField(null=True, blank=True, editable=False)
+    #: Set when an administrator issues a temporary password — TODO 0.6.8.
+    #: ⚠ Enforced by middleware on every request, not merely suggested at login.
+    #: A temporary password an administrator knows must stop working as soon as
+    #: the person it was given to has used it, or it is simply a second password
+    #: on the account that somebody else also holds.
+    must_change_password = models.BooleanField(
+        _("must change password"),
+        default=False,
+        editable=False,
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS: list[str] = []

@@ -42,7 +42,7 @@ from apps.identity.models import (
     User,
 )
 from apps.identity.org_forms import DojoForm, StudentForm
-from apps.identity.permissions import ROLE_ACTIONS, Action, PermissionDenied, require
+from apps.identity.permissions import ROLE_ACTIONS, Action, PermissionDenied, can, require
 from apps.ranks.models import RankLadder, Style
 from apps.staffing.models import InstructorProfile
 
@@ -517,10 +517,80 @@ def staff_roles_view(request, person_id) -> HttpResponse:
         .select_related("dojo")
         .order_by("role")
     )
+    # ⚠ Presentation only — temporary_password_view checks ORG_EDIT itself.
+    # Menu visibility is not a control (SEC §2.2).
+    may_issue = can(
+        actor, Action.ORG_EDIT, _organization(actor), governance_model=GovernanceModel.CENTRAL
+    )
     return render(
         request,
         "identity/staff_roles.html",
-        {"person": person, "assignments": assignments, "form": form},
+        {
+            "person": person,
+            "assignments": assignments,
+            "form": form,
+            "may_issue_password": may_issue,
+        },
+    )
+
+
+@login_required
+@require_POST
+def temporary_password_view(request, person_id) -> HttpResponse:
+    """Issue a temporary password for somebody — TODO 0.6.8.
+
+    ⚠ Restricted to ``ORG_EDIT``, which only an organisation administrator holds.
+    That is deliberately narrower than ``ROLE_ASSIGN`` — which dojo
+    administrators also have — because this is an account-takeover primitive:
+    whoever uses it can sign in as the person it is used on.
+
+    ⚠ The password is rendered straight into this response and nowhere else. Not
+    a message, which would put it in the session store; not a redirect, which
+    would have to carry it in a query string and into the server log.
+    """
+    from apps.identity.passwords import describe_handover, set_temporary_password
+
+    actor = request.actor
+    organization = _organization(actor)
+    _require_org_edit(actor, organization)
+
+    person = get_object_or_404(Person.objects.for_actor(actor), pk=person_id)
+    user = User.objects.filter(person=person).first()
+    if user is None:
+        messages.error(request, _("%(name)s has no sign-in.") % {"name": person.full_name})
+        return redirect("staff-roles", person_id=person.pk)
+
+    # ⚠ Not on yourself. Somebody resetting their own password should use the
+    # ordinary change screen; doing it here would drop them into the forced
+    # change loop for no reason, and it muddies what the audit entry means.
+    if user.person_id == actor.person_id:
+        messages.error(
+            request,
+            _("Use the password screen to change your own password."),
+        )
+        return redirect("staff-roles", person_id=person.pk)
+
+    password = set_temporary_password(user=user, actor=actor)
+
+    assignments = list(
+        RoleAssignment.objects.for_actor(actor)
+        .filter(person=person, revoked_at__isnull=True)
+        .select_related("dojo")
+        .order_by("role")
+    )
+    from apps.identity.org_forms import RoleGrantForm
+
+    return render(
+        request,
+        "identity/staff_roles.html",
+        {
+            "person": person,
+            "assignments": assignments,
+            "form": RoleGrantForm(actor=actor),
+            "temporary_password": password,
+            "handover_note": describe_handover(),
+            "may_issue_password": True,
+        },
     )
 
 

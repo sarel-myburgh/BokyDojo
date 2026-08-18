@@ -62,6 +62,11 @@ MIDDLEWARE = [
     "apps.core.sessions.SessionTimeoutMiddleware",
     # Enforce TOTP before privileged sessions can reach application or admin views.
     "apps.identity.middleware.MfaEnforcementMiddleware",
+    # ⚠ After the MFA middleware, so somebody signing in with a temporary
+    # password who also holds a TOTP credential finishes the second factor before
+    # being sent to choose a password. Before the audit context is fine either
+    # way; it only ever redirects.
+    "apps.identity.middleware.PasswordChangeRequiredMiddleware",
     # Must follow AuthenticationMiddleware — it derives the Actor from request.user.
     "apps.core.audit.AuditContextMiddleware",
     # Must follow the audit context — it reads request.actor to decide which

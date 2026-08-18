@@ -10,6 +10,19 @@
 <h1 class="text-2xl font-bold tracking-tight mb-1">{{ person.full_name }}</h1>
 <p class="text-sm text-gray-500 mb-6">{% translate "Roles held" %}</p>
 
+{% if temporary_password %}
+  {% comment %}
+    ⚠ Rendered here and nowhere else. Not a message — that would put it in the
+    session store — and not a redirect, which would carry it in a query string
+    and into the server log. Reload this page and it is gone.
+  {% endcomment %}
+  <div class="mb-6 border-l-2 border-crimson-600 bg-gray-50 px-5 py-4">
+    <p class="eyebrow mb-2">{% translate "Temporary password" %}</p>
+    <p class="mb-3 select-all font-mono text-2xl font-bold tracking-tight">{{ temporary_password }}</p>
+    <p class="text-sm text-gray-600">{{ handover_note }}</p>
+  </div>
+{% endif %}
+
 <div class="panel divide-y divide-gray-200 mb-6">
   {% for a in assignments %}
     <div class="flex items-center gap-4 px-4 py-3">
@@ -44,4 +57,19 @@
 <p class="mt-4 text-xs text-gray-500">
   {% translate "Revoking keeps the record — who held what, and until when, is what an investigation asks months later." %}
 </p>
+
+{% if may_issue_password %}
+  <div class="mt-8 border-t border-gray-200 pt-5">
+    <p class="eyebrow mb-1">{% translate "Signing in" %}</p>
+    <p class="mb-3 text-sm text-gray-500">
+      {% translate "For an organisation with no email set up, or somebody locked out. They will have to choose their own password before they can use anything." %}
+    </p>
+    <form method="post" action="{% url 'temporary-password' person.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="border border-gray-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 active:bg-gray-100">
+        {% translate "Issue a temporary password" %}
+      </button>
+    </form>
+  </div>
+{% endif %}
 {% endblock %}
