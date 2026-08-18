@@ -91,6 +91,36 @@ class LadderForm(forms.ModelForm):
                     "where": dojo.name if dojo else _("all dojos"),
                 }
             )
+
+        # ⚠ "Everyone" and the age-split ladders are mutually exclusive for a
+        # given style and dojo. Allowing both leaves no defensible answer for a
+        # nine-year-old — two ladders claim them — and the wrong one is invisible
+        # until a grading. Refused here with a message rather than resolved by a
+        # precedence rule nobody would remember.
+        siblings = RankLadder.objects.for_organization(self.style.organization_id).filter(
+            style=self.style, dojo=dojo
+        )
+        if self.instance.pk:
+            siblings = siblings.exclude(pk=self.instance.pk)
+        existing = set(siblings.values_list("applies_to", flat=True))
+        where = dojo.name if dojo else _("all dojos")
+        if applies_to == RankLadder.AppliesTo.ALL and existing:
+            raise forms.ValidationError(
+                _(
+                    "%(where)s already has age-specific belts for this style. A set "
+                    "for everyone cannot sit alongside them — remove those first, or "
+                    "add this one as adult or junior."
+                )
+                % {"where": where}
+            )
+        if applies_to != RankLadder.AppliesTo.ALL and RankLadder.AppliesTo.ALL in existing:
+            raise forms.ValidationError(
+                _(
+                    "%(where)s already has one set of belts for everyone in this "
+                    "style. Remove it before adding age-specific sets."
+                )
+                % {"where": where}
+            )
         return cleaned
 
 

@@ -1,0 +1,39 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Staff" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<p class="text-sm mb-2">
+  <a href="{% url 'org-settings' %}" class="eyebrow hover:text-gray-900">&larr; {% translate "Organisation settings" %}</a>
+</p>
+<div class="flex items-center gap-2 mb-1">
+  <h1 class="text-2xl font-bold tracking-tight">{% translate "Staff" %}</h1>
+  <a href="{% url 'staff-create' %}" class="eyebrow ml-auto text-crimson-600 hover:underline">
+    {% translate "Add a staff member" %}
+  </a>
+</div>
+<p class="text-sm text-gray-500 mb-6">
+  {% translate "Who holds which roles. A person may hold several." %}
+</p>
+
+<div class="panel divide-y divide-gray-200">
+  {% for row in rows %}
+    <a href="{% url 'staff-roles' row.person.pk %}" class="flex items-start gap-4 px-4 py-3 active:bg-gray-50">
+      <span class="min-w-0 flex-1">
+        <span class="block truncate font-medium">{{ row.person.full_name }}</span>
+        <span class="block text-sm text-gray-500">
+          {% for a in row.roles %}
+            {{ a.get_role_display }}<span class="text-gray-400">{% if a.dojo %} · {{ a.dojo.name }}{% else %} · {% translate "organisation" %}{% endif %}</span>{% if not forloop.last %} · {% endif %}
+          {% endfor %}
+        </span>
+      </span>
+      <span class="eyebrow shrink-0 text-gray-400">
+        {% blocktranslate count counter=row.roles|length %}{{ counter }} role{% plural %}{{ counter }} roles{% endblocktranslate %}
+      </span>
+    </a>
+  {% empty %}
+    <p class="px-4 py-6 text-center text-sm text-gray-500">{% translate "Nobody holds a staff role yet." %}</p>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ person.full_name }} — DojoMaster{% endblock %}
+
+{% block content %}
+<p class="text-sm mb-2">
+  <a href="{% url 'staff-list' %}" class="eyebrow hover:text-gray-900">&larr; {% translate "Staff" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{{ person.full_name }}</h1>
+<p class="text-sm text-gray-500 mb-6">{% translate "Roles held" %}</p>
+
+<div class="panel divide-y divide-gray-200 mb-6">
+  {% for a in assignments %}
+    <div class="flex items-center gap-4 px-4 py-3">
+      <span class="min-w-0 flex-1">
+        <span class="block font-medium">{{ a.get_role_display }}</span>
+        <span class="block text-sm text-gray-500">
+          {% if a.dojo %}{{ a.dojo.name }}{% else %}{% translate "The whole organisation" %}{% endif %}
+        </span>
+      </span>
+      <form method="post" action="{% url 'role-revoke' person.pk a.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="eyebrow text-gray-500 underline hover:text-red-700">{% translate "revoke" %}</button>
+      </form>
+    </div>
+  {% empty %}
+    <p class="px-4 py-6 text-center text-sm text-gray-500">{% translate "No live roles." %}</p>
+  {% endfor %}
+</div>
+
+<form method="post" class="panel px-5 py-4">
+  {% csrf_token %}
+  <p class="eyebrow mb-3">{% translate "Add a role" %}</p>
+  {% if form.non_field_errors %}
+    <div class="mb-3 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {% for field in form %}{% include "identity/_form_field.html" with field=field %}{% endfor %}
+  <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+    {% translate "Add role" %}
+  </button>
+</form>
+
+<p class="mt-4 text-xs text-gray-500">
+  {% translate "Revoking keeps the record — who held what, and until when, is what an investigation asks months later." %}
+</p>
+{% endblock %}

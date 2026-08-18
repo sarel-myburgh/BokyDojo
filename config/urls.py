@@ -94,7 +94,14 @@ urlpatterns = [
     ),
     path("settings/dojos/new/", org_views.dojo_create_view, name="dojo-create"),
     path("settings/dojos/<uuid:dojo_id>/", org_views.dojo_edit_view, name="dojo-edit"),
-    path("settings/instructors/new/", org_views.instructor_create_view, name="instructor-create"),
+    path("settings/people/", org_views.staff_list_view, name="staff-list"),
+    path("settings/people/new/", org_views.staff_create_view, name="staff-create"),
+    path("settings/people/<uuid:person_id>/roles/", org_views.staff_roles_view, name="staff-roles"),
+    path(
+        "settings/people/<uuid:person_id>/roles/<uuid:assignment_id>/revoke/",
+        org_views.role_revoke_view,
+        name="role-revoke",
+    ),
     path("students/new/", org_views.student_create_view, name="student-create"),
     path("students/", student_views.student_list_view, name="student-list"),
     path(

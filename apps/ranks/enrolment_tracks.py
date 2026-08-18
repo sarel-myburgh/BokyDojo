@@ -22,10 +22,10 @@ means the ladder they are on is whichever dojo enrolled them first. Moving them
 is a deliberate act on their record, not something re-enrolling silently redoes.
 
 ⚠ **A track with no ladder is a real, honest state.** Unranked styles never get
-one. Ranked styles get one only when it can be *known* — a style with a single
-ladder, or an age that decides between the junior and adult ladders. Guessing
-would put an eight-year-old on the adult ladder and nobody would notice until a
-grading.
+one. Ranked styles get one only when it can be *known* — a single ladder, an
+"everyone" ladder, or an age that decides between the junior and adult ones.
+Guessing would put an eight-year-old on the adult ladder and nobody would notice
+until a grading.
 """
 
 from __future__ import annotations
@@ -70,6 +70,14 @@ def choose_ladder(style: Style, *, student, organization_id, dojo=None) -> RankL
         return None
     if len(ladders) == 1:
         return ladders[0]
+
+    # ⚠ An "everyone" ladder needs no age and wins outright. A style that has one
+    # should not also have age-split ladders — the form refuses that combination
+    # — but if the data ever says otherwise, answering without guessing an age is
+    # the safer reading.
+    everyone = [ladder for ladder in ladders if ladder.applies_to == RankLadder.AppliesTo.ALL]
+    if everyone:
+        return everyone[0]
 
     age = getattr(student, "age", None)
     if age is None:

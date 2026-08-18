@@ -15,7 +15,7 @@ from django import forms
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
-from apps.identity.models import Dojo, Person
+from apps.identity.models import Dojo, Person, Role
 from apps.ranks.models import Style
 from apps.staffing.models import InstructorProfile
 
@@ -185,14 +185,34 @@ class StudentForm(forms.Form):
         return dob
 
 
-class InstructorForm(forms.Form):
-    """A person, a role, a dojo assignment and pay details, in one go.
+#: Roles that make somebody staff. ⚠ GUARDIAN and STUDENT are deliberately
+#: absent: they are created through enrolment and the parent portal, not by an
+#: admin handing out a role, and offering them here would produce a person with
+#: a sign-in and no student record.
+STAFF_ROLES = (
+    Role.ORG_ADMIN,
+    Role.DOJO_ADMIN,
+    Role.INSTRUCTOR,
+    Role.ASSISTANT_INSTRUCTOR,
+    Role.FRONT_DESK,
+    Role.SAFEGUARDING,
+)
 
-    ⚠ Four records, and creating three of the four is useless. An instructor
-    without a ``RoleAssignment`` cannot sign in; without an
-    ``InstructorAssignment`` the substitution check refuses them (found dark in
-    the seed once already); without an ``InstructorProfile`` they have no pay
-    setup and their timesheet lines carry no rate.
+#: Roles that mean this person actually teaches, and therefore need an
+#: InstructorAssignment and pay details. ⚠ DOJO_ADMIN is here because the role's
+#: own label is "Dojo administrator / head instructor" — they take classes.
+TEACHING_ROLES = (Role.DOJO_ADMIN, Role.INSTRUCTOR, Role.ASSISTANT_INSTRUCTOR)
+
+
+class StaffForm(forms.Form):
+    """One person, any number of roles — TODO 0.5.x, plan §3.
+
+    ⚠ Roles are a *set*, not a choice. The permission layer has always read them
+    that way (``Actor.roles`` is a frozenset and ``can()`` walks all of them, and
+    RoleAssignment is unique on person+role+scope+dojo precisely so somebody can
+    hold several) — it was only this screen that pretended a person had one job.
+    An organisation administrator who also teaches Tuesday evenings is the
+    ordinary case, not an exception.
     """
 
     given_name = forms.CharField(
@@ -211,9 +231,22 @@ class InstructorForm(forms.Form):
         widget=forms.EmailInput(attrs={"class": TEXT}),
         help_text=_("They sign in with this. It must be unique."),
     )
+    roles = forms.MultipleChoiceField(
+        label=_("Roles"),
+        choices=[(r, Role(r).label) for r in STAFF_ROLES],
+        widget=forms.CheckboxSelectMultiple(),
+        help_text=_("Somebody may hold more than one — an admin who also teaches, say."),
+    )
+    scope = forms.ChoiceField(
+        label=_("These roles apply to"),
+        choices=(("dojo", _("One dojo")), ("org", _("The whole organisation"))),
+        initial="dojo",
+        widget=forms.Select(attrs={"class": TEXT}),
+    )
     dojo = forms.ModelChoiceField(
         label=_("Dojo"),
         queryset=Dojo.objects.none(),
+        required=False,
         widget=forms.Select(attrs={"class": TEXT}),
     )
     styles = forms.ModelMultipleChoiceField(
@@ -226,6 +259,7 @@ class InstructorForm(forms.Form):
     pay_type = forms.ChoiceField(
         label=_("Pay"),
         choices=InstructorProfile.PayType.choices,
+        required=False,
         widget=forms.Select(attrs={"class": TEXT}),
     )
     pay_rate = forms.DecimalField(
@@ -234,8 +268,9 @@ class InstructorForm(forms.Form):
         decimal_places=2,
         max_digits=9,
         initial=0,
+        required=False,
         widget=forms.NumberInput(attrs={"class": TEXT, "step": "0.01"}),
-        help_text=_("Per hour or per class, depending on the pay type above."),
+        help_text=_("Per hour or per class, depending on the pay type. Only for roles that teach."),
     )
 
     def __init__(self, *args, actor=None, **kwargs):
@@ -248,12 +283,82 @@ class InstructorForm(forms.Form):
         from apps.identity.models import User
 
         email = (self.cleaned_data["email"] or "").strip().lower()
-        # ⚠ Users are global, not tenant-scoped — an address already in use
-        # anywhere is a collision, and the check must not be scoped or it would
-        # produce a database error instead of a field message.
+        # ⚠ Users are global, not tenant-scoped — an address in use anywhere is a
+        # collision, and scoping this check would produce a database error rather
+        # than a field message.
         if User.objects.filter(email__iexact=email).exists():
             raise forms.ValidationError(_("Somebody already signs in with that address."))
         return email
+
+    @property
+    def teaches(self) -> bool:
+        return any(role in TEACHING_ROLES for role in self.cleaned_data.get("roles", []))
+
+    def clean(self):
+        cleaned = super().clean()
+        roles = cleaned.get("roles") or []
+        scope = cleaned.get("scope")
+        dojo = cleaned.get("dojo")
+
+        if scope == "dojo" and dojo is None:
+            self.add_error("dojo", _("Choose which dojo these roles apply to."))
+
+        # ⚠ An organisation administrator is organisation-scoped by definition;
+        # a dojo-scoped one would silently hold none of the powers the role
+        # implies, because can() only grants a dojo-scoped role over that dojo's
+        # own objects.
+        if Role.ORG_ADMIN in roles and scope != "org":
+            self.add_error(
+                "scope",
+                _("An organisation administrator applies to the whole organisation."),
+            )
+
+        # ⚠ Somebody who teaches needs a dojo whatever the role scope: the
+        # InstructorAssignment that lets them be put on a class is per dojo, and
+        # without one every substitution is refused.
+        if any(role in TEACHING_ROLES for role in roles) and dojo is None:
+            self.add_error("dojo", _("A role that teaches must be attached to a dojo."))
+
+        if any(role in TEACHING_ROLES for role in roles) and not cleaned.get("pay_type"):
+            self.add_error("pay_type", _("Choose how this person is paid."))
+
+        return cleaned
+
+
+class RoleGrantForm(forms.Form):
+    """Add one role to somebody who already exists."""
+
+    role = forms.ChoiceField(
+        label=_("Role"),
+        choices=[(r, Role(r).label) for r in STAFF_ROLES],
+        widget=forms.Select(attrs={"class": TEXT}),
+    )
+    scope = forms.ChoiceField(
+        label=_("Applies to"),
+        choices=(("dojo", _("One dojo")), ("org", _("The whole organisation"))),
+        initial="dojo",
+        widget=forms.Select(attrs={"class": TEXT}),
+    )
+    dojo = forms.ModelChoiceField(
+        label=_("Dojo"),
+        queryset=Dojo.objects.none(),
+        required=False,
+        widget=forms.Select(attrs={"class": TEXT}),
+    )
+
+    def __init__(self, *args, actor=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["dojo"].queryset = Dojo.objects.for_actor(actor).order_by("name")
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("scope") == "dojo" and cleaned.get("dojo") is None:
+            self.add_error("dojo", _("Choose which dojo this role applies to."))
+        if cleaned.get("role") == Role.ORG_ADMIN and cleaned.get("scope") != "org":
+            self.add_error(
+                "scope", _("An organisation administrator applies to the whole organisation.")
+            )
+        return cleaned
 
 
 class PersonSearchMixin:

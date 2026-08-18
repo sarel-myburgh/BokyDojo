@@ -1,0 +1,64 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Add a staff member" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<p class="text-sm mb-2">
+  <a href="{% url 'staff-list' %}" class="eyebrow hover:text-gray-900">&larr; {% translate "Staff" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Add a staff member" %}</h1>
+<p class="text-sm text-gray-500 mb-6">
+  {% translate "Somebody may hold several roles — an administrator who also teaches on Tuesdays is the ordinary case, not an exception." %}
+</p>
+
+<form method="post" class="panel px-5 py-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  {% for field in form %}
+    {% if field.name != "roles" and field.name != "styles" and field.name != "is_head_instructor" %}
+      {% include "identity/_form_field.html" with field=field %}
+    {% endif %}
+  {% endfor %}
+
+  <fieldset class="mb-4 border-t border-gray-200 pt-4">
+    <legend class="eyebrow mb-1">{% translate "Roles" %}</legend>
+    <p class="mb-3 text-xs text-gray-500">{{ form.roles.help_text }}</p>
+    <div class="space-y-2">
+      {% for choice in form.roles %}
+        <label class="flex items-center gap-2 text-sm">{{ choice.tag }} {{ choice.choice_label }}</label>
+      {% endfor %}
+    </div>
+    {% if form.roles.errors %}<p class="mt-1 text-xs text-red-700">{{ form.roles.errors|join:" " }}</p>{% endif %}
+  </fieldset>
+
+  <fieldset class="mb-4 border-t border-gray-200 pt-4">
+    <legend class="eyebrow mb-1">{% translate "If they teach" %}</legend>
+    <p class="mb-3 text-xs text-gray-500">
+      {% translate "Only needed for roles that take classes. Pay details and a dojo assignment are created so they can be put on a class and paid for it." %}
+    </p>
+    <label class="mb-3 flex items-center gap-2 text-sm">
+      {{ form.is_head_instructor }} {% translate "Head instructor at this dojo" %}
+    </label>
+    <p class="eyebrow mb-2">{% translate "Styles taught" %}</p>
+    <div class="space-y-2">
+      {% for choice in form.styles %}
+        <label class="flex items-center gap-2 text-sm">{{ choice.tag }} {{ choice.choice_label }}</label>
+      {% empty %}
+        <p class="text-sm text-gray-500">{% translate "No styles exist yet." %}</p>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <div class="mb-4 border-l-2 border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+    {% translate "They cannot sign in until they set a password. Send them the 'forgot password' link from the sign-in page." %}
+  </div>
+
+  <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+    {% translate "Add staff member" %}
+  </button>
+</form>
+{% endblock %}

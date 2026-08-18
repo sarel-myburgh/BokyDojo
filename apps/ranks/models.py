@@ -64,6 +64,11 @@ class RankLadder(TenantScopedModel):
     """
 
     class AppliesTo(models.TextChoices):
+        #: ⚠ One set of belts for everybody, whatever their age. Plenty of clubs
+        #: grade children and adults on the same ladder, and forcing them to
+        #: create two identical ones — or to pick "adult" for an eight-year-old —
+        #: made the field a lie either way.
+        ALL = "all", _("Everyone")
         ADULT = "adult", _("Adult")
         JUNIOR = "junior", _("Junior")
 

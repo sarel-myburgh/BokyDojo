@@ -446,20 +446,26 @@ def test_a_student_can_be_added_and_gets_their_style_tracks(client, admin, org, 
     assert {t.style.name for t in tracks_of(emma)} == {"Goju Ryu"}
 
 
-def test_an_instructor_can_be_added_with_every_record_they_need(client, admin, org, dojos, goju):
-    """⚠ Four records. Three of the four is an instructor who cannot be put on a
-    class, or cannot sign in, or has no pay rate."""
+def test_a_staff_member_can_hold_several_roles_at_once(client, admin, org, dojos, goju):
+    """⚠ The point of the change: an administrator who also teaches.
+
+    RoleAssignment was always unique on (person, role, scope, dojo) precisely so
+    somebody could hold several, and can() has always walked the whole set. Only
+    the form pretended a person had one job.
+    """
     from apps.identity.models import InstructorAssignment
     from apps.staffing.models import InstructorProfile
 
     client.force_login(admin)
 
     client.post(
-        reverse("instructor-create"),
+        reverse("staff-create"),
         {
             "given_name": "Dara",
             "family_name": "Sok",
             "email": "dara@example.com",
+            "roles": [Role.DOJO_ADMIN, Role.INSTRUCTOR],
+            "scope": "dojo",
             "dojo": str(dojos["sen_sok"].pk),
             "styles": [str(goju.pk)],
             "pay_type": InstructorProfile.PayType.PER_CLASS,
@@ -469,29 +475,187 @@ def test_an_instructor_can_be_added_with_every_record_they_need(client, admin, o
 
     with allow_unscoped("test read"):
         person = Person.objects.get(given_name="Dara")
-        assert RoleAssignment.objects.filter(person=person, role=Role.INSTRUCTOR).exists()
+        roles = set(
+            RoleAssignment.objects.filter(person=person, revoked_at__isnull=True).values_list(
+                "role", flat=True
+            )
+        )
+        assert roles == {Role.DOJO_ADMIN, Role.INSTRUCTOR}
+        # Teaching roles still get the records that let them be put on a class
+        # and paid for it.
         assert InstructorAssignment.objects.filter(person=person).exists()
-        profile = InstructorProfile.objects.get(person=person)
-        assert profile.pay_rate_minor_units == 1500
-        assert list(profile.styles.all()) == [goju]
-        user = User.objects.get(email="dara@example.com")
-        assert not user.has_usable_password()
+        assert InstructorProfile.objects.filter(person=person).exists()
+        assert not User.objects.get(email="dara@example.com").has_usable_password()
 
 
-def test_a_duplicate_instructor_email_is_refused(client, admin, dojos):
+def test_an_admin_can_be_added_without_teaching(client, admin, org, dojos):
+    """A pure administrator needs no pay details or dojo assignment."""
+    from apps.identity.models import InstructorAssignment
+
+    client.force_login(admin)
+
+    client.post(
+        reverse("staff-create"),
+        {
+            "given_name": "Mala",
+            "family_name": "Chan",
+            "email": "mala@example.com",
+            "roles": [Role.ORG_ADMIN],
+            "scope": "org",
+        },
+    )
+
+    with allow_unscoped("test read"):
+        person = Person.objects.get(given_name="Mala")
+        assignment = RoleAssignment.objects.get(person=person)
+        assert assignment.role == Role.ORG_ADMIN
+        assert assignment.scope_type == ScopeType.ORG
+        assert assignment.dojo_id is None
+        assert not InstructorAssignment.objects.filter(person=person).exists()
+
+
+def test_an_org_admin_cannot_be_scoped_to_one_dojo(client, admin, dojos):
+    """⚠ A dojo-scoped org admin holds none of the powers the role implies —
+    can() only grants a dojo-scoped role over that dojo's own objects."""
+    client.force_login(admin)
+
+    client.post(
+        reverse("staff-create"),
+        {
+            "given_name": "Wrong",
+            "family_name": "Scope",
+            "email": "wrong@example.com",
+            "roles": [Role.ORG_ADMIN],
+            "scope": "dojo",
+            "dojo": str(dojos["sen_sok"].pk),
+        },
+    )
+
+    with allow_unscoped("test read"):
+        assert not Person.objects.filter(given_name="Wrong").exists()
+
+
+def test_a_teaching_role_requires_a_dojo(client, admin):
+    """⚠ InstructorAssignment is per dojo; without one every substitution is
+    refused."""
     from apps.staffing.models import InstructorProfile
 
     client.force_login(admin)
-    payload = {
-        "given_name": "Dara",
-        "family_name": "Sok",
-        "email": "ops@example.com",  # the admin's own address
-        "dojo": str(dojos["sen_sok"].pk),
-        "pay_type": InstructorProfile.PayType.VOLUNTEER,
-        "pay_rate": "0",
-    }
 
-    client.post(reverse("instructor-create"), payload)
+    client.post(
+        reverse("staff-create"),
+        {
+            "given_name": "NoDojo",
+            "family_name": "Teacher",
+            "email": "nodojo@example.com",
+            "roles": [Role.INSTRUCTOR],
+            "scope": "org",
+            "pay_type": InstructorProfile.PayType.VOLUNTEER,
+            "pay_rate": "0",
+        },
+    )
+
+    with allow_unscoped("test read"):
+        assert not Person.objects.filter(given_name="NoDojo").exists()
+
+
+def test_an_existing_person_can_be_granted_another_role(client, admin, org, dojos):
+    """⚠ The screen that makes this RBAC rather than a job title: without it an
+    instructor could only become an admin by being created twice."""
+    with allow_unscoped("test setup"):
+        person = Person.objects.create(organization=org, given_name="Mei", family_name="Kato")
+        RoleAssignment.objects.create(
+            organization=org,
+            person=person,
+            role=Role.INSTRUCTOR,
+            scope_type=ScopeType.DOJO,
+            dojo=dojos["sen_sok"],
+        )
+    client.force_login(admin)
+
+    client.post(
+        reverse("staff-roles", args=[person.pk]),
+        {"role": Role.ORG_ADMIN, "scope": "org"},
+    )
+
+    with allow_unscoped("test read"):
+        roles = set(
+            RoleAssignment.objects.filter(person=person, revoked_at__isnull=True).values_list(
+                "role", flat=True
+            )
+        )
+    assert roles == {Role.INSTRUCTOR, Role.ORG_ADMIN}
+
+
+def test_revoking_a_role_keeps_the_record(client, admin, org, dojos):
+    """⚠ Revoked, not deleted. Who held what and until when is the question an
+    investigation asks months later."""
+    with allow_unscoped("test setup"):
+        person = Person.objects.create(organization=org, given_name="Gone", family_name="Away")
+        assignment = RoleAssignment.objects.create(
+            organization=org,
+            person=person,
+            role=Role.INSTRUCTOR,
+            scope_type=ScopeType.DOJO,
+            dojo=dojos["sen_sok"],
+        )
+    client.force_login(admin)
+
+    client.post(reverse("role-revoke", args=[person.pk, assignment.pk]))
+
+    with allow_unscoped("test read"):
+        assignment.refresh_from_db()
+        assert assignment.revoked_at is not None
+        assert RoleAssignment.objects.filter(pk=assignment.pk).exists()
+
+
+def test_the_last_organisation_administrator_cannot_be_revoked(client, admin, org):
+    """⚠ Otherwise the tenant locks itself out and needs database access back."""
+    with allow_unscoped("test read"):
+        assignment = RoleAssignment.objects.get(person=admin.person, role=Role.ORG_ADMIN)
+    client.force_login(admin)
+
+    client.post(reverse("role-revoke", args=[admin.person_id, assignment.pk]))
+
+    with allow_unscoped("test read"):
+        assignment.refresh_from_db()
+    assert assignment.revoked_at is None
+
+
+def test_a_duplicate_staff_email_is_refused(client, admin, dojos):
+    client.force_login(admin)
+
+    client.post(
+        reverse("staff-create"),
+        {
+            "given_name": "Dara",
+            "family_name": "Sok",
+            "email": "ops@example.com",  # the admin's own address
+            "roles": [Role.FRONT_DESK],
+            "scope": "dojo",
+            "dojo": str(dojos["sen_sok"].pk),
+        },
+    )
 
     with allow_unscoped("test read"):
         assert not Person.objects.filter(given_name="Dara").exists()
+
+
+def test_an_instructor_cannot_manage_roles(client, org, dojos):
+    """⚠ ROLE_ASSIGN, not merely being staff."""
+    with allow_unscoped("test setup"):
+        person = Person.objects.create(organization=org, given_name="Sen", family_name="Sei")
+        RoleAssignment.objects.create(
+            organization=org,
+            person=person,
+            role=Role.INSTRUCTOR,
+            scope_type=ScopeType.DOJO,
+            dojo=dojos["sen_sok"],
+        )
+        user = User.objects.create_user(
+            email="sensei2@example.com", password=PASSWORD, person=person
+        )
+    client.force_login(user)
+
+    assert client.get(reverse("staff-list")).status_code == 403
+    assert client.get(reverse("staff-create")).status_code == 403

@@ -356,3 +356,144 @@ def test_a_ladder_cannot_pair_two_organisations(world):
                 name="Sneaky",
                 applies_to=RankLadder.AppliesTo.ADULT,
             )
+
+
+# -- one set of belts for everyone --------------------------------------------
+
+
+def test_an_everyone_ladder_applies_regardless_of_age(world):
+    """⚠ Plenty of clubs grade children and adults on the same belts. Forcing two
+    identical ladders — or picking "adult" for an eight-year-old — made the field
+    a lie either way."""
+    everyone = make_ladder(
+        world["goju"],
+        name="Goju belts",
+        applies_to=RankLadder.AppliesTo.ALL,
+        belts=["10th Kyu", "9th Kyu"],
+    )
+    child = make_student(
+        world["org"], given="Kid", dob=datetime.date.today() - datetime.timedelta(days=8 * 365)
+    )
+    adult = make_student(
+        world["org"], given="Grown", dob=datetime.date.today() - datetime.timedelta(days=40 * 365)
+    )
+
+    for student in (child, adult):
+        assert (
+            choose_ladder(world["goju"], student=student, organization_id=world["org"].pk)
+            == everyone
+        )
+
+
+def test_an_everyone_ladder_wins_over_age_split_ones_if_the_data_ever_mixes(world):
+    """⚠ A defensive branch, and tested as one.
+
+    The form refuses to create this combination, so it can only arise from a
+    direct write, an import, or a hand-edited database. When it does, answering
+    from the "everyone" ladder beats guessing an age — and a nine-year-old
+    claimed by two ladders is otherwise silently assigned to whichever the query
+    returned first.
+
+    ⚠ It has to be built through the model rather than the screen, which is also
+    why the earlier version of this test proved nothing: with a single ladder
+    ``choose_ladder`` returns at its len == 1 shortcut and never reaches the
+    branch at all.
+    """
+    make_ladder(
+        world["goju"], name="Adults", applies_to=RankLadder.AppliesTo.ADULT, belts=["10th Kyu"]
+    )
+    make_ladder(
+        world["goju"], name="Juniors", applies_to=RankLadder.AppliesTo.JUNIOR, belts=["10th Mon"]
+    )
+    everyone = make_ladder(
+        world["goju"], name="Everyone", applies_to=RankLadder.AppliesTo.ALL, belts=["1st Kyu"]
+    )
+    child = make_student(
+        world["org"], given="Kid", dob=datetime.date.today() - datetime.timedelta(days=8 * 365)
+    )
+
+    assert choose_ladder(world["goju"], student=child, organization_id=world["org"].pk) == everyone
+
+
+def test_an_everyone_ladder_needs_no_date_of_birth(world):
+    """The case age-split ladders cannot answer at all."""
+    everyone = make_ladder(
+        world["goju"], name="Goju belts", applies_to=RankLadder.AppliesTo.ALL, belts=["10th Kyu"]
+    )
+    unknown = make_student(world["org"], given="Nobirthday", dob=None)
+
+    assert (
+        choose_ladder(world["goju"], student=unknown, organization_id=world["org"].pk) == everyone
+    )
+
+
+def test_everyone_can_be_chosen_on_the_screen(client, world):
+    client.force_login(world["admin"])
+
+    client.post(
+        reverse("style-detail", args=[world["goju"].pk]),
+        {"name": "Goju belts", "applies_to": "all", "dojo": ""},
+    )
+
+    with allow_unscoped("test read"):
+        ladder = RankLadder.objects.get(name="Goju belts")
+    assert ladder.applies_to == RankLadder.AppliesTo.ALL
+
+
+def test_an_everyone_ladder_is_refused_alongside_age_split_ones(client, world):
+    """⚠ Both would claim a nine-year-old, and the wrong one is invisible until a
+    grading. Refused with a message rather than resolved by a precedence rule
+    nobody would remember."""
+    make_ladder(
+        world["goju"], name="Adults", applies_to=RankLadder.AppliesTo.ADULT, belts=["10th Kyu"]
+    )
+    client.force_login(world["admin"])
+
+    client.post(
+        reverse("style-detail", args=[world["goju"].pk]),
+        {"name": "Everyone", "applies_to": "all", "dojo": ""},
+    )
+
+    with allow_unscoped("test read"):
+        assert not RankLadder.objects.filter(name="Everyone").exists()
+
+
+def test_an_age_split_ladder_is_refused_alongside_an_everyone_one(client, world):
+    make_ladder(
+        world["goju"], name="Goju belts", applies_to=RankLadder.AppliesTo.ALL, belts=["10th Kyu"]
+    )
+    client.force_login(world["admin"])
+
+    client.post(
+        reverse("style-detail", args=[world["goju"].pk]),
+        {"name": "Juniors", "applies_to": "junior", "dojo": ""},
+    )
+
+    with allow_unscoped("test read"):
+        assert not RankLadder.objects.filter(name="Juniors").exists()
+
+
+def test_a_dojo_may_use_everyone_while_the_organisation_splits_by_age(world):
+    """The mix is refused per (style, dojo), not across the organisation — a dojo
+    running one ladder while the default splits by age is perfectly coherent."""
+    make_ladder(
+        world["goju"], name="Org adults", applies_to=RankLadder.AppliesTo.ADULT, belts=["10th Kyu"]
+    )
+    dojo_ladder = make_ladder(
+        world["goju"],
+        name="Sen Sok belts",
+        dojo=world["sen_sok"],
+        applies_to=RankLadder.AppliesTo.ALL,
+        belts=["8th Kyu"],
+    )
+    child = make_student(world["org"], dob=datetime.date.today() - datetime.timedelta(days=8 * 365))
+
+    assert (
+        choose_ladder(
+            world["goju"],
+            student=child,
+            organization_id=world["org"].pk,
+            dojo=world["sen_sok"],
+        )
+        == dojo_ladder
+    )

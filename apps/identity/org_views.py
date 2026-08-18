@@ -21,8 +21,9 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.translation import gettext as _
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 
 from apps.core import audit
 from apps.core.relations import scoped_m2m_ids, set_scoped_m2m
@@ -40,7 +41,7 @@ from apps.identity.models import (
     StudentProfile,
     User,
 )
-from apps.identity.org_forms import DojoForm, InstructorForm, StudentForm, StyleForm
+from apps.identity.org_forms import DojoForm, StudentForm, StyleForm
 from apps.identity.permissions import ROLE_ACTIONS, Action, PermissionDenied, require
 from apps.ranks.models import RankLadder, Style
 from apps.staffing.models import InstructorProfile
@@ -293,18 +294,61 @@ def student_create_view(request) -> HttpResponse:
     return render(request, "identity/student_form.html", {"form": form})
 
 
+def _role_rows(actor):
+    """Everybody holding a live staff role, with all of their roles."""
+    from apps.identity.org_forms import STAFF_ROLES
+
+    assignments = (
+        RoleAssignment.objects.for_actor(actor)
+        .filter(revoked_at__isnull=True, role__in=STAFF_ROLES)
+        .select_related("person", "dojo")
+        .order_by("person__family_name", "person__given_name")
+    )
+    people: dict = {}
+    for assignment in assignments:
+        entry = people.setdefault(assignment.person_id, {"person": assignment.person, "roles": []})
+        entry["roles"].append(assignment)
+    return list(people.values())
+
+
 @login_required
-@require_http_methods(["GET", "POST"])
-def instructor_create_view(request) -> HttpResponse:
-    """Add an instructor — person, sign-in, role, dojo assignment and pay."""
+@require_http_methods(["GET"])
+def staff_list_view(request) -> HttpResponse:
+    """Who holds what — TODO plan §3."""
     actor = request.actor
     if not _holds_anywhere(actor, Action.ROLE_ASSIGN):
         raise PermissionDenied(action=Action.ROLE_ASSIGN, actor=actor)
 
-    form = InstructorForm(request.POST or None, actor=actor)
+    return render(
+        request,
+        "identity/staff_list.html",
+        {"rows": _role_rows(actor)},
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def staff_create_view(request) -> HttpResponse:
+    """Add a staff member with one or more roles.
+
+    ⚠ Replaces the old instructor-only screen. A person holds a *set* of roles —
+    an organisation administrator who also teaches Tuesdays is ordinary — and the
+    permission layer always modelled it that way; only this form did not.
+    """
+    from apps.identity.org_forms import TEACHING_ROLES, StaffForm
+
+    actor = request.actor
+    if not _holds_anywhere(actor, Action.ROLE_ASSIGN):
+        raise PermissionDenied(action=Action.ROLE_ASSIGN, actor=actor)
+
+    form = StaffForm(request.POST or None, actor=actor)
     if request.method == "POST" and form.is_valid():
+        roles = form.cleaned_data["roles"]
+        scope_is_org = form.cleaned_data["scope"] == "org"
         dojo = form.cleaned_data["dojo"]
-        require(actor, Action.ROLE_ASSIGN, dojo, governance_model=_governance(dojo))
+        if dojo is not None:
+            require(actor, Action.ROLE_ASSIGN, dojo, governance_model=_governance(dojo))
+
         with transaction.atomic():
             person = Person(
                 organization_id=actor.organization_id,
@@ -313,39 +357,47 @@ def instructor_create_view(request) -> HttpResponse:
                 email=form.cleaned_data["email"],
             )
             person.save()
-            RoleAssignment.objects.for_actor(actor).create(
-                organization_id=actor.organization_id,
-                person=person,
-                role=Role.INSTRUCTOR,
-                scope_type=ScopeType.DOJO,
-                dojo=dojo,
-            )
-            # ⚠ Both assignments. RoleAssignment is what lets them sign in and
-            # what the permission layer reads; InstructorAssignment is what the
-            # substitution check reads. Creating one without the other leaves an
-            # instructor who cannot be put on a class — found dark in the seed
-            # once already.
-            InstructorAssignment.objects.for_actor(actor).create(
-                dojo=dojo,
-                person=person,
-                is_head_instructor=form.cleaned_data["is_head_instructor"],
-                started_on=datetime.date.today(),
-            )
-            profile = InstructorProfile.objects.for_actor(actor).create(
-                person=person,
-                pay_type=form.cleaned_data["pay_type"],
-                pay_rate_minor_units=int(form.cleaned_data["pay_rate"] * 100),
-                pay_currency=dojo.currency,
-            )
-            set_scoped_m2m(
-                profile,
-                "styles",
-                form.cleaned_data["styles"],
-                organization_id=actor.organization_id,
-            )
+
+            for role in roles:
+                # ⚠ ORG_ADMIN is always organisation-scoped; a dojo-scoped one
+                # would hold none of the powers the role implies, because can()
+                # only grants a dojo-scoped role over that dojo's own objects.
+                as_org = scope_is_org or role == Role.ORG_ADMIN
+                RoleAssignment.objects.for_actor(actor).create(
+                    organization_id=actor.organization_id,
+                    person=person,
+                    role=role,
+                    scope_type=ScopeType.ORG if as_org else ScopeType.DOJO,
+                    dojo=None if as_org else dojo,
+                )
+
+            if any(role in TEACHING_ROLES for role in roles):
+                # ⚠ Both records, as before. RoleAssignment is what the
+                # permission layer reads; InstructorAssignment is what the
+                # substitution check reads, and without it every attempt to put
+                # them on a class is refused.
+                InstructorAssignment.objects.for_actor(actor).create(
+                    dojo=dojo,
+                    person=person,
+                    is_head_instructor=form.cleaned_data["is_head_instructor"],
+                    started_on=datetime.date.today(),
+                )
+                profile = InstructorProfile.objects.for_actor(actor).create(
+                    person=person,
+                    pay_type=form.cleaned_data["pay_type"],
+                    pay_rate_minor_units=int((form.cleaned_data["pay_rate"] or 0) * 100),
+                    pay_currency=dojo.currency,
+                )
+                set_scoped_m2m(
+                    profile,
+                    "styles",
+                    form.cleaned_data["styles"],
+                    organization_id=actor.organization_id,
+                )
+
             # ⚠ No password is set. The creator must not choose one on somebody
             # else's behalf — they would know it, and the first thing the new
-            # instructor does is not change it. An unusable password plus the
+            # person does is not change it. An unusable password plus the
             # existing single-use reset flow (0.6.6) is the safe route in.
             user = User.objects.create_user(
                 email=form.cleaned_data["email"], password=None, person=person
@@ -353,14 +405,125 @@ def instructor_create_view(request) -> HttpResponse:
             user.set_unusable_password()
             user.save(update_fields=["password"])
             audit.record_change("create", person, actor=actor)
+
         messages.success(
             request,
             _(
-                "Added %(name)s. They cannot sign in until they set a password — "
-                "send them the 'forgot password' link."
+                "Added %(name)s with %(count)s role(s). They cannot sign in until "
+                "they set a password — send them the 'forgot password' link."
             )
-            % {"name": person.full_name},
+            % {"name": person.full_name, "count": len(roles)},
         )
-        return redirect("org-settings")
+        return redirect("staff-list")
 
-    return render(request, "identity/instructor_form.html", {"form": form})
+    return render(request, "identity/staff_form.html", {"form": form})
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def staff_roles_view(request, person_id) -> HttpResponse:
+    """Grant another role to somebody who already exists.
+
+    ⚠ This is the screen that makes it RBAC rather than a job title. Without it
+    an existing instructor could never become an administrator without being
+    created again as a second person.
+    """
+    from apps.identity.org_forms import RoleGrantForm
+
+    actor = request.actor
+    if not _holds_anywhere(actor, Action.ROLE_ASSIGN):
+        raise PermissionDenied(action=Action.ROLE_ASSIGN, actor=actor)
+    person = get_object_or_404(Person.objects.for_actor(actor), pk=person_id)
+
+    form = RoleGrantForm(request.POST or None, actor=actor)
+    if request.method == "POST" and form.is_valid():
+        role = form.cleaned_data["role"]
+        as_org = form.cleaned_data["scope"] == "org" or role == Role.ORG_ADMIN
+        dojo = form.cleaned_data["dojo"]
+        if dojo is not None:
+            require(actor, Action.ROLE_ASSIGN, dojo, governance_model=_governance(dojo))
+
+        existing = (
+            RoleAssignment.objects.for_actor(actor)
+            .filter(
+                person=person,
+                role=role,
+                scope_type=ScopeType.ORG if as_org else ScopeType.DOJO,
+                dojo=None if as_org else dojo,
+            )
+            .first()
+        )
+        if existing is not None and existing.revoked_at is None:
+            messages.error(request, _("They already hold that role."))
+        elif existing is not None:
+            # ⚠ Un-revoke rather than create a second row: the table is unique on
+            # (person, role, scope, dojo), so a second insert would fail.
+            existing.revoked_at = None
+            existing.save(update_fields=["revoked_at", "updated_at"])
+            audit.record_change("update", existing, actor=actor)
+            messages.success(request, _("Restored that role."))
+        else:
+            assignment = RoleAssignment.objects.for_actor(actor).create(
+                organization_id=actor.organization_id,
+                person=person,
+                role=role,
+                scope_type=ScopeType.ORG if as_org else ScopeType.DOJO,
+                dojo=None if as_org else dojo,
+            )
+            audit.record_change("create", assignment, actor=actor)
+            messages.success(request, _("Role added."))
+        return redirect("staff-roles", person_id=person.pk)
+
+    assignments = list(
+        RoleAssignment.objects.for_actor(actor)
+        .filter(person=person, revoked_at__isnull=True)
+        .select_related("dojo")
+        .order_by("role")
+    )
+    return render(
+        request,
+        "identity/staff_roles.html",
+        {"person": person, "assignments": assignments, "form": form},
+    )
+
+
+@login_required
+@require_POST
+def role_revoke_view(request, person_id, assignment_id) -> HttpResponse:
+    """Take a role away.
+
+    ⚠ Revoked, not deleted. Everything that reads roles filters on
+    ``revoked_at__isnull=True``, and who held what and until when is exactly the
+    question an investigation asks months later.
+    """
+    actor = request.actor
+    if not _holds_anywhere(actor, Action.ROLE_ASSIGN):
+        raise PermissionDenied(action=Action.ROLE_ASSIGN, actor=actor)
+    person = get_object_or_404(Person.objects.for_actor(actor), pk=person_id)
+    assignment = get_object_or_404(
+        RoleAssignment.objects.for_actor(actor).filter(person=person, revoked_at__isnull=True),
+        pk=assignment_id,
+    )
+
+    # ⚠ Nobody may remove their own last administrator role, and no organisation
+    # may be left without one. Either is a locked-out tenant needing database
+    # access to recover.
+    if assignment.role == Role.ORG_ADMIN:
+        remaining = (
+            RoleAssignment.objects.for_actor(actor)
+            .filter(role=Role.ORG_ADMIN, revoked_at__isnull=True)
+            .exclude(pk=assignment.pk)
+            .count()
+        )
+        if remaining == 0:
+            messages.error(
+                request,
+                _("This is the last organisation administrator. Add another first."),
+            )
+            return redirect("staff-roles", person_id=person.pk)
+
+    assignment.revoked_at = timezone.now()
+    assignment.save(update_fields=["revoked_at", "updated_at"])
+    audit.record_change("update", assignment, actor=actor)
+    messages.success(request, _("Role revoked."))
+    return redirect("staff-roles", person_id=person.pk)
