@@ -262,9 +262,7 @@ def test_the_settings_page_lists_styles_and_dojos(client, admin, dojos):
 def test_a_style_can_be_added(client, admin, org):
     client.force_login(admin)
 
-    client.post(
-        reverse("org-settings"), {"action": "add-style", "name": "Shotokan", "is_ranked": "on"}
-    )
+    client.post(reverse("style-create"), {"name": "Shotokan", "is_ranked": "on"})
 
     with allow_unscoped("test read"):
         assert Style.objects.filter(organization=org, name="Shotokan", is_ranked=True).exists()
@@ -273,7 +271,7 @@ def test_a_style_can_be_added(client, admin, org):
 def test_an_unranked_style_can_be_added(client, admin, org):
     client.force_login(admin)
 
-    client.post(reverse("org-settings"), {"action": "add-style", "name": "Conditioning"})
+    client.post(reverse("style-create"), {"name": "Conditioning"})
 
     with allow_unscoped("test read"):
         assert Style.objects.get(name="Conditioning").is_ranked is False
@@ -282,7 +280,7 @@ def test_an_unranked_style_can_be_added(client, admin, org):
 def test_a_duplicate_style_name_is_refused(client, admin, org, goju):
     client.force_login(admin)
 
-    client.post(reverse("org-settings"), {"action": "add-style", "name": "goju ryu"})
+    client.post(reverse("style-create"), {"name": "goju ryu", "is_ranked": "on"})
 
     with allow_unscoped("test read"):
         assert Style.objects.filter(organization=org).count() == 2  # goju + boxing
@@ -659,3 +657,81 @@ def test_an_instructor_cannot_manage_roles(client, org, dojos):
 
     assert client.get(reverse("staff-list")).status_code == 403
     assert client.get(reverse("staff-create")).status_code == 403
+
+
+# -- the settings page's shape ------------------------------------------------
+
+
+def test_each_settings_section_offers_its_own_add_button(client, admin, dojos):
+    """⚠ Three sections that behave the same way.
+
+    The styles section used to carry an inline form while dojos carried a link,
+    which is the sort of inconsistency that has people hunting for a button that
+    is not there.
+    """
+    client.force_login(admin)
+
+    body = client.get(reverse("org-settings")).content.decode()
+
+    for target in ("style-create", "dojo-create", "staff-create"):
+        assert reverse(target) in body, f"no add button for {target}"
+
+
+def test_the_settings_page_no_longer_takes_a_post(client, admin):
+    """Adding happens on its own screen now."""
+    client.force_login(admin)
+
+    assert client.post(reverse("org-settings"), {"name": "Nope"}).status_code == 405
+
+
+def test_staff_appear_on_the_settings_page(client, admin, org, dojos):
+    with allow_unscoped("test setup"):
+        person = Person.objects.create(
+            organization=org, given_name="Visible", family_name="Staffer"
+        )
+        RoleAssignment.objects.create(
+            organization=org,
+            person=person,
+            role=Role.FRONT_DESK,
+            scope_type=ScopeType.DOJO,
+            dojo=dojos["sen_sok"],
+        )
+    client.force_login(admin)
+
+    body = client.get(reverse("org-settings")).content.decode()
+
+    assert "Visible Staffer" in body
+
+
+def test_adding_a_student_is_offered_with_the_students_not_in_settings(client, admin):
+    """It belongs where students live."""
+    client.force_login(admin)
+
+    students = client.get(reverse("student-list")).content.decode()
+    settings_page = client.get(reverse("org-settings")).content.decode()
+
+    assert reverse("student-create") in students
+    assert reverse("student-create") not in settings_page
+
+
+def test_the_add_student_button_is_hidden_from_somebody_who_cannot(client, org, dojos):
+    """⚠ Menu visibility is not a control — student_create_view checks the same
+    action. This only stops offering a button that would refuse."""
+    with allow_unscoped("test setup"):
+        person = Person.objects.create(organization=org, given_name="Sen", family_name="Sei")
+        RoleAssignment.objects.create(
+            organization=org,
+            person=person,
+            role=Role.ASSISTANT_INSTRUCTOR,
+            scope_type=ScopeType.DOJO,
+            dojo=dojos["sen_sok"],
+        )
+        user = User.objects.create_user(
+            email="assistant@example.com", password=PASSWORD, person=person
+        )
+    client.force_login(user)
+
+    body = client.get(reverse("student-list")).content.decode()
+
+    assert reverse("student-create") not in body
+    assert client.get(reverse("student-create")).status_code == 403

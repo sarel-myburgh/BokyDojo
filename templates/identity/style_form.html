@@ -1,0 +1,45 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Add a style" %} — DojoMaster{% endblock %}
+
+{% block content %}
+<p class="text-sm mb-2">
+  <a href="{% url 'org-settings' %}" class="eyebrow hover:text-gray-900">&larr; {% translate "Organisation settings" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Add a style" %}</h1>
+<p class="text-sm text-gray-500 mb-6">
+  {% translate "An art this organisation teaches. Dojos are tagged with the styles they run, and enrolling a student there records them as training each one." %}
+</p>
+
+<form method="post" class="panel px-5 py-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  {% include "identity/_form_field.html" with field=form.name %}
+
+  <label class="mb-2 flex items-center gap-2 text-sm">
+    {{ form.is_ranked }} {% translate "This style uses ranks" %}
+  </label>
+  <p class="mb-5 text-xs text-gray-500">
+    {% translate "Leave unticked for arts with no grading — boxing, conditioning, open mat. Students still get a record that they train it; they simply have no belt." %}
+  </p>
+  {% if form.is_ranked.errors %}<p class="mb-3 text-xs text-red-700">{{ form.is_ranked.errors|join:" " }}</p>{% endif %}
+
+  <fieldset class="border-t border-gray-200 pt-4">
+    <legend class="eyebrow mb-1">{% translate "Grading ladder" %}</legend>
+    <p class="mb-4 text-xs text-gray-500">
+      {% translate "Only for graded styles. You can add these later instead, but a graded style with no belts cannot grade anybody." %}
+    </p>
+    {% include "identity/_form_field.html" with field=form.belts %}
+    {% include "identity/_form_field.html" with field=form.applies_to %}
+    {% include "identity/_form_field.html" with field=form.dojo %}
+  </fieldset>
+
+  <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+    {% translate "Add style" %}
+  </button>
+</form>
+{% endblock %}

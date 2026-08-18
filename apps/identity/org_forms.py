@@ -45,6 +45,73 @@ class StyleForm(forms.ModelForm):
         return name
 
 
+class StyleCreateForm(StyleForm):
+    """Name, whether it grades, and its first set of belts — all on one screen.
+
+    ⚠ The belts are optional but the field is here on purpose. A style created
+    without them is marked graded and has nothing to grade anybody on, which the
+    settings screen then has to flag in amber; asking once at the point of
+    creation avoids the half-made state entirely.
+    """
+
+    applies_to = forms.ChoiceField(
+        label=_("These belts apply to"),
+        choices=(),
+        required=False,
+        widget=forms.Select(attrs={"class": TEXT}),
+    )
+    dojo = forms.ModelChoiceField(
+        label=_("Used at"),
+        queryset=Dojo.objects.none(),
+        required=False,
+        widget=forms.Select(attrs={"class": TEXT}),
+    )
+    belts = forms.CharField(
+        label=_("Belt levels"),
+        required=False,
+        widget=forms.Textarea(attrs={"class": TEXT, "rows": 10, "spellcheck": "false"}),
+        help_text=_(
+            "One per line, lowest grade first — 10th Kyu, 9th Kyu, and so on. "
+            "Leave empty to add them later. Colours and minimum waits are set "
+            "afterwards on the belt screen."
+        ),
+    )
+
+    def __init__(self, *args, actor=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        from apps.ranks.models import RankLadder
+
+        self.fields["applies_to"].choices = RankLadder.AppliesTo.choices
+        self.fields["applies_to"].initial = RankLadder.AppliesTo.ALL
+        self.fields["dojo"].queryset = Dojo.objects.for_actor(actor).order_by("name")
+        self.fields["dojo"].empty_label = _("All dojos (organisation default)")
+
+    def clean_belts(self):
+        raw = self.cleaned_data.get("belts") or ""
+        names = [line.strip() for line in raw.splitlines() if line.strip()]
+        seen: set[str] = set()
+        for name in names:
+            key = name.casefold()
+            if key in seen:
+                raise forms.ValidationError(_("'%(name)s' is listed twice.") % {"name": name})
+            seen.add(key)
+        return names
+
+    def clean(self):
+        cleaned = super().clean()
+        # ⚠ Belts on an unranked style are a contradiction, not a harmless extra.
+        # Silently dropping them would lose what somebody typed; saying so lets
+        # them decide which half they meant.
+        if cleaned.get("belts") and not cleaned.get("is_ranked"):
+            self.add_error(
+                "belts",
+                _(
+                    "This style is marked unranked, so it cannot have belts. Tick 'uses ranks', or clear these."
+                ),
+            )
+        return cleaned
+
+
 class DojoForm(forms.ModelForm):
     """⚠ ``styles`` is declared here, not listed in ``Meta.fields``.
 

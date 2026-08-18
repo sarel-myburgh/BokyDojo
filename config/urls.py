@@ -76,6 +76,7 @@ urlpatterns = [
         org_views.style_toggle_ranked_view,
         name="style-toggle-ranked",
     ),
+    path("settings/styles/new/", org_views.style_create_view, name="style-create"),
     path("settings/styles/<uuid:style_id>/", ladder_views.style_detail_view, name="style-detail"),
     path(
         "settings/ladders/<uuid:ladder_id>/",

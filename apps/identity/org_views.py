@@ -41,7 +41,7 @@ from apps.identity.models import (
     StudentProfile,
     User,
 )
-from apps.identity.org_forms import DojoForm, StudentForm, StyleForm
+from apps.identity.org_forms import DojoForm, StudentForm
 from apps.identity.permissions import ROLE_ACTIONS, Action, PermissionDenied, require
 from apps.ranks.models import RankLadder, Style
 from apps.staffing.models import InstructorProfile
@@ -69,27 +69,18 @@ def _governance(dojo) -> str:
 
 
 @login_required
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["GET"])
 def organization_settings_view(request) -> HttpResponse:
-    """Styles and dojos in one place."""
+    """Styles, dojos and staff — three sections, each with its own add button.
+
+    ⚠ Read-only. Adding anything happens on its own screen, so the three sections
+    behave identically; the style section used to carry an inline form and the
+    other two a link, which is the sort of inconsistency that makes people hunt
+    for the button that is not there.
+    """
     actor = request.actor
     organization = _organization(actor)
     _require_org_edit(actor, organization)
-
-    style_form = StyleForm(organization=organization)
-
-    if request.method == "POST" and request.POST.get("action") == "add-style":
-        style_form = StyleForm(request.POST, organization=organization)
-        if style_form.is_valid():
-            style = style_form.save(commit=False)
-            style.organization = organization
-            style.save()
-            audit.record_change("create", style, actor=actor)
-            messages.success(
-                request,
-                _("Added %(name)s.") % {"name": style.name},
-            )
-            return redirect("org-settings")
 
     styles = list(Style.objects.for_actor(actor).order_by("name"))
     ladders = RankLadder.objects.for_actor(actor).select_related("style")
@@ -110,7 +101,9 @@ def organization_settings_view(request) -> HttpResponse:
         "identity/org_settings.html",
         {
             "organization": organization,
-            "style_form": style_form,
+            "staff": _role_rows(actor)[:8],
+            "staff_total": len(_role_rows(actor)),
+            "may_assign_roles": _holds_anywhere(actor, Action.ROLE_ASSIGN),
             "styles": [
                 {
                     "style": style,
@@ -122,6 +115,50 @@ def organization_settings_view(request) -> HttpResponse:
             "dojos": [{"dojo": dojo, "styles": dojo_styles.get(dojo.pk, [])} for dojo in dojos],
         },
     )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def style_create_view(request) -> HttpResponse:
+    """Add a style, and optionally its first set of belts, in one screen."""
+    from apps.identity.org_forms import StyleCreateForm
+    from apps.ranks.models import Rank, RankLadder
+
+    actor = request.actor
+    organization = _organization(actor)
+    _require_org_edit(actor, organization)
+
+    form = StyleCreateForm(request.POST or None, actor=actor, organization=organization)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            style = form.save(commit=False)
+            style.organization = organization
+            style.save()
+            audit.record_change("create", style, actor=actor)
+
+            belts = form.cleaned_data["belts"]
+            if belts and style.is_ranked:
+                ladder = RankLadder.objects.for_actor(actor).create(
+                    style=style,
+                    dojo=form.cleaned_data["dojo"],
+                    applies_to=form.cleaned_data["applies_to"] or RankLadder.AppliesTo.ALL,
+                    name=_("%(style)s belts") % {"style": style.name},
+                )
+                # Lowest grade first, in the order they were typed — the order is
+                # the whole meaning of a ladder and must not be re-sorted.
+                for order, name in enumerate(belts, start=1):
+                    Rank.objects.for_actor(actor).create(ladder=ladder, name=name, order=order)
+                audit.record_change("create", ladder, actor=actor)
+        messages.success(
+            request,
+            _("Added %(name)s with %(count)s belt(s).")
+            % {"name": style.name, "count": len(form.cleaned_data["belts"])}
+            if form.cleaned_data["belts"]
+            else _("Added %(name)s.") % {"name": style.name},
+        )
+        return redirect("style-detail", style_id=style.pk)
+
+    return render(request, "identity/style_form.html", {"form": form})
 
 
 @login_required

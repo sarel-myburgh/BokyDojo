@@ -250,6 +250,10 @@ def student_list_view(request):
             "can_save_segment": bool(saved_filters),
             "may_bulk_status": any(profile.may_change_status for profile in page.object_list),
             "may_bulk_promote": _holds_anywhere(actor, Action.RANK_AWARD),
+            # ⚠ Menu visibility is not a control (SEC §2.2) — student_create_view
+            # checks the same action itself. This only stops offering a button
+            # that would refuse.
+            "may_add_student": _holds_anywhere(actor, Action.PERSON_CREATE),
             "bulk_status_form": StudentBulkStatusForm(actor=actor),
         },
     )

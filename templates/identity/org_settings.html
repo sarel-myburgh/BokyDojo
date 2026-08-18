@@ -19,6 +19,9 @@
 <div class="flex items-center gap-2 mb-1">
   <span class="seal" aria-hidden="true"></span>
   <h2 class="text-base font-bold tracking-tight">{% translate "Styles" %}</h2>
+  <a href="{% url 'style-create' %}" class="eyebrow ml-auto text-crimson-600 hover:underline">
+    {% translate "Add a style" %}
+  </a>
 </div>
 <p class="mb-4 text-sm text-gray-500">
   {% translate "The arts this organisation teaches. A dojo is tagged with the ones it runs, and enrolling a student there records them as training each one." %}
@@ -70,35 +73,9 @@
   </div>
 {% else %}
   <p class="mb-4 border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500">
-    {% translate "No styles yet. Add the first one below." %}
+    {% translate "No styles yet." %} <a href="{% url 'style-create' %}" class="underline">{% translate "Add the first one" %}</a>.
   </p>
 {% endif %}
-
-<form method="post" class="panel mb-10 px-5 py-4">
-  {% csrf_token %}
-  <input type="hidden" name="action" value="add-style">
-  <p class="eyebrow mb-3">{% translate "Add a style" %}</p>
-  {% if style_form.non_field_errors %}
-    <div class="mb-3 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">
-      {{ style_form.non_field_errors }}
-    </div>
-  {% endif %}
-  <div class="mb-1">
-    {{ style_form.name }}
-  </div>
-  {% if style_form.name.errors %}
-    <p class="mb-2 text-xs text-red-700">{{ style_form.name.errors|join:" " }}</p>
-  {% endif %}
-  <label class="mb-3 mt-2 flex items-center gap-2 text-sm">
-    {{ style_form.is_ranked }} {% translate "This style uses ranks" %}
-  </label>
-  <p class="mb-4 text-xs text-gray-500">
-    {% translate "Leave unticked for arts with no grading — boxing, conditioning, open mat. Students still get a record that they train it; they simply have no belt." %}
-  </p>
-  <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
-    {% translate "Add style" %}
-  </button>
-</form>
 
 {# -- dojos ----------------------------------------------------------------- #}
 <div class="flex items-center gap-2 mb-1">
@@ -132,12 +109,42 @@
   {% endfor %}
 </div>
 
-<div class="mt-8 flex flex-wrap gap-2">
-  <a href="{% url 'student-create' %}" class="border border-gray-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 active:bg-gray-100">
-    {% translate "Add a student" %}
-  </a>
-  <a href="{% url 'staff-list' %}" class="border border-gray-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-gray-700 active:bg-gray-100">
-    {% translate "Staff and roles" %}
-  </a>
-</div>
+{# -- staff ---------------------------------------------------------------- #}
+{% if may_assign_roles %}
+  <div class="mt-10 flex items-center gap-2 mb-1">
+    <span class="seal" aria-hidden="true"></span>
+    <h2 class="text-base font-bold tracking-tight">{% translate "Staff and roles" %}</h2>
+    <a href="{% url 'staff-create' %}" class="eyebrow ml-auto text-crimson-600 hover:underline">
+      {% translate "Add staff" %}
+    </a>
+  </div>
+  <p class="mb-4 text-sm text-gray-500">
+    {% translate "Somebody may hold several roles — an administrator who also teaches, say." %}
+  </p>
+
+  <div class="panel divide-y divide-gray-200">
+    {% for row in staff %}
+      <a href="{% url 'staff-roles' row.person.pk %}" class="flex items-start gap-4 px-4 py-3 active:bg-gray-50">
+        <span class="min-w-0 flex-1">
+          <span class="block truncate font-medium">{{ row.person.full_name }}</span>
+          <span class="block text-sm text-gray-500">
+            {% for a in row.roles %}{{ a.get_role_display }}{% if not forloop.last %} · {% endif %}{% endfor %}
+          </span>
+        </span>
+        <span class="eyebrow shrink-0 text-gray-400">
+          {% blocktranslate count counter=row.roles|length %}{{ counter }} role{% plural %}{{ counter }} roles{% endblocktranslate %}
+        </span>
+      </a>
+    {% empty %}
+      <p class="px-4 py-6 text-center text-sm text-gray-500">{% translate "Nobody holds a staff role yet." %}</p>
+    {% endfor %}
+  </div>
+  {% if staff_total > staff|length %}
+    <p class="mt-2 text-sm">
+      <a href="{% url 'staff-list' %}" class="text-gray-500 underline hover:text-gray-900">
+        {% blocktranslate with total=staff_total %}See all {{ total }}{% endblocktranslate %}
+      </a>
+    </p>
+  {% endif %}
+{% endif %}
 {% endblock %}
