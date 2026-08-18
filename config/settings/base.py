@@ -144,6 +144,20 @@ PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.PBKDF2PasswordHasher",
 ]
 
+# ⚠ Length, and no composition rules. Requiring a capital, a digit and a symbol
+# produces "Password1!" and a sticky note; requiring length produces a passphrase.
+# This follows NIST SP 800-63B, which dropped composition rules for exactly that
+# reason and kept two things worth keeping:
+#
+#   * a length floor — twelve characters, which any three-word phrase clears;
+#   * a blocklist of known-bad passwords. ⚠ That is *not* a composition rule.
+#     It rejects "qwertyuiop" and "letmeinplease" — passwords that are long,
+#     lower-case and already in every cracking dictionary — and dropping it would
+#     leave the length floor as the only thing standing between an account and a
+#     word somebody guessed in ten seconds.
+#
+# UserAttributeSimilarityValidator stays for the same reason: refusing a password
+# that is the person's own email address is not a complexity demand.
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {
@@ -151,7 +165,6 @@ AUTH_PASSWORD_VALIDATORS = [
         "OPTIONS": {"min_length": 12},
     },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
 # i18n — TODO 0.4.x, plan 13.4. Chinese variant is zh-Hans (decision D6).

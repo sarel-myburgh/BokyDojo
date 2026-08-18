@@ -32,25 +32,27 @@ from django.utils.translation import gettext as _
 
 from apps.core import audit
 from apps.core.scoping import Actor
+from apps.identity.wordlist import WORDS
 
-#: ⚠ No 0/O, 1/l/I. This is read aloud across a room or written on a slip of
-#: paper, and a character somebody cannot transcribe is a support call.
-_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"
-_GROUPS = 4
-_GROUP_LENGTH = 4
+#: Words per passphrase. Four from a 1787-word list is 43 bits, which behind a
+#: five-attempt lockout is far more than a single-use password needs.
+_WORD_COUNT = 4
 
 
 def generate_temporary_password() -> str:
-    """A password that is strong and can still be dictated.
+    """A passphrase somebody can actually type — Battery-Staple-Horse style.
 
-    Four groups of four from a 32-character alphabet is 80 bits — far beyond
-    anything the login throttle would let somebody try, and short enough to read
-    out without losing your place.
+    ⚠ Replaces a random-character version. Random characters are stronger per
+    keystroke and worse at the only job this has: being read across a counter or
+    down a phone by one person and typed by another, often onto a phone keyboard,
+    often where copy and paste is not available. "Was that an l or a 1" is the
+    failure mode, and it costs a support call every time.
+
+    Capitalised and hyphen-joined because that is what people expect a password
+    to look like, and because the hyphens give the eye somewhere to rest when
+    reading it out.
     """
-    groups = [
-        "".join(secrets.choice(_ALPHABET) for _ in range(_GROUP_LENGTH)) for _ in range(_GROUPS)
-    ]
-    return "-".join(groups)
+    return "-".join(secrets.choice(WORDS).capitalize() for _ in range(_WORD_COUNT))
 
 
 def set_temporary_password(*, user, actor: Actor) -> str:

@@ -73,17 +73,51 @@ def world():
 # -- the password itself ------------------------------------------------------
 
 
-def test_the_generated_password_avoids_ambiguous_characters():
-    """⚠ It is read aloud across a room. A character nobody can transcribe is a
-    support call."""
-    joined = "".join(generate_temporary_password() for _ in range(200)).replace("-", "")
+def test_the_generated_password_is_a_typable_passphrase():
+    """⚠ The whole reason it is words and not random characters.
 
-    for ambiguous in "0O1lI":
-        assert ambiguous not in joined
+    It gets read across a counter or down a phone by one person and typed by
+    another, often onto a phone keyboard where copy and paste is not available.
+    Letters and hyphens only — no digits, no symbols, nothing anybody has to ask
+    "was that an l or a 1" about.
+    """
+    for _ in range(200):
+        password = generate_temporary_password()
+        words = password.split("-")
+
+        assert len(words) == 4
+        for word in words:
+            assert word.isascii() and word.isalpha(), password
+            assert word[0].isupper() and word[1:].islower(), password
+
+
+def test_the_generated_password_always_clears_the_length_floor():
+    """Four words is comfortably past twelve characters even at their shortest."""
+    assert min(len(generate_temporary_password()) for _ in range(2000)) >= 12
 
 
 def test_generated_passwords_do_not_repeat():
     assert len({generate_temporary_password() for _ in range(1000)}) == 1000
+
+
+def test_the_generated_password_passes_the_policy_it_will_be_checked_against():
+    """⚠ Otherwise an administrator issues one and the recipient is told, at the
+    change screen, that the password they were just given is invalid."""
+    from django.contrib.auth.password_validation import validate_password
+
+    for _ in range(100):
+        validate_password(generate_temporary_password())
+
+
+def test_the_wordlist_is_big_enough_to_be_worth_four_words():
+    """43 bits behind a five-attempt lockout. If the list ever shrinks, this says
+    so rather than the entropy quietly dropping."""
+    import math
+
+    from apps.identity.wordlist import WORDS
+
+    assert len(WORDS) >= 1500
+    assert 4 * math.log2(len(WORDS)) >= 40
 
 
 def test_the_password_is_never_stored_in_the_clear(world):
@@ -186,7 +220,7 @@ def _issue(client, world):
     body = client.post(reverse("temporary-password", args=[world["teacher"].pk])).content.decode()
     import re
 
-    match = re.search(r"select-all font-mono[^>]*>([a-z0-9-]+)<", body)
+    match = re.search(r"select-all font-mono[^>]*>([A-Za-z-]+)<", body)
     assert match, "the password was not rendered"
     client.logout()
     return match.group(1)
@@ -293,3 +327,43 @@ def test_a_temporary_password_does_not_bypass_a_second_factor(client, world, set
     # Sent to the second factor, not to the application.
     assert response.status_code == 302
     assert "2fa" in response["Location"]
+
+
+# -- the password policy -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "password,why",
+    [
+        ("correct horse battery staple", "a plain lower-case passphrase"),
+        ("Pizza-Dense-While-Problem", "a generated passphrase"),
+        ("the quick brown fox jumps", "spaces and nothing else"),
+    ],
+)
+def test_a_passphrase_is_accepted_without_composition_rules(password, why):
+    """⚠ Requiring a capital, a digit and a symbol produces "Password1!" and a
+    sticky note. Requiring length produces a passphrase."""
+    from django.contrib.auth.password_validation import validate_password
+
+    validate_password(password)
+
+
+def test_twelve_characters_is_the_floor():
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+
+    validate_password("abcdefghijkl")  # exactly twelve
+    with pytest.raises(ValidationError):
+        validate_password("abcdefghijk")  # eleven
+
+
+def test_a_known_bad_password_is_still_refused():
+    """⚠ Not a composition rule — a blocklist. "qwertyuiop12" is long and
+    lower-case and is in every cracking dictionary; without this the length floor
+    is the only thing between an account and a ten-second guess.
+    """
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+
+    with pytest.raises(ValidationError):
+        validate_password("qwertyuiop12")
