@@ -1,4 +1,4 @@
-# Contributing to DojoMaster
+# Contributing to BokyDojo
 
 ## Non-Negotiable Conventions
 
@@ -61,8 +61,8 @@ install the distribution package or do the same.
 executable — so naive `-x` checks select a Windows binary and everything
 afterwards fails confusingly. `start.sh` and the `Makefile` both *execute* a
 candidate interpreter to prove it runs before trusting it, and fall back to an
-environment outside the tree (`$HOME/.cache/dojomaster-venv`, overridable with
-`DOJOMASTER_VENV`). The same applies under WSL, where the environment must live
+environment outside the tree (`$HOME/.cache/bokydojo-venv`, overridable with
+`BOKYDOJO_VENV`). The same applies under WSL, where the environment must live
 outside `/mnt/c`.
 
 ### Front end
@@ -120,7 +120,7 @@ Tasks marked `[DS]` in TODO.md are self-contained and mechanical. They can be ru
 
 ## Licensing of contributions ⚠
 
-DojoMaster is AGPL-3.0-or-later, and the copyright holder additionally sells
+BokyDojo is AGPL-3.0-or-later, and the copyright holder additionally sells
 commercial exceptions (see the README). That second half only works while one
 party owns all the copyright: an exception cannot be granted over code somebody
 else owns.

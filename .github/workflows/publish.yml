@@ -1,10 +1,10 @@
 # =============================================================================
-# DojoMaster — publish the container image
+# BokyDojo — publish the container image
 #
 # Builds and pushes to GitHub Container Registry so a self-hoster can run the
 # app without cloning or building anything:
 #
-#   podman pull ghcr.io/sarel-myburgh/dojomaster:latest
+#   podman pull ghcr.io/sarel-myburgh/bokydojo:latest
 #
 # ⚠ Runs only after CI passes on main. Publishing an image whose tests never ran
 # is how ":latest" stops meaning anything.
@@ -23,9 +23,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # ⚠ Must be lower-case. The repository is "DojoMaster"; ghcr rejects capitals
+  # ⚠ Must be lower-case. The repository is "BokyDojo"; ghcr rejects capitals
   # in an image name, so this cannot be github.repository verbatim.
-  IMAGE_NAME: sarel-myburgh/dojomaster
+  IMAGE_NAME: sarel-myburgh/bokydojo
 
 jobs:
   publish:

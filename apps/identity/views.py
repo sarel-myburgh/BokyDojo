@@ -43,10 +43,10 @@ logger = logging.getLogger(__name__)
 
 LOGIN_SCOPE = "login"
 MFA_SCOPE = "mfa"
-PENDING_USER_KEY = "_dojomaster_pending_mfa_user"
-PENDING_STARTED_KEY = "_dojomaster_pending_mfa_started"
-PENDING_NEXT_KEY = "_dojomaster_pending_mfa_next"
-RECOVERY_DISPLAY_KEY = "_dojomaster_mfa_recovery_display"
+PENDING_USER_KEY = "_bokydojo_pending_mfa_user"
+PENDING_STARTED_KEY = "_bokydojo_pending_mfa_started"
+PENDING_NEXT_KEY = "_bokydojo_pending_mfa_next"
+RECOVERY_DISPLAY_KEY = "_bokydojo_mfa_recovery_display"
 PENDING_MAX_AGE_SECONDS = 5 * 60
 GENERIC_FAILURE = _("That email and password combination is not recognised.")
 GENERIC_MFA_FAILURE = _("That verification code is not valid.")

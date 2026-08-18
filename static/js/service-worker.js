@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE = "dojomaster-shell-v4";
+const CACHE = "bokydojo-shell-v4";
 const SHELL = [
   "/offline/",
   "/static/css/tailwind.css",
@@ -12,8 +12,8 @@ const SHELL = [
   "/static/js/kiosk.js",
   "/static/js/offline.js",
   "/static/manifest.webmanifest",
-  "/static/icons/dojomaster-192.png",
-  "/static/icons/dojomaster-512.png",
+  "/static/icons/bokydojo-192.png",
+  "/static/icons/bokydojo-512.png",
 ];
 
 self.addEventListener("install", (event) => {

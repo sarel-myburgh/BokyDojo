@@ -158,10 +158,10 @@ PUBLISH = ROOT / ".github/workflows/publish.yml"
 def test_the_image_runs_as_a_non_root_user():
     source = DOCKERFILE.read_text(encoding="utf-8")
 
-    assert "USER dojomaster" in source
+    assert "USER bokydojo" in source
     # ⚠ After the COPY and chown, or the application files stay root-owned and
     # the unprivileged user cannot write to them.
-    assert source.index("chown -R dojomaster") < source.index("USER dojomaster")
+    assert source.index("chown -R bokydojo") < source.index("USER bokydojo")
 
 
 def test_the_image_creates_its_writable_directories_before_dropping_privileges():
@@ -190,8 +190,8 @@ def test_only_one_service_applies_migrations(compose):
     import yaml
 
     services = yaml.safe_load(compose)["services"]
-    assert services["worker"]["environment"]["DOJOMASTER_MIGRATE"] == "false"
-    assert "DOJOMASTER_MIGRATE" not in services.get("web", {}).get("environment", {})
+    assert services["worker"]["environment"]["BOKYDOJO_MIGRATE"] == "false"
+    assert "BOKYDOJO_MIGRATE" not in services.get("web", {}).get("environment", {})
 
 
 def test_the_web_container_publishes_no_port(compose):
@@ -212,7 +212,7 @@ def test_production_trusts_the_proxys_forwarded_proto_header():
 
 
 def test_the_publish_workflow_is_valid_and_lowercases_the_image_name():
-    """⚠ ghcr rejects capitals, and this repository is called DojoMaster."""
+    """⚠ ghcr rejects capitals, and this repository is called BokyDojo."""
     import yaml
 
     parsed = yaml.safe_load(PUBLISH.read_text(encoding="utf-8"))

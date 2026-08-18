@@ -1,4 +1,4 @@
-# Khmer translation for DojoMaster
+# Khmer translation for BokyDojo
 # Machine draft — native-speaker review required before launch
 msgid ""
 msgstr ""

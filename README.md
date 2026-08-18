@@ -1,4 +1,4 @@
-# DojoMaster
+# BokyDojo
 
 A Student Information System (SIS) for martial arts organisations: multi-dojo attendance, ranking, scheduling, billing, and a parent portal.
 
@@ -8,7 +8,7 @@ Self-hostable via Docker; managed single-tenant SaaS long term.
 
 ```bash
 # Clone and configure
-git clone <repo-url> && cd DojoMaster
+git clone <repo-url> && cd BokyDojo
 cp .env.example .env
 
 # Start with Docker Compose (Postgres + Redis + app + worker + Caddy)
@@ -80,9 +80,9 @@ cloned or built:
 
 ```sh
 # 1. Fetch the two files that describe the stack
-curl -fsSLO https://raw.githubusercontent.com/sarel-myburgh/DojoMaster/main/docker-compose.yml
-curl -fsSLO https://raw.githubusercontent.com/sarel-myburgh/DojoMaster/main/Caddyfile
-curl -fsSLO https://raw.githubusercontent.com/sarel-myburgh/DojoMaster/main/scripts/init-env.sh
+curl -fsSLO https://raw.githubusercontent.com/sarel-myburgh/BokyDojo/main/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/sarel-myburgh/BokyDojo/main/Caddyfile
+curl -fsSLO https://raw.githubusercontent.com/sarel-myburgh/BokyDojo/main/scripts/init-env.sh
 chmod +x init-env.sh
 
 # 2. Generate real secrets (it refuses to overwrite an existing .env)
@@ -99,7 +99,7 @@ your browser will warn once.
 To pull the image on its own:
 
 ```sh
-podman pull ghcr.io/sarel-myburgh/dojomaster:latest
+podman pull ghcr.io/sarel-myburgh/bokydojo:latest
 ```
 
 Tags: `latest` tracks `main`, `sha-<commit>` pins an exact build, and `vX.Y.Z`
@@ -109,7 +109,7 @@ appears on releases. Built for `linux/amd64` and `linux/arm64`.
 
 - **Rootless Podman cannot bind ports below 1024**, so the stack publishes 8080
   and 8443 by default. A real deployment with a domain needs 80 and 443 for
-  certificate issuance — set `DOJOMASTER_HTTP_PORT=80`, `DOJOMASTER_HTTPS_PORT=443`
+  certificate issuance — set `BOKYDOJO_HTTP_PORT=80`, `BOKYDOJO_HTTPS_PORT=443`
   and either run rootful or lower `net.ipv4.ip_unprivileged_port_start`.
 - **Set `DOMAIN` and `DJANGO_ALLOWED_HOSTS` to your hostname.** Django refuses
   requests for hosts it does not know, and Caddy will not get a certificate for
@@ -137,17 +137,17 @@ podman-compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 Copyright © 2026 Sarel Myburgh.
 
-DojoMaster is free software under the **GNU Affero General Public License,
+BokyDojo is free software under the **GNU Affero General Public License,
 version 3 or later** — see [LICENSE](LICENSE). You may run it, study it, modify
 it and self-host it. If you run a modified version as a network service, AGPL
 §13 requires you to offer that version's source to its users.
 
 **Commercial exception.** The copyright holder also grants proprietary licences
-to anyone who wants to use DojoMaster without the AGPL's source-disclosure
+to anyone who wants to use BokyDojo without the AGPL's source-disclosure
 obligations — embedding it in a closed product, or reselling it as a hosted
 service. Enquiries: jmsarel@gmail.com.
 
 Choosing AGPL was decision `D7` (project_plan.md §10). The reasoning: the
 business is managed hosting and support, not code secrecy, so the source can be
 open — but a competitor should not be able to take it and run a rival hosted
-DojoMaster without contributing back.
+BokyDojo without contributing back.

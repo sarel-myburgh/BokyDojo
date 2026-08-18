@@ -1,5 +1,5 @@
 # =============================================================================
-# DojoMaster — build context exclusions
+# BokyDojo — build context exclusions
 #
 # ⚠ The Dockerfile does `COPY . .`. Without this file that copies whatever
 # happens to be in the working directory into the image — including .env, which

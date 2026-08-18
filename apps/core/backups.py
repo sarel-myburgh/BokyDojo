@@ -87,17 +87,17 @@ def create_backup(destination: str | Path | None = None) -> Path:
     media_root = _validate_media_root(Path(settings.MEDIA_ROOT))
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     if destination is None:
-        output = Path(settings.BASE_DIR, "backups", f"dojomaster-{timestamp}.tar.gz")
+        output = Path(settings.BASE_DIR, "backups", f"bokydojo-{timestamp}.tar.gz")
     else:
         output = Path(destination).expanduser()
         if output.exists() and output.is_dir():
-            output = output / f"dojomaster-{timestamp}.tar.gz"
+            output = output / f"bokydojo-{timestamp}.tar.gz"
     output = output.resolve()
     if _is_within(output, media_root):
         raise CommandError("The backup archive may not be written inside MEDIA_ROOT.")
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(prefix="dojomaster-backup-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="bokydojo-backup-") as temporary:
         temporary_path = Path(temporary)
         dump_path = temporary_path / DATABASE_NAME
         command = [
@@ -218,7 +218,7 @@ def restore_backup(archive_path: str | Path, *, confirm_database: str) -> None:
     if not source.is_file():
         raise CommandError(f"Backup archive does not exist: {source}")
 
-    with tempfile.TemporaryDirectory(prefix="dojomaster-restore-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="bokydojo-restore-") as temporary:
         extracted = Path(temporary)
         try:
             with tarfile.open(source, "r:*") as archive:

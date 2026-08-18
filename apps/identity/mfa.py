@@ -143,6 +143,16 @@ def _normalise_recovery_code(code: str) -> str:
 
 
 def _recovery_digest(code: str) -> str:
+    """⚠ The 'dojomaster' below is deliberate and must not be renamed.
+
+    It is the HMAC domain-separation prefix for recovery-code digests. Recovery
+    codes are stored hashed and cannot be re-derived, so changing this string
+    silently invalidates every code ever issued — people would find out the day
+    they lost their phone and needed one.
+
+    It survived the rename to BokyDojo for that reason. It is internal, never
+    shown to anybody, and its only job is to be *stable*.
+    """
     key = settings.SECRET_KEY.encode("utf-8")
     message = ("dojomaster-mfa-recovery:" + _normalise_recovery_code(code)).encode("ascii")
     return hmac.new(key, message, hashlib.sha256).hexdigest()
@@ -201,11 +211,11 @@ def consume_recovery_code(credential: MfaCredential, code: str) -> bool:
 
 
 def provisioning_uri(credential: MfaCredential) -> str:
-    label = quote(f"DojoMaster:{credential.user.email}", safe="")
+    label = quote(f"BokyDojo:{credential.user.email}", safe="")
     query = urlencode(
         {
             "secret": credential.totp_secret,
-            "issuer": "DojoMaster",
+            "issuer": "BokyDojo",
             "algorithm": "SHA1",
             "digits": TOTP_DIGITS,
             "period": TOTP_PERIOD,

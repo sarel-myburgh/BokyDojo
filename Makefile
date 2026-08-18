@@ -1,5 +1,5 @@
 # =============================================================================
-# DojoMaster — Makefile
+# BokyDojo — Makefile
 # TODO 0.1.7 — dev, test, lint, migrate, seed, backup, restore
 # =============================================================================
 
@@ -18,7 +18,7 @@
 # A checkout made on Windows carries a .venv/Scripts/python.exe that is marked
 # executable on Linux, so the interpreter is *executed* to prove it runs here.
 
-VENV_DIR ?= $(HOME)/.cache/dojomaster-venv
+VENV_DIR ?= $(HOME)/.cache/bokydojo-venv
 
 PYTHON ?= $(shell \
 	if [ -x .venv/bin/python ] && .venv/bin/python -c '' >/dev/null 2>&1; then \

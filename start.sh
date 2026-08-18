@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start a disposable local DojoMaster demo for hands-on testing.
+# Start a disposable local BokyDojo demo for hands-on testing.
 #
 # This deliberately uses config.settings.dev (SQLite, no Docker services) and
 # refuses an explicit PostgreSQL connection. It is not a production launcher.
@@ -9,8 +9,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$repo_root"
 
-host="${DOJOMASTER_HOST:-127.0.0.1}"
-port="${DOJOMASTER_PORT:-8000}"
+host="${BOKYDOJO_HOST:-127.0.0.1}"
+port="${BOKYDOJO_PORT:-8000}"
 reset_demo=1
 
 usage() {
@@ -22,12 +22,12 @@ By default it resets and seeds the local SQLite demo database. Use
 --keep-data to preserve the current demo data.
 
 Optional environment variables:
-  DOJOMASTER_HOST       Bind address (default: 127.0.0.1)
-  DOJOMASTER_PORT       Port (default: 8000)
-  DOJOMASTER_PYTHON     Python executable to use
-  DOJOMASTER_VENV       Virtual environment location when one must be created
-                        (default: $HOME/.cache/dojomaster-venv)
-  DOJOMASTER_WSL_VENV   Deprecated alias for DOJOMASTER_VENV
+  BOKYDOJO_HOST       Bind address (default: 127.0.0.1)
+  BOKYDOJO_PORT       Port (default: 8000)
+  BOKYDOJO_PYTHON     Python executable to use
+  BOKYDOJO_VENV       Virtual environment location when one must be created
+                        (default: $HOME/.cache/bokydojo-venv)
+  BOKYDOJO_WSL_VENV   Deprecated alias for BOKYDOJO_VENV
 EOF
 }
 
@@ -92,8 +92,8 @@ create_venv() {
   rm -f "$get_pip"
 }
 
-if [[ -n "${DOJOMASTER_PYTHON:-}" ]]; then
-  python_bin="$DOJOMASTER_PYTHON"
+if [[ -n "${BOKYDOJO_PYTHON:-}" ]]; then
+  python_bin="$BOKYDOJO_PYTHON"
 elif runnable .venv/bin/python; then
   python_bin=".venv/bin/python"
 elif runnable .venv/Scripts/python.exe; then
@@ -103,7 +103,7 @@ else
   # WSL looking at a Windows .venv. Under WSL the environment must live outside
   # /mnt/c, where Linux executables and permissions behave normally; $HOME is
   # already there, so the same default works for both.
-  venv_dir="${DOJOMASTER_VENV:-${DOJOMASTER_WSL_VENV:-$HOME/.cache/dojomaster-venv}}"
+  venv_dir="${BOKYDOJO_VENV:-${BOKYDOJO_WSL_VENV:-$HOME/.cache/bokydojo-venv}}"
   python_bin="$venv_dir/bin/python"
   if ! runnable "$python_bin"; then
     create_venv "$venv_dir"
@@ -140,5 +140,5 @@ else
   echo "Keeping existing local demo data."
 fi
 
-echo "Starting DojoMaster at http://$host:$port (Ctrl+C to stop)."
+echo "Starting BokyDojo at http://$host:$port (Ctrl+C to stop)."
 exec "$python_bin" manage.py runserver "$host:$port"

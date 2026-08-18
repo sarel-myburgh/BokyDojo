@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Generate a .env for a self-hosted DojoMaster.
+# Generate a .env for a self-hosted BokyDojo.
 #
 #   ./scripts/init-env.sh
 #
@@ -53,10 +53,10 @@ DJANGO_FIELD_ENCRYPTION_KEYS=${field_key}
 # anything not listed, and the guard refuses to boot when this is empty.
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 
-DJANGO_DEFAULT_FROM_EMAIL=DojoMaster <noreply@localhost>
+DJANGO_DEFAULT_FROM_EMAIL=BokyDojo <noreply@localhost>
 
-POSTGRES_DB=dojomaster
-POSTGRES_USER=dojomaster
+POSTGRES_DB=bokydojo
+POSTGRES_USER=bokydojo
 POSTGRES_PASSWORD=${db_password}
 POSTGRES_HOST=db
 POSTGRES_PORT=5432
@@ -78,8 +78,8 @@ SMTP_USE_TLS=true
 
 # Ports published on the host. Defaults are high so this works under rootless
 # Podman; a public deployment wants 80 and 443.
-DOJOMASTER_HTTP_PORT=8080
-DOJOMASTER_HTTPS_PORT=8443
+BOKYDOJO_HTTP_PORT=8080
+BOKYDOJO_HTTPS_PORT=8443
 
 # The domain Caddy serves and requests a certificate for. Leave as localhost for
 # a local trial (Caddy issues an internal self-signed certificate).

@@ -1,4 +1,4 @@
-# Simplified Chinese translation for DojoMaster
+# Simplified Chinese translation for BokyDojo
 # Machine draft — native-speaker review required before launch
 msgid ""
 msgstr ""

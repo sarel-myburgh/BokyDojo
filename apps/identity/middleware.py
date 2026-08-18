@@ -10,8 +10,8 @@ from django.urls import resolve, reverse
 
 from apps.identity.mfa import get_credential, user_requires_mfa
 
-MFA_VERIFIED_AT_KEY = "_dojomaster_mfa_verified"
-AUTH_FLOW_KEY = "_dojomaster_auth_flow"
+MFA_VERIFIED_AT_KEY = "_bokydojo_mfa_verified"
+AUTH_FLOW_KEY = "_bokydojo_auth_flow"
 MFA_ALLOWED_URL_NAMES = frozenset(
     {"login", "logout", "mfa-challenge", "mfa-setup", "mfa-recovery-codes"}
 )

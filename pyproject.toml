@@ -1,5 +1,5 @@
 [project]
-name = "dojomaster"
+name = "bokydojo"
 version = "0.1.0"
 description = "Student Information System for martial arts organisations"
 requires-python = ">=3.12"

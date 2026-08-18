@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Two-step verification" %} — DojoMaster{% endblock %}
+{% block title %}{% translate "Two-step verification" %} — BokyDojo{% endblock %}
 
 {% block body %}
 <main class="min-h-screen flex items-center justify-center px-4 py-10">
@@ -10,7 +10,7 @@
 
     {% if is_confirmed %}
       <p class="text-gray-600 mb-5">{% translate "Two-step verification is active on this account." %}</p>
-      <a href="{% url 'today' %}" class="inline-block rounded-lg bg-gray-900 px-4 py-3 text-white">{% translate "Return to DojoMaster" %}</a>
+      <a href="{% url 'today' %}" class="inline-block rounded-lg bg-gray-900 px-4 py-3 text-white">{% translate "Return to BokyDojo" %}</a>
     {% elif can_start %}
       <p class="text-gray-600 mb-5">{% translate "Add an authenticator app to protect this account." %}</p>
       {% if error %}<div role="alert" class="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">{{ error }}</div>{% endif %}

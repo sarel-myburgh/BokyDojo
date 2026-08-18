@@ -25,7 +25,7 @@ from apps.identity.models import (
     User,
 )
 
-SETUP_LOCK_KEY = "dojomaster:first-run-setup"
+SETUP_LOCK_KEY = "bokydojo:first-run-setup"
 SETUP_LOCK_SECONDS = 60
 
 

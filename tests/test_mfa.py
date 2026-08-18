@@ -126,7 +126,7 @@ def test_setup_confirms_totp_and_shows_recovery_codes_only_once(monkeypatch):
     assert response.url == reverse("mfa-recovery-codes")
     assert client.session["_auth_user_id"] == str(user.pk)
     credential.refresh_from_db()
-    shown_codes = list(client.session["_dojomaster_mfa_recovery_display"])
+    shown_codes = list(client.session["_bokydojo_mfa_recovery_display"])
     assert len(shown_codes) == 10
     assert not any(code in credential.recovery_code_hashes for code in shown_codes)
 
@@ -255,7 +255,7 @@ def test_pending_second_factor_expires():
     client = Client()
     password_login(client, user)
     session = client.session
-    session["_dojomaster_pending_mfa_started"] -= 3600
+    session["_bokydojo_pending_mfa_started"] -= 3600
     session.save()
 
     response = client.get(reverse("mfa-challenge"))

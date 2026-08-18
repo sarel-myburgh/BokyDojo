@@ -1,9 +1,9 @@
-# DojoMaster — Project Plan
+# BokyDojo — Project Plan
 
 A Student Information System (SIS) for martial arts organisations: multi-dojo attendance, ranking, scheduling, billing, and a parent portal. Self-hostable via Docker short term; managed single-tenant SaaS long term.
 
 > Companion documents:
-> - **[competitive_analysis.md](competitive_analysis.md)** — what the ~20 existing products do well and badly, and where DojoMaster fits.
+> - **[competitive_analysis.md](competitive_analysis.md)** — what the ~20 existing products do well and badly, and where BokyDojo fits.
 > - **[security_and_compliance.md](security_and_compliance.md)** — threat model, security controls, AI prompt-injection defence, GDPR/hosting posture, pentest scope.
 
 ---
@@ -480,7 +480,7 @@ Most dojos have no admin staff. The owner teaches five nights a week and does ad
 Verify before Phase 2: GDT requirements for invoice content and sequential numbering, whether Khmer-language invoices are mandatory, VAT registration thresholds, and what constitutes a valid receipt for a customer who needs one. Get this wrong and your invoices are decorative. Worth an hour with a local accountant rather than an afternoon of my guessing.
 
 ### 12.17 The name
-`DojoMaster` sits in a crowded namespace — Dojo Manager, DojoExpert, DojoTrack, Dojo Champ, dojomanagementsoftware.com all exist. Worth a trademark search before you print anything. Separately: *dojo* is a Japanese term. BJJ academies, taekwondo *dojangs*, and kung fu *kwoons* may read the name as not-for-them, which narrows your market perception at zero benefit. Something style-neutral costs nothing now and something later.
+`BokyDojo` sits in a crowded namespace — Dojo Manager, DojoExpert, DojoTrack, Dojo Champ, dojomanagementsoftware.com all exist. Worth a trademark search before you print anything. Separately: *dojo* is a Japanese term. BJJ academies, taekwondo *dojangs*, and kung fu *kwoons* may read the name as not-for-them, which narrows your market perception at zero benefit. Something style-neutral costs nothing now and something later.
 
 ### 12.18 Be honest about who runs their own box
 A dojo owner who can run Docker Compose is rare. Realistically the self-host tier serves *you*, a handful of technical owners, and your credibility — it is not a customer acquisition channel. That's fine and worth building anyway (it's your architecture, your dogfood, your anti-lock-in story), but don't let it distort the roadmap: the **managed-hosting offering is where actual users will be** (see §13.9), so provisioning and operations tooling matters more than a polished self-host installer.

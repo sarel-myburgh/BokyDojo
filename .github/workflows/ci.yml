@@ -1,5 +1,5 @@
 # =============================================================================
-# DojoMaster CI — TODO 0.2.6 + 0.2.7
+# BokyDojo CI — TODO 0.2.6 + 0.2.7
 # Lint, test, build image, dependency audit, SAST, secret scanning
 # =============================================================================
 
@@ -41,7 +41,7 @@ jobs:
     needs: [lint, test]
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t dojomaster:ci .
+      - run: docker build -t bokydojo:ci .
 
   security:
     runs-on: ubuntu-latest

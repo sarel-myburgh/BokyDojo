@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% load i18n %}
 
-{% block title %}{% translate "Set up DojoMaster" %}{% endblock %}
+{% block title %}{% translate "Set up BokyDojo" %}{% endblock %}
 
 {% block body %}
 <main class="mx-auto max-w-2xl px-4 py-10">
-  <h1 class="text-2xl font-semibold mb-2">{% translate "Set up DojoMaster" %}</h1>
+  <h1 class="text-2xl font-semibold mb-2">{% translate "Set up BokyDojo" %}</h1>
   <p class="text-gray-600 mb-6">{% translate "Create the organisation, first dojo, and owner account." %}</p>
 
   {% if setup_error %}<div role="alert" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">{{ setup_error }}</div>{% endif %}

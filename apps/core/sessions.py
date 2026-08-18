@@ -26,9 +26,9 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 #: Set when the session was created, and never refreshed.
-STARTED_AT_KEY = "_dojomaster_session_started"
+STARTED_AT_KEY = "_bokydojo_session_started"
 #: Refreshed on every request.
-LAST_SEEN_KEY = "_dojomaster_last_seen"
+LAST_SEEN_KEY = "_bokydojo_last_seen"
 
 
 def _now_stamp() -> float:

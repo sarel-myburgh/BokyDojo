@@ -44,7 +44,7 @@ def _send_reset_email(request, email: str, user) -> None:
     if user is None:
         body = _(
             "A password reset was requested for this email address, but no active "
-            "DojoMaster account matches it. No action is needed."
+            "BokyDojo account matches it. No action is needed."
         )
     else:
         uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -52,13 +52,13 @@ def _send_reset_email(request, email: str, user) -> None:
         path = reverse("password-reset-confirm", kwargs={"uidb64": uid, "token": token})
         reset_url = request.build_absolute_uri(path)
         body = _(
-            "A password reset was requested for your DojoMaster account.\n\n"
+            "A password reset was requested for your BokyDojo account.\n\n"
             "Use this single-use link within 30 minutes:\n%(url)s\n\n"
             "If you did not request this, no action is needed."
         ) % {"url": reset_url}
 
     send_mail(
-        subject=_("Reset your DojoMaster password"),
+        subject=_("Reset your BokyDojo password"),
         message=body,
         from_email=None,
         recipient_list=[email],

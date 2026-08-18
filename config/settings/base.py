@@ -104,9 +104,9 @@ TEMPLATES = [
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("POSTGRES_DB", "dojomaster"),
-        "USER": env("POSTGRES_USER", "dojomaster"),
-        "PASSWORD": env("POSTGRES_PASSWORD", "dojomaster"),
+        "NAME": env("POSTGRES_DB", "bokydojo"),
+        "USER": env("POSTGRES_USER", "bokydojo"),
+        "PASSWORD": env("POSTGRES_PASSWORD", "bokydojo"),
         "HOST": env("POSTGRES_HOST", "localhost"),
         "PORT": env("POSTGRES_PORT", "5432"),
     }
@@ -127,7 +127,7 @@ CACHES = {
         if _REDIS_URL
         else {
             "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "dojomaster-local",
+            "LOCATION": "bokydojo-local",
         }
     )
 }
@@ -209,7 +209,7 @@ FIRST_RUN_SETUP_TOKEN = env("DJANGO_FIRST_RUN_TOKEN", "")
 DEMO_SEED_ENABLED = False
 MFA_ENFORCEMENT_ENABLED = True
 PASSWORD_RESET_TIMEOUT = 30 * 60
-DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL", "DojoMaster <noreply@localhost>")
+DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL", "BokyDojo <noreply@localhost>")
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "today"

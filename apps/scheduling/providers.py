@@ -77,7 +77,7 @@ class NagerDateProvider(BaseProvider):
             raise HolidayImportError("Holiday provider refused an untrusted URL")
         request = urllib.request.Request(
             url,
-            headers={"Accept": "application/json", "User-Agent": "DojoMaster/0.1"},
+            headers={"Accept": "application/json", "User-Agent": "BokyDojo/0.1"},
         )
         # The HTTPS scheme and exact host are checked above; redirects remain
         # subject to urllib's HTTP(S)-only redirect handler.

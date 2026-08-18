@@ -1,4 +1,4 @@
-# DojoMaster — Build TODO
+# BokyDojo — Build TODO
 
 Working checklist for the whole project. Designed so **any agent can pick up mid-stream** without the original conversation.
 
@@ -58,7 +58,7 @@ than conserving it.
 
 #### opencode — default dispatcher
 
-Runs in `Code/DojoMaster-opencode`. Writes files headlessly with **no permission
+Runs in `Code/BokyDojo-opencode`. Writes files headlessly with **no permission
 flags at all**, which is why it is the default.
 
 **Only these two families are approved.** The picker lists 448 models; most are
@@ -91,14 +91,14 @@ Go has 5-hour / weekly / monthly usage caps rather than per-token charges, so a
 very large batch can be throttled. That is the only reason to pace it.
 
 ```bash
-# from Code/DojoMaster-opencode
+# from Code/BokyDojo-opencode
 opencode run "Read TASK_BRIEF.md in the repository root and carry out exactly what it specifies." \
   -m opencode-go/mimo-v2.5-pro
 ```
 
 #### CommandCode — second dispatcher
 
-Runs in `Code/DojoMaster-commandcode`. **$1 bought $100 of usage**, so it is
+Runs in `Code/BokyDojo-commandcode`. **$1 bought $100 of usage**, so it is
 effectively free capacity — roughly 100× leverage. Use it freely; do not treat
 the credit figures as a scarce budget.
 
@@ -112,7 +112,7 @@ several times faster than MiMo for the same work. Not a reason to avoid them,
 just not the first reach.
 
 ```bash
-# from Code/DojoMaster-commandcode
+# from Code/BokyDojo-commandcode
 commandcode -p "Read TASK_BRIEF.md in the repository root and carry out exactly what it specifies." \
   -m xiaomi/mimo-v2.5-pro \
   --max-turns 120 --skip-onboarding -t --yolo
@@ -120,7 +120,7 @@ commandcode -p "Read TASK_BRIEF.md in the repository root and carry out exactly 
 
 #### Grok — fourth dispatcher
 
-Runs in `Code/DojoMaster-grok`. Installed at `C:\Users\Sarel\.grok\bin\grok.exe`
+Runs in `Code/BokyDojo-grok`. Installed at `C:\Users\Sarel\.grok\bin\grok.exe`
 (Windows PATH, added at install time — a shell opened earlier will not see it).
 Logged in via grok.com.
 
@@ -138,7 +138,7 @@ features rather than review.
 
 #### Codex — high-stakes second opinion
 
-Runs in `Code/DojoMaster-codex`. Installed and available with **GPT Tera** and
+Runs in `Code/BokyDojo-codex`. Installed and available with **GPT Tera** and
 **GPT Sol**. **The highest-value agent so far**: one adversarial review found
 18 issues including a critical cross-tenant privilege escalation, every one with
 a working reproduction. See `security_review_2026-07-26.md`.
@@ -266,8 +266,8 @@ OUTPUT
 > **Update this block whenever you stop work.**
 
 - 📁 **Single folder, single branch.** The parallel worktrees have been
-  consolidated: everything is merged into `main` in `Code/DojoMaster`, the five
-  `agent/*` branches are deleted, and the `DojoMaster-*` directories are gone.
+  consolidated: everything is merged into `main` in `Code/BokyDojo`, the five
+  `agent/*` branches are deleted, and the `BokyDojo-*` directories are gone.
   Work directly here. The multi-agent section below is retained as a record of
   how to set the fan-out up again, not as a description of the current state.
 - **Current phase:** Phase 0 complete / Phase 1 in progress
@@ -444,7 +444,7 @@ OUTPUT
 - **Test suite:** 1374 passing, 56 skipped; Ruff lint and format gates clean;
   `makemigrations --check` clean; `npm run test:js` clean. Bandit medium/high and
   Django production deploy checks are clean. From WSL:
-  `$HOME/.cache/dojomaster-venv/bin/pytest`. On Windows:
+  `$HOME/.cache/bokydojo-venv/bin/pytest`. On Windows:
   `.venv/Scripts/python.exe -m pytest`.
 - 🐧 **Running on native Linux now, not WSL/Windows — and the tooling assumed
   otherwise.** Every documented command was broken on a plain Linux box:
@@ -1198,11 +1198,11 @@ OUTPUT
 
 > ⚠ **This section is history, not instructions.** The worktrees and `agent/*`
 > branches described below were removed on 2026-07-26 when everything was
-> consolidated into a single `main` in `Code/DojoMaster`. Keep it as the recipe
+> consolidated into a single `main` in `Code/BokyDojo`. Keep it as the recipe
 > for setting the fan-out up again; do not follow it as a description of how the
 > repository is laid out today.
 >
-> To restore it: recreate the branches, `git worktree add ../DojoMaster-<name>
+> To restore it: recreate the branches, `git worktree add ../BokyDojo-<name>
 > agent/<name>` per agent, and pre-create any shared scaffolding first.
 
 Several agents work this repo. Running them in one shared working tree caused a
@@ -1215,11 +1215,11 @@ its **own branch and its own directory** (a git worktree), all sharing one
 
 | Directory | Branch | Agent |
 |---|---|---|
-| `Code/DojoMaster` | `main` | integration + inspection — **nobody commits here** |
-| `Code/DojoMaster-claude` | `agent/claude` | Claude |
-| `Code/DojoMaster-commandcode` | `agent/commandcode` | CommandCode |
-| `Code/DojoMaster-opencode` | `agent/opencode` | OpenCode / MiniMax |
-| `Code/DojoMaster-codex` | `agent/codex` | Codex |
+| `Code/BokyDojo` | `main` | integration + inspection — **nobody commits here** |
+| `Code/BokyDojo-claude` | `agent/claude` | Claude |
+| `Code/BokyDojo-commandcode` | `agent/commandcode` | CommandCode |
+| `Code/BokyDojo-opencode` | `agent/opencode` | OpenCode / MiniMax |
+| `Code/BokyDojo-codex` | `agent/codex` | Codex |
 
 **Work only in your own directory.** `cd` there and stay there. Your branch is
 already checked out; you never need `git checkout`, and attempting to check out
@@ -1231,11 +1231,11 @@ that refusal is the safety mechanism).
 There is one shared virtualenv, in the primary directory. From any worktree:
 
 ```bash
-../DojoMaster/.venv/Scripts/python.exe -m pytest        # Windows
-../DojoMaster/.venv/bin/python -m pytest                # POSIX
+../BokyDojo/.venv/Scripts/python.exe -m pytest        # Windows
+../BokyDojo/.venv/bin/python -m pytest                # POSIX
 ```
 
-- `.env` is gitignored, so a new worktree has none. Copy it: `cp ../DojoMaster/.env .env`
+- `.env` is gitignored, so a new worktree has none. Copy it: `cp ../BokyDojo/.env .env`
 - `media/`, `staticfiles/` and `__pycache__` are per-worktree. That is fine.
 - ⚠ **Do not run `docker compose up` in two worktrees at once** — they bind the
   same host ports and share the same volume names. One at a time, or set
@@ -1245,8 +1245,8 @@ There is one shared virtualenv, in the primary directory. From any worktree:
 
 ```bash
 git worktree list                                  # show all
-git worktree add ../DojoMaster-foo agent/foo       # add one
-git worktree remove ../DojoMaster-foo              # remove (must be clean)
+git worktree add ../BokyDojo-foo agent/foo       # add one
+git worktree remove ../BokyDojo-foo              # remove (must be clean)
 git worktree prune                                 # tidy stale entries
 ```
 
@@ -1286,11 +1286,11 @@ git add -A && git commit -m "..."
 git rebase main
 
 # 3. prove it still works, post-rebase
-../DojoMaster/.venv/Scripts/python.exe -m pytest
-../DojoMaster/.venv/Scripts/python.exe -m ruff check .
+../BokyDojo/.venv/Scripts/python.exe -m pytest
+../BokyDojo/.venv/Scripts/python.exe -m ruff check .
 
 # 4. fast-forward main without leaving your directory
-git -C ../DojoMaster merge --ff-only agent/<you>
+git -C ../BokyDojo merge --ff-only agent/<you>
 ```
 
 Step 3 matters: a rebase can produce a tree that compiles but fails, and nobody

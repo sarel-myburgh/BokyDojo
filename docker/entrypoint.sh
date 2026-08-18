@@ -1,6 +1,6 @@
 #!/bin/sh
 # =============================================================================
-# DojoMaster container entrypoint
+# BokyDojo container entrypoint
 #
 # The image has to be able to stand up on its own: `podman run` against an empty
 # database previously started gunicorn against unmigrated tables and an empty
@@ -14,8 +14,8 @@
 # =============================================================================
 set -eu
 
-RUN_MIGRATIONS="${DOJOMASTER_MIGRATE:-true}"
-WAIT_SECONDS="${DOJOMASTER_DB_WAIT:-60}"
+RUN_MIGRATIONS="${BOKYDOJO_MIGRATE:-true}"
+WAIT_SECONDS="${BOKYDOJO_DB_WAIT:-60}"
 
 wait_for_database() {
     echo "entrypoint: waiting up to ${WAIT_SECONDS}s for the database..."
@@ -47,7 +47,7 @@ except Exception as exc:
 wait_for_database
 
 if [ "$RUN_MIGRATIONS" = "true" ]; then
-    # ⚠ Only the web container does this; the worker sets DOJOMASTER_MIGRATE=false.
+    # ⚠ Only the web container does this; the worker sets BOKYDOJO_MIGRATE=false.
     # Two containers racing to migrate the same database is how a self-host
     # deployment ends up with a half-applied schema.
     echo "entrypoint: applying migrations..."
@@ -56,7 +56,7 @@ if [ "$RUN_MIGRATIONS" = "true" ]; then
     echo "entrypoint: collecting static files..."
     python manage.py collectstatic --noinput --clear
 else
-    echo "entrypoint: DOJOMASTER_MIGRATE is not 'true' — skipping migrate/collectstatic."
+    echo "entrypoint: BOKYDOJO_MIGRATE is not 'true' — skipping migrate/collectstatic."
 fi
 
 echo "entrypoint: starting: $*"

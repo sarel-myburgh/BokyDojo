@@ -27,7 +27,7 @@ from uuid import UUID
 
 _unscoped_depth = threading.local()
 _current_actor: contextvars.ContextVar[Actor | None] = contextvars.ContextVar(
-    "dojomaster_current_actor", default=None
+    "bokydojo_current_actor", default=None
 )
 
 

@@ -1,9 +1,9 @@
 # =============================================================================
-# DojoMaster — Multi-stage image
+# BokyDojo — Multi-stage image
 # TODO 0.2.1 — build deps separated, non-root runtime user
 #
 # Built and published by .github/workflows/publish.yml to
-#   ghcr.io/sarel-myburgh/dojomaster
+#   ghcr.io/sarel-myburgh/bokydojo
 # for linux/amd64 and linux/arm64, so it runs under Docker or Podman on an
 # ordinary server and on an Apple-silicon laptop without rebuilding.
 # =============================================================================
@@ -28,7 +28,7 @@ FROM python:3.13-slim AS runtime
 # ⚠ OCI labels, not decoration: ghcr.io links the package to this repository
 # through org.opencontainers.image.source, which is also what makes the package
 # inherit the repository's visibility settings.
-LABEL org.opencontainers.image.source="https://github.com/sarel-myburgh/DojoMaster" \
+LABEL org.opencontainers.image.source="https://github.com/sarel-myburgh/BokyDojo" \
       org.opencontainers.image.description="Student information system for martial arts organisations" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later"
 
@@ -39,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /install /usr/local
 
-RUN groupadd -r dojomaster && useradd -r -g dojomaster -d /app -s /sbin/nologin dojomaster
+RUN groupadd -r bokydojo && useradd -r -g bokydojo -d /app -s /sbin/nologin bokydojo
 
 WORKDIR /app
 
@@ -50,10 +50,10 @@ COPY . .
 # this the non-root user cannot write and `collectstatic` fails on first boot
 # with a permission error that reads like a bug in Django.
 RUN mkdir -p /app/staticfiles /app/media && \
-    chown -R dojomaster:dojomaster /app && \
+    chown -R bokydojo:bokydojo /app && \
     chmod +x /app/docker/entrypoint.sh
 
-USER dojomaster
+USER bokydojo
 
 EXPOSE 8000
 

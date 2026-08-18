@@ -1,4 +1,4 @@
-"""Generate deterministic raster PWA icons from the DojoMaster mark."""
+"""Generate deterministic raster PWA icons from the BokyDojo mark."""
 
 from pathlib import Path
 
@@ -24,4 +24,4 @@ for size in (192, 512):
         ],
         fill="#f59e0b",
     )
-    image.save(OUTPUT / f"dojomaster-{size}.png", optimize=True)
+    image.save(OUTPUT / f"bokydojo-{size}.png", optimize=True)
