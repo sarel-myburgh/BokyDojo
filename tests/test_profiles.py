@@ -36,7 +36,7 @@ from apps.identity.profiles import current_profile_photo, may_edit_person, uploa
 
 pytestmark = pytest.mark.django_db
 
-PASSWORD = "correct-horse-battery-staple"
+PASSWORD = "correct-horse-battery-staple"  # pragma: allowlist secret
 
 
 def an_image(name="face.jpg"):

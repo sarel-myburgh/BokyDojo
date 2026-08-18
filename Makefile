@@ -93,7 +93,12 @@ restore:
 # and the local gates passed the whole time. A check that only exists in CI is a
 # check you find out about afterwards.
 secrets:
-	git ls-files -z | xargs -0 $(PYTHON) -m detect_secrets.pre_commit_hook --baseline .secrets.baseline
+	# ⚠ --others as well as --cached. `git ls-files` alone lists only tracked
+	# files, so a brand new file is invisible to this scan until after it has
+	# been committed — which is precisely when it is too late, and is how a
+	# test password reached CI having passed `make check` locally.
+	git ls-files -z --cached --others --exclude-standard \
+		| xargs -0 $(PYTHON) -m detect_secrets.pre_commit_hook --baseline .secrets.baseline
 
 # Also CI's, and also previously invisible locally.
 i18n-check:
