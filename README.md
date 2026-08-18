@@ -73,6 +73,66 @@ repository. The review documents unremediated findings with working
 reproductions, so it is not published alongside the code it describes; ask if you
 need it for an audit.
 
+## Run it with Podman or Docker
+
+The image is published to GitHub Container Registry, so nothing here needs to be
+cloned or built:
+
+```sh
+# 1. Fetch the two files that describe the stack
+curl -fsSLO https://raw.githubusercontent.com/sarel-myburgh/DojoMaster/main/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/sarel-myburgh/DojoMaster/main/Caddyfile
+curl -fsSLO https://raw.githubusercontent.com/sarel-myburgh/DojoMaster/main/scripts/init-env.sh
+chmod +x init-env.sh
+
+# 2. Generate real secrets (it refuses to overwrite an existing .env)
+./init-env.sh
+
+# 3. Up
+podman-compose up -d        # or: docker compose up -d
+```
+
+Then open <https://localhost:8443/setup/> and use the first-run token that
+`init-env.sh` printed. Caddy issues an internal certificate for `localhost`, so
+your browser will warn once.
+
+To pull the image on its own:
+
+```sh
+podman pull ghcr.io/sarel-myburgh/dojomaster:latest
+```
+
+Tags: `latest` tracks `main`, `sha-<commit>` pins an exact build, and `vX.Y.Z`
+appears on releases. Built for `linux/amd64` and `linux/arm64`.
+
+### Things worth knowing before you deploy it
+
+- **Rootless Podman cannot bind ports below 1024**, so the stack publishes 8080
+  and 8443 by default. A real deployment with a domain needs 80 and 443 for
+  certificate issuance — set `DOJOMASTER_HTTP_PORT=80`, `DOJOMASTER_HTTPS_PORT=443`
+  and either run rootful or lower `net.ipv4.ip_unprivileged_port_start`.
+- **Set `DOMAIN` and `DJANGO_ALLOWED_HOSTS` to your hostname.** Django refuses
+  requests for hosts it does not know, and Caddy will not get a certificate for
+  a domain it has not been told about.
+- ⚠ **`SMTP_HOST` must be real before you rely on the system.** The generated
+  `.env` contains a placeholder so the stack boots for evaluation; password
+  reset and every notification fail until it points at a transactional provider.
+  A residential IP lands in spam — this is deliberate (plan §12.9), not an
+  oversight.
+- ⚠ **Back up `DJANGO_FIELD_ENCRYPTION_KEYS` somewhere other than the server.**
+  It decrypts medical and safeguarding records. Lose it and those records are
+  unreadable; there is no recovery path and there is not meant to be one.
+- The web container publishes no port. It is reachable only through Caddy, which
+  is what makes trusting `X-Forwarded-Proto` safe. Do not expose gunicorn
+  directly.
+
+To build from a checkout instead of pulling:
+
+```sh
+podman-compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+```
+
+
 ## Licence
 
 Copyright © 2026 Sarel Myburgh.

@@ -1,0 +1,75 @@
+# =============================================================================
+# DojoMaster — publish the container image
+#
+# Builds and pushes to GitHub Container Registry so a self-hoster can run the
+# app without cloning or building anything:
+#
+#   podman pull ghcr.io/sarel-myburgh/dojomaster:latest
+#
+# ⚠ Runs only after CI passes on main. Publishing an image whose tests never ran
+# is how ":latest" stops meaning anything.
+# =============================================================================
+
+name: Publish image
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  # Tagged releases publish their own immutable tag.
+  push:
+    tags: ["v*"]
+
+env:
+  REGISTRY: ghcr.io
+  # ⚠ Must be lower-case. The repository is "DojoMaster"; ghcr rejects capitals
+  # in an image name, so this cannot be github.repository verbatim.
+  IMAGE_NAME: sarel-myburgh/dojomaster
+
+jobs:
+  publish:
+    # Skip when the CI run that triggered this failed. Without the guard the
+    # workflow_run trigger fires on failure too.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # QEMU so one runner can produce an arm64 image as well — an Apple-silicon
+      # laptop is a likely place to try this, and an amd64-only image fails
+      # there with an exec-format error that explains nothing.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=long
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

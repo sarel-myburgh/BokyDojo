@@ -15,6 +15,19 @@ EMAIL_HOST_PASSWORD = env("SMTP_PASSWORD", "")
 EMAIL_USE_TLS = env_bool("SMTP_USE_TLS", True)
 
 SECURE_SSL_REDIRECT = True
+
+# ⚠ Without this the whole stack is an infinite redirect loop, and always was.
+# Caddy terminates TLS and proxies plain HTTP to gunicorn, so Django sees
+# request.is_secure() == False on every request, SECURE_SSL_REDIRECT sends a 301
+# to https, Caddy proxies it back as http, and round it goes. Not a single page
+# would ever have rendered in production.
+#
+# ⚠ Trusting a client-supplied header is only safe because the app is reachable
+# *solely* through the proxy — the compose stack does not publish the web
+# container's port, and the Caddyfile sets X-Forwarded-Proto itself, overwriting
+# anything a client sent. Expose gunicorn directly and this becomes a way to
+# fake HTTPS; do not.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True

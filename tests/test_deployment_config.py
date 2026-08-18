@@ -146,3 +146,92 @@ def test_the_docker_build_context_excludes_secrets_and_local_state():
     }
     for required in (".env", "*.sqlite3", ".venv/", "node_modules/", ".git/"):
         assert required in patterns, f".dockerignore must exclude {required}"
+
+
+# -- container image -----------------------------------------------------------
+
+DOCKERFILE = ROOT / "Dockerfile"
+ENTRYPOINT = ROOT / "docker/entrypoint.sh"
+PUBLISH = ROOT / ".github/workflows/publish.yml"
+
+
+def test_the_image_runs_as_a_non_root_user():
+    source = DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "USER dojomaster" in source
+    # ⚠ After the COPY and chown, or the application files stay root-owned and
+    # the unprivileged user cannot write to them.
+    assert source.index("chown -R dojomaster") < source.index("USER dojomaster")
+
+
+def test_the_image_creates_its_writable_directories_before_dropping_privileges():
+    """⚠ A named volume inherits the ownership of the directory it covers.
+
+    Without these created and chowned in the image, `collectstatic` fails on
+    first boot with a permission error that reads like a bug in Django.
+    """
+    source = DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "mkdir -p /app/staticfiles /app/media" in source
+
+
+def test_the_entrypoint_migrates_and_collects_static():
+    """The image must stand up against an empty database on its own."""
+    source = ENTRYPOINT.read_text(encoding="utf-8")
+
+    assert "manage.py migrate" in source
+    assert "manage.py collectstatic" in source
+    assert 'exec "$@"' in source
+
+
+def test_only_one_service_applies_migrations(compose):
+    """⚠ Two containers racing to migrate is how a self-host deployment ends up
+    with a half-applied schema."""
+    import yaml
+
+    services = yaml.safe_load(compose)["services"]
+    assert services["worker"]["environment"]["DOJOMASTER_MIGRATE"] == "false"
+    assert "DOJOMASTER_MIGRATE" not in services.get("web", {}).get("environment", {})
+
+
+def test_the_web_container_publishes_no_port(compose):
+    """⚠ Trusting X-Forwarded-Proto is only safe because the app is reachable
+    solely through Caddy. Publishing gunicorn turns it into a way to fake HTTPS.
+    """
+    import yaml
+
+    assert "ports" not in yaml.safe_load(compose)["services"]["web"]
+
+
+def test_production_trusts_the_proxys_forwarded_proto_header():
+    """⚠ Without this, SECURE_SSL_REDIRECT behind a TLS-terminating proxy is an
+    infinite redirect loop and the stack cannot serve a single page."""
+    source = (ROOT / "config/settings/prod.py").read_text(encoding="utf-8")
+
+    assert 'SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")' in source
+
+
+def test_the_publish_workflow_is_valid_and_lowercases_the_image_name():
+    """⚠ ghcr rejects capitals, and this repository is called DojoMaster."""
+    import yaml
+
+    parsed = yaml.safe_load(PUBLISH.read_text(encoding="utf-8"))
+    image = parsed["env"]["IMAGE_NAME"]
+
+    assert image == image.lower(), "ghcr image names must be lower-case"
+    assert parsed["jobs"]["publish"]["permissions"]["packages"] == "write"
+
+
+def test_the_published_image_is_multi_architecture():
+    import yaml
+
+    parsed = yaml.safe_load(PUBLISH.read_text(encoding="utf-8"))
+    step = next(
+        s
+        for s in parsed["jobs"]["publish"]["steps"]
+        if "build-push-action" in str(s.get("uses", ""))
+    )
+
+    assert "linux/arm64" in step["with"]["platforms"], (
+        "an amd64-only image fails on Apple silicon with an exec-format error"
+    )
