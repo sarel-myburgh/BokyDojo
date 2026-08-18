@@ -1,5 +1,13 @@
 # Contributing to BokyDojo
 
+## After the rename to BokyDojo
+
+⚠ The virtualenv path moved to `~/.cache/bokydojo-venv`. A venv cannot simply be
+renamed — its console scripts hardcode the absolute path — so run `make venv` to
+create the new one, then delete `~/.cache/dojomaster-venv`. `make venv` prints
+which interpreter the targets resolved to, which is the first thing to check when
+a target fails.
+
 ## Non-Negotiable Conventions
 
 These apply to every task, including delegated ones. Violating these is the most likely way a multi-agent handoff produces a broken codebase.

@@ -88,7 +88,24 @@ restore:
 
 # -- Full check (run before committing) ----------------------------------------
 
-check: lint test
+# ⚠ The same secret scan CI runs — tracked files against the reviewed baseline.
+# It was missing from `check` for three commits, CI was red for three commits,
+# and the local gates passed the whole time. A check that only exists in CI is a
+# check you find out about afterwards.
+secrets:
+	git ls-files -z | xargs -0 $(PYTHON) -m detect_secrets.pre_commit_hook --baseline .secrets.baseline
+
+# Also CI's, and also previously invisible locally.
+i18n-check:
+	@matches="$$(grep -rlP '(?<=>)[A-Z][a-z]+(?:\s+[a-z]+)+(?=<)' templates --include='*.html' || true)"; \
+	if [ -n "$$matches" ]; then \
+		echo "ERROR: hardcoded English strings in templates; wrap them in {% translate %}:"; \
+		echo "$$matches"; exit 1; \
+	fi; \
+	echo "No untranslated template strings found."
+
+# ⚠ Mirrors every CI job except the container build, which needs Docker.
+check: lint test secrets i18n-check
 	@echo "All checks passed."
 
 # -- i18n — TODO 0.4.5 ---------------------------------------------------------

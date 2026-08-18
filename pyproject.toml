@@ -41,6 +41,9 @@ dev = [
     # workflow file fails every run in 0s without executing a step, which is
     # invisible unless somebody reads the emails — so the suite checks it.
     "pyyaml>=6.0",
+    # ⚠ So `make check` can run the same secret scan CI does. Without it that
+    # step exists only in CI, which is where the last three red builds came from.
+    "detect-secrets>=1.5",
 ]
 
 [tool.black]
