@@ -1,0 +1,48 @@
+# =============================================================================
+# DojoMaster — build context exclusions
+#
+# ⚠ The Dockerfile does `COPY . .`. Without this file that copies whatever
+# happens to be in the working directory into the image — including .env, which
+# holds DJANGO_SECRET_KEY, the database password and the field-encryption keys
+# that protect medical and safeguarding data. A fresh CI checkout has no .env,
+# so CI would never have caught it; the person it bites is whoever builds an
+# image on their own machine.
+# =============================================================================
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Local databases — dev.sqlite3 is ~7 MB of demo data and has no business in an image
+*.sqlite3
+
+# Virtualenvs and toolchains (the image installs its own)
+.venv/
+venv/
+node_modules/
+
+# Version control and CI
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Caches and build artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Uploaded files and backups — runtime state, mounted as volumes
+media/
+backups/
+staticfiles/
+
+# Editor and OS noise
+.idea/
+.vscode/
+*.log

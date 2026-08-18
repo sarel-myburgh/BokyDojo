@@ -37,6 +37,10 @@ dev = [
     "pytest-django>=4.9",
     "ruff>=0.7",
     "black>=24.10",
+    # Used by tests/test_deployment_config.py to parse the CI workflow. A broken
+    # workflow file fails every run in 0s without executing a step, which is
+    # invisible unless somebody reads the emails — so the suite checks it.
+    "pyyaml>=6.0",
 ]
 
 [tool.black]

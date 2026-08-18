@@ -57,25 +57,33 @@ jobs:
       - run: pip install bandit[toml]
       - run: bandit -r apps/ -c pyproject.toml --severity-level medium
       # Secret scanning with detect-secrets — TODO 0.2.7
+      #
+      # ⚠ The previous version embedded a Python one-liner as an unquoted,
+      # multi-line YAML scalar. `if results:` made YAML try to read a mapping,
+      # the workflow file failed to parse, and *every* run since the repository
+      # gained a remote failed in 0s without executing a single step. Any
+      # embedded script must be a block scalar.
+      #
+      # ⚠ Scans tracked files against the reviewed baseline, not `--all-files`:
+      # the latter walks .venv/ and node_modules/ when they exist locally, and
+      # `scan` *rewrites* the baseline rather than failing on new findings.
+      # `detect-secrets-hook` is what pre-commit runs, so CI and the hook now
+      # agree.
       - run: pip install detect-secrets
-      - run: detect-secrets scan --all-files --exclude-files '\.env\.example$' | python -c "
-          import json, sys
-          data = json.load(sys.stdin)
-          results = data.get('results', {})
-          if results:
-              print('Secrets found:')
-              for f, findings in results.items():
-                  for f in findings:
-                      print(f'  {f[\"type\"]} in {f[\"line_number\"]}')
-              sys.exit(1)
-          print('No secrets detected.')
-          "
+      - name: Secret scan
+        run: git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline
       # Untranslated strings check — TODO 0.4.6
       - name: Check for untranslated template strings
+        # ⚠ The previous version piped `find` into `head -1` and tested the
+        # pipeline's status — which is head's, and head returns 0 on empty
+        # input. The condition was therefore always true and the step always
+        # failed, whether or not it had found anything. It flagged nothing and
+        # failed regardless, which is the worst of both.
         run: |
-          if find templates -name '*.html' -exec grep -lP '(?<=>)[A-Z][a-z]+(?:\s+[a-z]+)+(?=<)' {} \; 2>/dev/null | head -1; then
-            echo "ERROR: Found hardcoded English strings in templates."
-            echo "All user-facing strings must use {% translate %}."
+          matches="$(grep -rlP '(?<=>)[A-Z][a-z]+(?:\s+[a-z]+)+(?=<)' templates --include='*.html' || true)"
+          if [ -n "$matches" ]; then
+            echo "ERROR: hardcoded English strings in templates; wrap them in {% translate %}:"
+            echo "$matches"
             exit 1
           fi
           echo "No untranslated template strings found."
