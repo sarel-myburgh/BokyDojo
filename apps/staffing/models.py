@@ -182,3 +182,95 @@ class TimeEntry(TenantScopedModel):
         if self.ended_at is not None and self.started_at is not None:
             if self.ended_at <= self.started_at:
                 raise ValidationError({"ended_at": _("ended_at must be after started_at.")})
+
+
+class StaffGrade(TenantScopedModel):
+    """The rank a member of staff holds in a style — plan §3.
+
+    ⚠ Deliberately not a ``StudentStyleTrack``.
+
+    A student track hangs off ``StudentProfile`` and is the live, promotable
+    record: it drives eligibility, gradings, and the rank reports. An instructor
+    who is 5th dan is usually not enrolled as a student anywhere, and giving them
+    a student profile so they could hold a grade would put them in class rosters,
+    the check-in grid, and the active-students count — every one of which would
+    be wrong.
+
+    ⚠ Optional, and optional per style. Some styles have no belts at all, and an
+    instructor may hold a grade in one art and none in another they also teach.
+    Nothing here requires a grade to exist.
+    """
+
+    tenant_org_path = "person__organization_id"
+    same_organization_fields = ("person", "style", "rank")
+
+    person = models.ForeignKey(
+        "identity.Person",
+        on_delete=models.CASCADE,
+        related_name="staff_grades",
+    )
+    style = models.ForeignKey(
+        "ranks.Style",
+        on_delete=models.PROTECT,
+        related_name="staff_grades",
+    )
+    #: ⚠ Either ``rank`` or ``label``, never both and never neither — see the
+    #: constraint below. ``rank`` is preferred and is what you get when the grade
+    #: is on a ladder somebody has configured. ``label`` exists because dan
+    #: grades routinely are not: a ladder set up for students often stops at
+    #: black belt, and refusing to record "5th Dan" until somebody extends it
+    #: would mean the field simply goes unused.
+    rank = models.ForeignKey(
+        "ranks.Rank",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="held_by_staff",
+    )
+    label = models.CharField(_("grade"), max_length=50, blank=True)
+    awarded_on = models.DateField(_("awarded on"), null=True, blank=True)
+    notes = models.CharField(_("notes"), max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = _("staff grade")
+        verbose_name_plural = _("staff grades")
+        ordering = ("style__name",)
+        constraints = [
+            # ⚠ One grade per person per style. Two rows would be two answers to
+            # "what dan is she", and nothing would say which is current.
+            models.UniqueConstraint(
+                fields=["person", "style"],
+                name="staffgrade_one_per_person_per_style",
+            ),
+            # ⚠ Exactly one of rank/label. Both set means two names for one
+            # grade that can disagree; neither means a row that says nothing.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(rank__isnull=False, label="")
+                    | models.Q(rank__isnull=True) & ~models.Q(label="")
+                ),
+                name="staffgrade_rank_or_label_not_both",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.person} — {self.style}: {self.display_name}"
+
+    @property
+    def display_name(self) -> str:
+        return self.rank.name if self.rank_id else self.label
+
+    def clean(self):
+        super().clean()
+        has_rank = self.rank_id is not None
+        has_label = bool((self.label or "").strip())
+        if has_rank and has_label:
+            raise ValidationError(
+                {"label": _("Choose a rank from the list or type one, not both.")}
+            )
+        if not has_rank and not has_label:
+            raise ValidationError({"label": _("Enter the grade they hold.")})
+        # ⚠ A rank belongs to a ladder which belongs to a style. Picking one from
+        # a different style would file a karate belt under boxing.
+        if has_rank and self.style_id and self.rank.ladder.style_id != self.style_id:
+            raise ValidationError({"rank": _("That grade belongs to a different style.")})

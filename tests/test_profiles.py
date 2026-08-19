@@ -610,15 +610,17 @@ def test_an_admin_is_offered_a_way_to_award_a_grade(client, world):
     assert reverse("student-promote", args=[world["teacher"].pk, track.pk]) in body
 
 
-def test_somebody_with_no_student_record_is_told_why_there_is_no_grade(client, world):
-    """⚠ Not "no grades recorded" — grades hang off a student record, and staff
-    who were never enrolled have none. The wrong wording sends an administrator
-    hunting for a button that cannot exist."""
+def test_somebody_with_no_grade_is_offered_a_way_to_record_one(client, world):
+    """⚠ This used to say "not enrolled as a student, so there is no grade to
+    award", which was true only while grades hung off a student record. Staff
+    now hold their own grades, so the honest state is simply that none is on
+    file — and an administrator is offered the form to add one."""
     client.force_login(world["boss_user"])
 
     body = client.get(reverse("person-detail", args=[world["teacher"].pk])).content.decode()
 
-    assert "Not enrolled as a student" in body
+    assert "No grade recorded." in body
+    assert reverse("staff-grade-add", args=[world["teacher"].pk]) in body
 
 
 def test_the_settings_page_lists_every_member_of_staff(client, world):

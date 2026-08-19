@@ -87,6 +87,8 @@
 
 <div class="panel mb-6 px-5 py-4">
   <h2 class="mb-3 text-base font-bold tracking-tight">{% translate "Grades" %}</h2>
+
+  {# -- as a student: the live, promotable record ------------------------- #}
   {% if tracks %}
     <ul class="divide-y divide-gray-100 text-sm">
       {% for track in tracks %}
@@ -106,19 +108,74 @@
         </li>
       {% endfor %}
     </ul>
-  {% elif student_profile %}
-    <p class="text-sm text-gray-400">{% translate "No style tracks yet — enrol them in a dojo and its styles apply." %}</p>
-  {% else %}
-    {% comment %}
-      ⚠ Not "no grades recorded". Grades hang off a student record, and somebody
-      who only ever appears as staff has none — so there is nothing to grade
-      until they are enrolled, and saying "none recorded" would send an
-      administrator looking for a button that cannot exist.
-    {% endcomment %}
-    <p class="text-sm text-gray-400">
-      {% translate "Not enrolled as a student, so there is no grade to award. Enrol them from the Students page first." %}
-    </p>
   {% endif %}
+
+  {% comment %}
+    ⚠ Staff grades sit beside the student tracks, never merged with them. Both
+    answer "what rank does this person hold", but a track is the live promotable
+    record and a staff grade is a recorded fact about somebody who is usually not
+    enrolled at all. The form refuses a staff grade in a style the person already
+    has a track in, so there is never more than one answer for one style.
+  {% endcomment %}
+  {% if staff_grades %}
+    <ul class="divide-y divide-gray-100 text-sm {% if tracks %}mt-2 border-t border-gray-200 pt-2{% endif %}">
+      {% for grade in staff_grades %}
+        <li class="flex items-baseline gap-3 py-2">
+          <span class="font-medium">{{ grade.style.name }}</span>
+          <span class="ml-auto text-right">
+            {{ grade.display_name }}
+            {% if grade.awarded_on %}
+              <span class="block text-xs text-gray-400">{{ grade.awarded_on|date:"M Y" }}</span>
+            {% endif %}
+          </span>
+          {% if may_record_grade %}
+            <form method="post" action="{% url 'staff-grade-delete' person.pk grade.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="eyebrow shrink-0 text-gray-500 underline hover:text-red-700">
+                {% translate "remove" %}
+              </button>
+            </form>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% if not tracks and not staff_grades %}
+    {% if student_profile %}
+      <p class="text-sm text-gray-400">{% translate "No style tracks yet — enrol them in a dojo and its styles apply." %}</p>
+    {% else %}
+      <p class="text-sm text-gray-400">{% translate "No grade recorded." %}</p>
+    {% endif %}
+  {% endif %}
+
+  {% comment %}
+    ⚠ Optional, on purpose, and that is the whole point of this control. Some
+    styles have no belts at all — boxing — and an instructor may hold a grade in
+    one art and none in another they also teach. Nothing anywhere requires a
+    grade to exist.
+  {% endcomment %}
+  {% if may_record_grade %}
+    <details class="mt-4 border-t border-gray-200 pt-3">
+      <summary class="eyebrow cursor-pointer text-crimson-600">{% translate "Record a grade" %}</summary>
+      <form method="post" action="{% url 'staff-grade-add' person.pk %}" class="mt-3">
+        {% csrf_token %}
+        {% if grade_form.non_field_errors %}
+          <div class="mb-3 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">
+            {{ grade_form.non_field_errors }}
+          </div>
+        {% endif %}
+        {% for field in grade_form %}{% include "identity/_form_field.html" with field=field %}{% endfor %}
+        <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+          {% translate "Save grade" %}
+        </button>
+      </form>
+      <p class="mt-2 text-xs text-gray-500">
+        {% translate "Leave this alone for styles that do not use belts." %}
+      </p>
+    </details>
+  {% endif %}
+
   {% if tracks and not may_award_rank %}
     <p class="mt-3 text-xs text-gray-500">
       {% translate "Grades are awarded by an instructor or administrator." %}

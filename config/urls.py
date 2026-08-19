@@ -23,6 +23,7 @@ from apps.imports import views as import_views
 from apps.ranks import ladder_views
 from apps.ranks import views as rank_views
 from apps.scheduling import views as scheduling_views
+from apps.staffing import grade_views as staffing_grade_views
 from apps.staffing import views as staffing_views
 
 
@@ -118,6 +119,16 @@ urlpatterns = [
         "people/<uuid:person_id>/roles/",
         org_views.role_grant_view,
         name="role-grant",
+    ),
+    path(
+        "people/<uuid:person_id>/grades/",
+        staffing_grade_views.staff_grade_add_view,
+        name="staff-grade-add",
+    ),
+    path(
+        "people/<uuid:person_id>/grades/<uuid:grade_id>/delete/",
+        staffing_grade_views.staff_grade_delete_view,
+        name="staff-grade-delete",
     ),
     path(
         "people/<uuid:person_id>/edit/",

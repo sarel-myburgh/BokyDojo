@@ -40,14 +40,25 @@ def is_self(actor: Actor, person: Person) -> bool:
 def may_edit_person(actor: Actor, person: Person) -> bool:
     """Whether ``actor`` may change ``person``'s own details.
 
-    Everybody may edit themselves. Beyond that, see the module docstring: the
-    object-level check cannot express "the dojo they administer", because a
-    Person has no dojo to match against.
+    Everybody may edit themselves. Beyond that, see ``administers_person``.
+    """
+    return is_self(actor, person) or administers_person(actor, person)
+
+
+def administers_person(actor: Actor, person: Person) -> bool:
+    """Whether ``actor`` holds administrative authority *over* ``person``.
+
+    ⚠ Distinct from ``may_edit_person``, which also lets everybody edit their
+    own contact details. This is the stricter question, and it is the one to ask
+    before recording anything that is a claim about somebody rather than a way
+    of reaching them — a rank, most of all. Without the split, an instructor
+    could type themselves a 5th dan on their own profile page.
+
+    See the module docstring: the object-level check cannot express "the dojo
+    they administer", because a Person has no dojo to match against.
     """
     if actor is None or actor.is_anonymous:
         return False
-    if is_self(actor, person):
-        return True
     if person.organization_id != actor.organization_id:
         return False
 
@@ -143,13 +154,21 @@ def dojos_and_belts(*, person: Person, actor: Actor) -> dict:
     dojos = list(
         Dojo.objects.for_actor(actor).filter(pk__in=role_dojos | enrolled_dojos).order_by("name")
     )
+    from apps.staffing.models import StaffGrade
+
+    staff_grades = list(
+        StaffGrade.objects.for_actor(actor)
+        .filter(person=person)
+        .select_related("style", "rank")
+        .order_by("style__name")
+    )
     tracks = list(
         StudentStyleTrack.objects.for_actor(actor)
         .filter(student=person, status=StudentStyleTrack.Status.ACTIVE)
         .select_related("style", "ladder", "current_rank")
         .order_by("style__name")
     )
-    return {"dojos": dojos, "tracks": tracks}
+    return {"dojos": dojos, "tracks": tracks, "staff_grades": staff_grades}
 
 
 def person_page_context(*, person: Person, actor: Actor) -> dict:
@@ -188,9 +207,14 @@ def person_page_context(*, person: Person, actor: Actor) -> dict:
         governance_model=_governance(person),
     )
 
+    from apps.staffing.grade_forms import StaffGradeForm
+
+    may_record_grade = administers_person(actor, person)
     return {
         "person": person,
         "photo": current_profile_photo(person=person, actor=actor),
+        "may_record_grade": may_record_grade,
+        "grade_form": StaffGradeForm(actor=actor, person=person) if may_record_grade else None,
         "is_self": is_self(actor, person),
         "may_edit": may_edit_person(actor, person),
         "may_assign_roles": may_assign,
