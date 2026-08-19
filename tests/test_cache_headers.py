@@ -92,8 +92,9 @@ def test_the_login_page_keeps_its_own_stricter_header(client):
 
 def test_a_view_that_sets_its_own_cache_control_is_left_alone(client, user):
     """The document and photograph endpoints send their own deliberately."""
-    from apps.core.cache_headers import NoStoreMiddleware
     from django.http import HttpResponse
+
+    from apps.core.cache_headers import NoStoreMiddleware
 
     def view(request):
         response = HttpResponse("x")
@@ -111,8 +112,9 @@ def test_a_view_that_sets_its_own_cache_control_is_left_alone(client, user):
 def test_static_assets_are_left_for_the_web_server_to_handle():
     """⚠ Django is not what serves /static/ in production — Caddy is — and the
     header belongs where the file is served from."""
-    from apps.core.cache_headers import NoStoreMiddleware
     from django.http import HttpResponse
+
+    from apps.core.cache_headers import NoStoreMiddleware
 
     middleware = NoStoreMiddleware(lambda request: HttpResponse("x"))
 
