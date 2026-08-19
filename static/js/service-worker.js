@@ -1,6 +1,14 @@
 "use strict";
 
-const CACHE = "bokydojo-shell-v4";
+// ⚠ __BUILD__ is substituted with the running build's revision when this file
+// is served — see config/urls.py. It must stay a placeholder here rather than a
+// hard-coded version, because a cache name that only changes when somebody
+// remembers to bump it is a cache that does not change.
+//
+// A new revision means a new cache name, so `activate` deletes the old one and
+// every asset is refetched. That is what makes a deploy actually reach an
+// installed PWA instead of waiting for a stale-while-revalidate second load.
+const CACHE = "bokydojo-shell-__BUILD__";
 const SHELL = [
   "/offline/",
   "/static/css/tailwind.css",

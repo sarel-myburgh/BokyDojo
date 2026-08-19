@@ -49,6 +49,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # ⚠ Outermost of ours on purpose: its work happens on the way *out*, and
+    # listing it early means it sees the final response of every other one.
+    "apps.core.cache_headers.NoStoreMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",

@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.contrib import admin
-from django.http import FileResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.urls import path
 from django.views.decorators.cache import never_cache
 from django.views.generic import RedirectView, TemplateView
@@ -34,10 +34,17 @@ def healthz(request):
 
 @never_cache
 def service_worker(request):
-    response = FileResponse(
-        open(settings.BASE_DIR / "static/js/service-worker.js", "rb"),
-        content_type="text/javascript; charset=utf-8",
-    )
+    """Serve the worker with this build's revision baked into its cache name.
+
+    ⚠ Read and rewritten per request rather than at import time so a rebuilt
+    image cannot serve a worker still naming the previous build's cache. It is
+    one small file and the browser fetches it about once per navigation.
+    """
+    from apps.core.version import build_revision
+
+    source = (settings.BASE_DIR / "static/js/service-worker.js").read_text(encoding="utf-8")
+    stamped = source.replace("__BUILD__", build_revision())
+    response = HttpResponse(stamped, content_type="text/javascript; charset=utf-8")
     response["Service-Worker-Allowed"] = "/"
     return response
 

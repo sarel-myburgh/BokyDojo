@@ -16,6 +16,18 @@
     # Serve static files directly
     handle /static/* {
         root * /app/staticfiles
+
+        # ⚠ Without this, file_server sends only Last-Modified and ETag, and a
+        # browser with no explicit freshness applies *heuristic* caching — it
+        # invents a lifetime from the file's age and serves the old asset for
+        # it. Django writes static files under stable, unhashed names, so a
+        # redeploy does not change any URL and nothing else busts them. That is
+        # how a shipped fix could sit invisible in somebody's browser.
+        #
+        # "no-cache" does not mean "do not cache": it means revalidate every
+        # time. The ETag still turns almost every one of those into a 304, so
+        # this costs a round trip, not the file.
+        header Cache-Control "no-cache"
         file_server
     }
 
