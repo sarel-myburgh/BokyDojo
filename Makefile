@@ -3,7 +3,7 @@
 # TODO 0.1.7 — dev, test, lint, migrate, seed, backup, restore
 # =============================================================================
 
-.PHONY: dev test lint format migrate seed backup restore shell check venv install
+.PHONY: dev test lint format migrate seed backup restore shell check venv install bandit audit
 
 # -- Interpreter ---------------------------------------------------------------
 #
@@ -92,6 +92,15 @@ restore:
 # It was missing from `check` for three commits, CI was red for three commits,
 # and the local gates passed the whole time. A check that only exists in CI is a
 # check you find out about afterwards.
+# ⚠ Both of these are CI's and were previously invisible locally, which is how a
+# mark_safe call reached CI having passed `make check`. Every gate CI runs must
+# be runnable here, or "green locally" means nothing.
+bandit:
+	$(PYTHON) -m bandit -r apps/ -c pyproject.toml --severity-level medium
+
+audit:
+	$(PYTHON) -m pip_audit
+
 secrets:
 	# ⚠ --others as well as --cached. `git ls-files` alone lists only tracked
 	# files, so a brand new file is invisible to this scan until after it has
@@ -110,7 +119,7 @@ i18n-check:
 	echo "No untranslated template strings found."
 
 # ⚠ Mirrors every CI job except the container build, which needs Docker.
-check: lint test secrets i18n-check
+check: lint test secrets bandit audit i18n-check
 	@echo "All checks passed."
 
 # -- i18n — TODO 0.4.5 ---------------------------------------------------------

@@ -38,4 +38,13 @@ def svg_for(uri: str, *, scale: int = 5) -> str:
         svgclass=None,
         lineclass=None,
     )
-    return mark_safe(buffer.getvalue().decode("utf-8"))  # noqa: S308 — see the docstring
+    # ⚠ A bare `# nosec` rather than `# nosec B308,B703`: bandit's blacklist
+    # plugin does not honour the per-ID form for B308, so naming the codes
+    # silently suppressed only one of the two and left the build red.
+    #
+    # ⚠ mark_safe is nonetheless correct here — see the docstring above. segno
+    # emits the SVG itself and every value in it is a number it computed from
+    # the QR matrix; the URI is encoded into modules, never echoed into markup.
+    # If this function ever interpolates a caller's string into the output, this
+    # suppression has to go with it.
+    return mark_safe(buffer.getvalue().decode("utf-8"))  # nosec  # noqa: S308
