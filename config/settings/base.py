@@ -96,6 +96,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "django.template.context_processors.i18n",
                 "apps.core.csp.csp_nonce",
+                "apps.identity.context.security_nudges",
             ],
         },
     },
@@ -207,7 +208,18 @@ SESSION_ABSOLUTE_TIMEOUT_SECONDS = int(env("DJANGO_SESSION_ABSOLUTE_TIMEOUT", 60
 
 FIRST_RUN_SETUP_TOKEN = env("DJANGO_FIRST_RUN_TOKEN", "")
 DEMO_SEED_ENABLED = False
-MFA_ENFORCEMENT_ENABLED = True
+# ⚠ Off by default: enrolment is encouraged, not compulsory.
+#
+# Requiring it meant an organisation with no smartphone to hand, or an
+# administrator whose authenticator app was on a lost phone, could not sign in
+# at all — and there is no SMTP in many of these deployments to mail a reset.
+# Privileged accounts without a second factor are shown a banner on every page
+# instead (see mfa.should_encourage_mfa).
+#
+# ⚠ Setting this to True still works and makes enrolment mandatory for
+# privileged roles. Turning it off never weakens an account that has already
+# enrolled: the login view challenges any confirmed credential regardless.
+MFA_ENFORCEMENT_ENABLED = env_bool("DJANGO_MFA_ENFORCEMENT", False)
 PASSWORD_RESET_TIMEOUT = 30 * 60
 DEFAULT_FROM_EMAIL = env("DJANGO_DEFAULT_FROM_EMAIL", "BokyDojo <noreply@localhost>")
 

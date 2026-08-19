@@ -44,6 +44,7 @@
           {% if request.actor.person_id %}
             <a href="{% url 'account' %}" class="block px-4 py-2 hover:bg-gray-50">{% translate "Profile" %}</a>
           {% endif %}
+          <a href="{% url 'help' %}" class="block px-4 py-2 hover:bg-gray-50">{% translate "Help" %}</a>
           <a href="{% url 'mfa-setup' %}" class="block px-4 py-2 hover:bg-gray-50">{% translate "Security" %}</a>
           <form method="post" action="{% url 'logout' %}">
             {% csrf_token %}
@@ -56,6 +57,24 @@
   </header>
 
   <main class="mx-auto w-full max-w-3xl px-4 py-6 flex-1">
+    {% if encourage_mfa %}
+      {% comment %}
+        ⚠ A nudge, not a gate. Enrolment is optional by decision — see
+        config/settings/base.py — so this is the only thing standing between a
+        privileged account and a password alone. It says what to do and why, in
+        one line, and it does not offer a way to dismiss it: an account that can
+        read medical and safeguarding records should keep being asked.
+      {% endcomment %}
+      <div class="mb-5 border-l-2 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p class="mb-1 font-semibold">{% translate "Add a second lock to your account" %}</p>
+        <p class="mb-2">
+          {% translate "Your account can see people's personal details, so a password on its own is thin protection. Setting this up takes about two minutes and needs only your phone." %}
+        </p>
+        <a href="{% url 'mfa-setup' %}" class="font-semibold underline hover:text-amber-950">
+          {% translate "Set it up now" %}
+        </a>
+      </div>
+    {% endif %}
     {% if messages %}
       {% for message in messages %}
         {# Border-left, not a filled pill: a notice, not a decoration. #}

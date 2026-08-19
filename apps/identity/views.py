@@ -38,6 +38,7 @@ from apps.identity.mfa import (
 )
 from apps.identity.middleware import AUTH_FLOW_KEY, MFA_VERIFIED_AT_KEY
 from apps.identity.models import Organization, User
+from apps.identity.qr import svg_for as qr_svg_for
 
 logger = logging.getLogger(__name__)
 
@@ -227,9 +228,14 @@ def mfa_setup_view(request) -> HttpResponse:
             return redirect("mfa-challenge")
         return render(request, "auth/mfa_setup.html", {"is_confirmed": True})
 
+    uri = provisioning_uri(credential)
     context = {
         "secret": credential.totp_secret,
-        "provisioning_uri": provisioning_uri(credential),
+        "provisioning_uri": uri,
+        # ⚠ Built here, not fetched by the page. The URI contains the TOTP
+        # secret; handing it to a remote QR service would post the second factor
+        # itself to a third party.
+        "qr_svg": qr_svg_for(uri),
         "next": _safe_next(request),
     }
     if request.method == "GET":

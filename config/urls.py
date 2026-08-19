@@ -7,6 +7,7 @@ from django.views.generic import RedirectView, TemplateView
 
 from apps.attendance import kiosk_views
 from apps.attendance import views as attendance_views
+from apps.core import help_views
 from apps.identity import (
     consent_views,
     guardian_views,
@@ -68,6 +69,8 @@ urlpatterns = [
         password_reset_views.password_reset_complete_view,
         name="password-reset-complete",
     ),
+    path("help/", help_views.help_index_view, name="help"),
+    path("help/<slug:slug>/", help_views.help_guide_view, name="help-guide"),
     path("account/", profile_views.account_view, name="account"),
     path("account/edit/", profile_views.account_edit_view, name="account-edit"),
     path("account/password/", identity_views.password_change_view, name="password-change"),

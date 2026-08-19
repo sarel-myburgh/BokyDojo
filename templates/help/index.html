@@ -1,0 +1,30 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% comment %}
+  Help index — plan §3. Guides are grouped by the job you are trying to do, not
+  by the part of the system they touch: somebody looking for help does not yet
+  know which screen their problem lives on.
+{% endcomment %}
+
+{% block title %}{% translate "Help" %} — BokyDojo{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Help" %}</h1>
+<p class="text-sm text-gray-500 mb-6">
+  {% translate "Step-by-step guides for everything in BokyDojo. Pick whatever you are trying to do." %}
+</p>
+
+<div class="panel divide-y divide-gray-200">
+  {% for guide in guides %}
+    <a href="{% url 'help-guide' guide.slug %}" class="block px-5 py-4 active:bg-gray-50">
+      <span class="block font-medium">{{ guide.title }}</span>
+      <span class="block text-sm text-gray-500">{{ guide.blurb }}</span>
+    </a>
+  {% endfor %}
+</div>
+
+<p class="mt-6 text-sm text-gray-500">
+  {% translate "Still stuck? Nothing here can break the system permanently — every change is recorded and can be undone by an administrator." %}
+</p>
+{% endblock %}

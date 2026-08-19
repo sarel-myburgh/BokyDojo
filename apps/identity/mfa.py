@@ -28,24 +28,15 @@ TOTP_PERIOD = 30
 TOTP_WINDOW = 1
 
 
-def user_requires_mfa(user) -> bool:
-    """Whether active assignments make MFA mandatory for this user.
+def mfa_is_recommended(user) -> bool:
+    """Whether this account holds enough power that a second factor matters.
 
-    ⚠ The one predicate both the login view and the enforcement middleware ask.
-    It has to carry the ``MFA_ENFORCEMENT_ENABLED`` switch itself: the middleware
-    checked the setting and the login view did not, so turning enforcement off
-    for local testing left privileged accounts stuck at the enrolment screen
-    anyway — two enforcement points, one of them deaf to the switch.
-
-    ⚠ Turning enforcement off does **not** bypass MFA for somebody who has
-    already enrolled. The login view separately challenges any confirmed
-    credential, so a user with a working second factor keeps using it; this only
-    stops *demanding* one from a user who has none.
+    ⚠ Deliberately separate from ``user_requires_mfa``. This is the role test on
+    its own, with no enforcement switch in front of it, so that the encouragement
+    banner keeps working while enrolment is optional. Fold the two together and
+    turning enforcement off silences the nudge as well, which leaves privileged
+    accounts on a password alone and nothing anywhere saying so.
     """
-    from django.conf import settings
-
-    if not getattr(settings, "MFA_ENFORCEMENT_ENABLED", True):
-        return False
     if not getattr(user, "is_authenticated", False) or not user.person_id:
         return False
     return (
@@ -54,6 +45,35 @@ def user_requires_mfa(user) -> bool:
         .filter(Q(role__in=ADMIN_ROLES) | Q(can_view_financials=True) | Q(can_export_pii=True))
         .exists()
     )
+
+
+def user_requires_mfa(user) -> bool:
+    """Whether MFA is *mandatory* — i.e. blocks sign-in until enrolled.
+
+    ⚠ The one predicate both the login view and the enforcement middleware ask.
+    It has to carry the ``MFA_ENFORCEMENT_ENABLED`` switch itself: the middleware
+    checked the setting and the login view did not, so turning enforcement off
+    left privileged accounts stuck at the enrolment screen anyway — two
+    enforcement points, one of them deaf to the switch.
+
+    ⚠ Turning enforcement off does **not** bypass MFA for somebody who has
+    already enrolled. The login view separately challenges any confirmed
+    credential, so a user with a working second factor keeps using it; this only
+    stops *demanding* one from a user who has none.
+    """
+    from django.conf import settings
+
+    if not getattr(settings, "MFA_ENFORCEMENT_ENABLED", False):
+        return False
+    return mfa_is_recommended(user)
+
+
+def should_encourage_mfa(user) -> bool:
+    """Whether to show the enrolment banner: powerful account, no second factor."""
+    if not mfa_is_recommended(user):
+        return False
+    credential = get_credential(user)
+    return credential is None or not credential.is_confirmed
 
 
 def get_credential(user) -> MfaCredential | None:

@@ -1,0 +1,38 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ guide.title }} — BokyDojo{% endblock %}
+
+{% block content %}
+<p class="mb-2 text-sm">
+  <a href="{% url 'help' %}" class="text-gray-500 hover:underline">← {% translate "Help" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{{ guide.title }}</h1>
+<p class="text-sm text-gray-500 mb-6">{{ guide.blurb }}</p>
+
+{% for section in guide.sections %}
+  <div class="panel mb-5 px-5 py-4">
+    <h2 class="mb-3 text-base font-bold tracking-tight">{{ section.heading }}</h2>
+    <ol class="space-y-2 text-sm">
+      {% for step in section.steps %}
+        <li class="flex gap-3">
+          <span class="shrink-0 font-semibold tabular-nums text-gray-400">{{ forloop.counter }}.</span>
+          <span>{{ step }}</span>
+        </li>
+      {% endfor %}
+    </ol>
+    {% if section.note %}
+      <p class="mt-4 border-l-2 border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+        {{ section.note }}
+      </p>
+    {% endif %}
+    {% if section.url_name %}
+      <p class="mt-4">
+        <a href="{% url section.url_name %}" class="eyebrow text-crimson-600 hover:underline">
+          {{ section.link_text }} →
+        </a>
+      </p>
+    {% endif %}
+  </div>
+{% endfor %}
+{% endblock %}

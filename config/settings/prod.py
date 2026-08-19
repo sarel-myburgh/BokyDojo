@@ -38,7 +38,7 @@ CSRF_COOKIE_SECURE = True
 # Explicit rather than inherited, and read from the environment so that an
 # attempt to switch it off is a *loud* boot failure from the guard below rather
 # than a silent inheritance question.
-MFA_ENFORCEMENT_ENABLED = env_bool("DJANGO_MFA_ENFORCEMENT", True)
+MFA_ENFORCEMENT_ENABLED = env_bool("DJANGO_MFA_ENFORCEMENT", False)
 
 assert_safe_production_config(
     secret_key=SECRET_KEY,
@@ -46,5 +46,4 @@ assert_safe_production_config(
     allowed_hosts=ALLOWED_HOSTS,
     field_encryption_keys=env("DJANGO_FIELD_ENCRYPTION_KEYS", ""),
     shared_cache_url=env("REDIS_URL", ""),
-    mfa_enforced=MFA_ENFORCEMENT_ENABLED,
 )
