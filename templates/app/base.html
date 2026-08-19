@@ -66,12 +66,14 @@
         read medical and safeguarding records should keep being asked.
       {% endcomment %}
       <div class="mb-5 border-l-2 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        <p class="mb-1 font-semibold">{% translate "Add a second lock to your account" %}</p>
+        <p class="mb-1 font-semibold">
+          {% translate "For additional security, please turn on two-step verification" %}
+        </p>
         <p class="mb-2">
-          {% translate "Your account can see people's personal details, so a password on its own is thin protection. Setting this up takes about two minutes and needs only your phone." %}
+          {% translate "Your account can see people's personal details, so a password on its own is thin protection. It takes about two minutes and needs only your phone." %}
         </p>
         <a href="{% url 'mfa-setup' %}" class="font-semibold underline hover:text-amber-950">
-          {% translate "Set it up now" %}
+          {% translate "Turn it on" %}
         </a>
       </div>
     {% endif %}

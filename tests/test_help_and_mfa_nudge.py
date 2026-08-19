@@ -87,7 +87,7 @@ def test_a_privileged_account_without_a_second_factor_is_nudged(client, world):
 
     body = client.get(reverse("today")).content.decode()
 
-    assert "Add a second lock to your account" in body
+    assert "For additional security" in body
 
 
 def test_the_nudge_stops_once_they_enrol(client, world):
@@ -105,7 +105,7 @@ def test_an_ordinary_instructor_is_not_nudged(client, world):
 
     body = client.get(reverse("today")).content.decode()
 
-    assert "Add a second lock to your account" not in body
+    assert "For additional security" not in body
 
 
 def test_the_recommendation_survives_enforcement_being_off(world, settings):
@@ -312,3 +312,94 @@ def test_the_guides_avoid_jargon(client, world):
 
     for word in banned:
         assert word.lower() not in blob, f"help copy uses jargon: {word}"
+
+
+# -- the first sign-in, end to end --------------------------------------------
+
+
+def test_a_new_admin_with_a_temporary_password_is_never_sent_to_mfa_enrolment(client, world):
+    """⚠ The reported bug, walked the whole way through.
+
+    A brand new organisation administrator signs in with a temporary password.
+    They must land on the password screen, choose their own, and then be working
+    — never diverted into authenticator enrolment on the way. Every individual
+    piece of this was already tested; the journey through all of them was not,
+    which is how it stayed broken while the suite was green.
+    """
+    from apps.identity.actors import actor_for_user
+    from apps.identity.passwords import set_temporary_password
+
+    with allow_unscoped("test"):
+        newcomer = Person.objects.create(
+            organization=world["org"], given_name="New", family_name="Boss"
+        )
+        RoleAssignment.objects.create(
+            organization=world["org"],
+            person=newcomer,
+            role=Role.ORG_ADMIN,
+            scope_type=ScopeType.ORG,
+        )
+        user = User.objects.create_user("new.boss@example.com", PASSWORD, person=newcomer)
+
+    temporary = set_temporary_password(user=user, actor=actor_for_user(world["boss_user"]))
+
+    signed_in = client.post(
+        reverse("login"),
+        {"email": "new.boss@example.com", "password": temporary},
+        follow=True,
+    )
+    assert signed_in.request["PATH_INFO"] == reverse("password-change"), (
+        "a new admin should be asked to choose a password, not to enrol in MFA"
+    )
+    assert reverse("mfa-setup") not in [step[0] for step in signed_in.redirect_chain]
+
+    chosen = "a-passphrase-they-picked-themselves"  # pragma: allowlist secret
+    after = client.post(
+        reverse("password-change"),
+        {"old_password": temporary, "new_password1": chosen, "new_password2": chosen},
+        follow=True,
+    )
+    assert after.request["PATH_INFO"] == reverse("today")
+
+    working = client.get(reverse("today"))
+    assert working.status_code == 200
+
+
+def test_that_new_admin_is_then_nudged_rather_than_forced(client, world):
+    """The encouragement replaces the old gate — it does not vanish with it."""
+    from apps.identity.actors import actor_for_user
+    from apps.identity.passwords import set_temporary_password
+
+    with allow_unscoped("test"):
+        newcomer = Person.objects.create(
+            organization=world["org"], given_name="New", family_name="Boss"
+        )
+        RoleAssignment.objects.create(
+            organization=world["org"],
+            person=newcomer,
+            role=Role.ORG_ADMIN,
+            scope_type=ScopeType.ORG,
+        )
+        user = User.objects.create_user("new.boss@example.com", PASSWORD, person=newcomer)
+
+    temporary = set_temporary_password(user=user, actor=actor_for_user(world["boss_user"]))
+    client.post(reverse("login"), {"email": "new.boss@example.com", "password": temporary})
+    chosen = "a-passphrase-they-picked-themselves"  # pragma: allowlist secret
+    client.post(
+        reverse("password-change"),
+        {"old_password": temporary, "new_password1": chosen, "new_password2": chosen},
+    )
+
+    body = client.get(reverse("today")).content.decode()
+
+    assert "For additional security" in body
+    assert reverse("mfa-setup") in body
+
+
+def test_the_banner_links_to_enrolment_and_security_settings_reaches_it_too(client, world):
+    """Two ways in, as asked: the banner, or Security in the account menu."""
+    client.force_login(world["boss_user"])
+
+    body = client.get(reverse("today")).content.decode()
+
+    assert body.count(reverse("mfa-setup")) >= 2, "expected the banner link and the menu link"
