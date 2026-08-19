@@ -21,9 +21,9 @@ from .permissions import PermissionDenied
 from .profile_forms import PersonDetailsForm, ProfilePhotoForm
 from .profiles import (
     current_profile_photo,
-    dojos_and_belts,
     is_self,
     may_edit_person,
+    person_page_context,
     require_edit,
     upload_profile_photo,
 )
@@ -34,13 +34,7 @@ def _person(request, person_id) -> Person:
 
 
 def _detail_context(request, person: Person) -> dict:
-    return {
-        "person": person,
-        "photo": current_profile_photo(person=person, actor=request.actor),
-        "is_self": is_self(request.actor, person),
-        "may_edit": may_edit_person(request.actor, person),
-        **dojos_and_belts(person=person, actor=request.actor),
-    }
+    return person_page_context(person=person, actor=request.actor)
 
 
 def _edit(request, person: Person, *, template: str, redirect_to, back_url: str):
@@ -87,7 +81,12 @@ def account_edit_view(request):
 
 
 def person_detail_view(request, person_id):
-    """An administrator's view of a staff member."""
+    """The one page for a person — plan §3.
+
+    ⚠ Details, picture, dojos, grades, roles and sign-in, all here. There used
+    to be a staff list and a separate roles screen alongside this, so the same
+    person could be reached three ways and offered different things by each.
+    """
     person = _person(request, person_id)
     if not may_edit_person(request.actor, person):
         raise PermissionDenied(action="person.edit", actor=request.actor)

@@ -139,12 +139,5 @@
       <p class="px-4 py-6 text-center text-sm text-gray-500">{% translate "Nobody holds a staff role yet." %}</p>
     {% endfor %}
   </div>
-  {% if staff_total > staff|length %}
-    <p class="mt-2 text-sm">
-      <a href="{% url 'staff-list' %}" class="text-gray-500 underline hover:text-gray-900">
-        {% blocktranslate with total=staff_total %}See all {{ total }}{% endblocktranslate %}
-      </a>
-    </p>
-  {% endif %}
 {% endif %}
 {% endblock %}

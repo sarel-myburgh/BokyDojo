@@ -572,7 +572,7 @@ def test_an_existing_person_can_be_granted_another_role(client, admin, org, dojo
     client.force_login(admin)
 
     client.post(
-        reverse("staff-roles", args=[person.pk]),
+        reverse("role-grant", args=[person.pk]),
         {"role": Role.ORG_ADMIN, "scope": "org"},
     )
 
@@ -655,7 +655,7 @@ def test_an_instructor_cannot_manage_roles(client, org, dojos):
         )
     client.force_login(user)
 
-    assert client.get(reverse("staff-list")).status_code == 403
+    assert client.post(reverse("role-grant", args=[person.pk])).status_code == 403
     assert client.get(reverse("staff-create")).status_code == 403
 
 

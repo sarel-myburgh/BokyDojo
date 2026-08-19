@@ -152,5 +152,69 @@ def dojos_and_belts(*, person: Person, actor: Actor) -> dict:
     return {"dojos": dojos, "tracks": tracks}
 
 
+def person_page_context(*, person: Person, actor: Actor) -> dict:
+    """Everything the one staff page shows.
+
+    ⚠ One builder, used by the page itself and by every action that redirects
+    back to it or re-renders it with a bound form. There used to be a separate
+    roles screen with its own copy of half of this, and the two drifted — you
+    could reach a person from two places and be offered different things.
+    """
+    from apps.identity.org_forms import RoleGrantForm
+    from apps.identity.permissions import Action, can
+
+    from .models import GovernanceModel, RoleAssignment, StudentProfile
+
+    may_assign = _holds_anywhere(actor, Action.ROLE_ASSIGN)
+    assignments = (
+        list(
+            RoleAssignment.objects.for_actor(actor)
+            .filter(person=person, revoked_at__isnull=True)
+            .select_related("dojo")
+            .order_by("role")
+        )
+        if may_assign
+        else []
+    )
+
+    # ⚠ Grades hang off StudentProfile, not Person. A member of staff who is not
+    # also enrolled has no profile and therefore no grade to award — which is a
+    # real state to report, not an empty list to render silently.
+    profile = StudentProfile.objects.for_actor(actor).filter(person=person).first()
+    may_award = profile is not None and can(
+        actor,
+        Action.RANK_AWARD,
+        profile,
+        governance_model=_governance(person),
+    )
+
+    return {
+        "person": person,
+        "photo": current_profile_photo(person=person, actor=actor),
+        "is_self": is_self(actor, person),
+        "may_edit": may_edit_person(actor, person),
+        "may_assign_roles": may_assign,
+        "assignments": assignments,
+        "role_form": RoleGrantForm(actor=actor) if may_assign else None,
+        "student_profile": profile,
+        "may_award_rank": may_award,
+        # ⚠ Presentation only — temporary_password_view checks ORG_EDIT itself.
+        # Menu visibility is not a control (SEC §2.2).
+        "may_issue_password": can(
+            actor,
+            Action.ORG_EDIT,
+            person.organization,
+            governance_model=GovernanceModel.CENTRAL,
+        ),
+        **dojos_and_belts(person=person, actor=actor),
+    }
+
+
+def _holds_anywhere(actor: Actor, action: str) -> bool:
+    from .permissions import ROLE_ACTIONS
+
+    return any(action in ROLE_ACTIONS.get(role, set()) for role, _s, _d in actor.roles)
+
+
 def is_org_admin(actor: Actor) -> bool:
     return any(role == Role.ORG_ADMIN and scope == "org" for role, scope, _d in actor.roles)

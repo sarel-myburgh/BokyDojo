@@ -65,9 +65,14 @@
 </div>
 
 {% comment %}
-  ⚠ Dojos and grades are shown, never edited, on any of these screens. Which
-  dojo somebody belongs to and what grade they hold are an administrator's
-  decisions made elsewhere; a field here would be a self-service promotion.
+  ⚠ Dojos and grades are never editable *as form fields on this page*, on any of
+  these screens, including for an administrator. Awarding a grade goes through
+  the promotion screen, which records who awarded what and when and refuses a
+  rank that is not on the student's own ladder. A free field here would let
+  somebody type themselves a black belt with no record of it.
+
+  So an administrator gets a link to that screen, and everybody else gets the
+  note saying whose decision it is.
 {% endcomment %}
 <div class="panel mb-6 px-5 py-4">
   <h2 class="mb-3 text-base font-bold tracking-tight">{% translate "Dojos" %}</h2>
@@ -94,13 +99,32 @@
               <span class="text-gray-400">{% translate "Unranked style" %}</span>
             {% endif %}
           </span>
+          {% if may_award_rank and track.style.is_ranked %}
+            <a href="{% url 'student-promote' person.pk track.pk %}"
+               class="eyebrow shrink-0 text-crimson-600 hover:underline">{% translate "grade" %}</a>
+          {% endif %}
         </li>
       {% endfor %}
     </ul>
+  {% elif student_profile %}
+    <p class="text-sm text-gray-400">{% translate "No style tracks yet — enrol them in a dojo and its styles apply." %}</p>
   {% else %}
-    <p class="text-sm text-gray-400">{% translate "No grades recorded." %}</p>
+    {% comment %}
+      ⚠ Not "no grades recorded". Grades hang off a student record, and somebody
+      who only ever appears as staff has none — so there is nothing to grade
+      until they are enrolled, and saying "none recorded" would send an
+      administrator looking for a button that cannot exist.
+    {% endcomment %}
+    <p class="text-sm text-gray-400">
+      {% translate "Not enrolled as a student, so there is no grade to award. Enrol them from the Students page first." %}
+    </p>
+  {% endif %}
+  {% if tracks and not may_award_rank %}
+    <p class="mt-3 text-xs text-gray-500">
+      {% translate "Grades are awarded by an instructor or administrator." %}
+    </p>
   {% endif %}
   <p class="mt-3 text-xs text-gray-500">
-    {% translate "Dojos and grades are set by an administrator." %}
+    {% translate "Which dojos somebody belongs to is set from the Dojos and Students pages." %}
   </p>
 </div>

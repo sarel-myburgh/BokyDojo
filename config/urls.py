@@ -105,13 +105,16 @@ urlpatterns = [
     ),
     path("settings/dojos/new/", org_views.dojo_create_view, name="dojo-create"),
     path("settings/dojos/<uuid:dojo_id>/", org_views.dojo_edit_view, name="dojo-edit"),
-    path("settings/people/", org_views.staff_list_view, name="staff-list"),
     path("settings/people/new/", org_views.staff_create_view, name="staff-create"),
-    path("settings/people/<uuid:person_id>/roles/", org_views.staff_roles_view, name="staff-roles"),
     path(
         "people/<uuid:person_id>/",
         profile_views.person_detail_view,
         name="person-detail",
+    ),
+    path(
+        "people/<uuid:person_id>/roles/",
+        org_views.role_grant_view,
+        name="role-grant",
     ),
     path(
         "people/<uuid:person_id>/edit/",

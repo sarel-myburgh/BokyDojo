@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import io
+from datetime import date
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -96,6 +97,20 @@ def world(settings, tmp_path):
         outsider = Person.objects.create(
             organization=other_org, given_name="Nope", family_name="Person"
         )
+        # ⚠ Front desk holds PERSON_EDIT but neither ROLE_ASSIGN nor
+        # RANK_AWARD, so they can reach their own page and must be offered
+        # neither the roles panel nor a way to grade. Nothing else in the
+        # fixture separates those three powers.
+        desk = Person.objects.create(organization=org, given_name="Dee", family_name="Desk")
+        RoleAssignment.objects.create(
+            organization=org,
+            person=desk,
+            role=Role.FRONT_DESK,
+            scope_type=ScopeType.DOJO,
+            dojo=dojo,
+        )
+        desk_user = User.objects.create_user("desk@example.com", PASSWORD, person=desk)
+
         # Same organisation, no roles at all — a guardian, once 3.2 exists.
         bystander = Person.objects.create(organization=org, given_name="Pat", family_name="Parent")
         User.objects.create_user("pat@example.com", PASSWORD, person=bystander)
@@ -113,6 +128,8 @@ def world(settings, tmp_path):
         "far_admin": far_admin,
         "outsider": outsider,
         "bystander": bystander,
+        "desk": desk,
+        "desk_user": desk_user,
     }
 
 
@@ -462,3 +479,166 @@ def test_the_header_menu_uses_no_inline_script(client, world):
     assert "onclick=" not in body
     assert "onerror=" not in body
     assert "<details" in body
+
+
+# -- one page, not three ------------------------------------------------------
+
+
+def test_the_person_page_carries_roles_grades_and_sign_in_together(client, world):
+    """⚠ The point of the merge. There used to be a staff list and a roles
+    screen beside this page, so the same person could be reached three ways and
+    each way offered a different subset of what could be done to them."""
+    client.force_login(world["boss_user"])
+
+    body = client.get(reverse("person-detail", args=[world["teacher"].pk])).content.decode()
+
+    assert "Roles" in body
+    assert reverse("role-grant", args=[world["teacher"].pk]) in body
+    assert reverse("temporary-password", args=[world["teacher"].pk]) in body
+    assert "Grades" in body
+    assert "picture/upload/" in body
+
+
+def test_the_back_link_goes_to_organization_settings(client, world):
+    """Not to a staff page of its own — there no longer is one."""
+    client.force_login(world["boss_user"])
+
+    body = client.get(reverse("person-detail", args=[world["teacher"].pk])).content.decode()
+
+    assert reverse("org-settings") in body
+
+
+def test_the_separate_staff_screens_are_gone(world):
+    """⚠ Removed, not merely unlinked. A route left reachable is a second place
+    the same person can be looked at, which is what this change was undoing."""
+    from django.urls import NoReverseMatch
+
+    for name in ("staff-list", "staff-roles"):
+        with pytest.raises(NoReverseMatch):
+            reverse(name, args=[world["teacher"].pk])
+
+
+def test_a_role_can_be_granted_from_the_person_page(client, world):
+    client.force_login(world["boss_user"])
+
+    response = client.post(
+        reverse("role-grant", args=[world["teacher"].pk]),
+        {"role": Role.DOJO_ADMIN, "scope": "dojo", "dojo": str(world["dojo"].pk)},
+    )
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("person-detail", args=[world["teacher"].pk])
+    with allow_unscoped("test"):
+        assert RoleAssignment.objects.filter(
+            person=world["teacher"], role=Role.DOJO_ADMIN, revoked_at__isnull=True
+        ).exists()
+
+
+def test_granting_a_role_is_refused_without_role_assign(client, world):
+    client.force_login(world["teacher_user"])
+
+    response = client.post(
+        reverse("role-grant", args=[world["boss"].pk]),
+        {"role": Role.ORG_ADMIN, "scope": "org"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_the_roles_panel_is_hidden_from_somebody_who_cannot_assign_them(client, world):
+    """⚠ Front desk can edit details but not hand out roles.
+
+    Checked on the person page, not the account page — the account page has no
+    roles panel at all, so asserting its absence there proves nothing.
+    """
+    client.force_login(world["desk_user"])
+
+    body = client.get(reverse("person-detail", args=[world["desk"].pk])).content.decode()
+
+    assert "Details" in body, "expected to be on the person page"
+    assert reverse("role-grant", args=[world["desk"].pk]) not in body
+
+
+def test_the_grade_link_is_hidden_from_somebody_who_cannot_award_one(client, world):
+    """⚠ Having a grade to show is not permission to change it. Front desk sees
+    the grade and is offered no way to alter it."""
+    from apps.identity.models import StudentProfile
+    from apps.ranks.models import RankLadder, StudentStyleTrack, Style
+
+    with allow_unscoped("test"):
+        StudentProfile.objects.create(
+            person=world["desk"], home_dojo=world["dojo"], status=StudentProfile.Status.ACTIVE
+        )
+        style = Style.objects.create(organization=world["org"], name="Boxing", is_ranked=True)
+        ladder = RankLadder.objects.create(style=style, name="Adult")
+        track = StudentStyleTrack.objects.create(
+            student=world["desk"], style=style, ladder=ladder, started_on=date(2024, 1, 1)
+        )
+
+    client.force_login(world["desk_user"])
+    body = client.get(reverse("person-detail", args=[world["desk"].pk])).content.decode()
+
+    assert "Boxing" in body, "expected the track to be listed"
+    assert reverse("student-promote", args=[world["desk"].pk, track.pk]) not in body
+
+
+def test_an_admin_is_offered_a_way_to_award_a_grade(client, world):
+    """⚠ The page used to tell an organisation administrator that grades were
+    set by an administrator, which is both unhelpful and, to them, untrue."""
+    from apps.identity.models import StudentProfile
+    from apps.ranks.models import RankLadder, StudentStyleTrack, Style
+
+    with allow_unscoped("test"):
+        profile = StudentProfile.objects.create(
+            person=world["teacher"],
+            home_dojo=world["dojo"],
+            status=StudentProfile.Status.ACTIVE,
+        )
+        style = Style.objects.create(organization=world["org"], name="Goju Ryu", is_ranked=True)
+        ladder = RankLadder.objects.create(style=style, name="Adult")
+        track = StudentStyleTrack.objects.create(
+            student=world["teacher"],
+            style=style,
+            ladder=ladder,
+            started_on=date(2024, 1, 1),
+        )
+
+    client.force_login(world["boss_user"])
+    body = client.get(reverse("person-detail", args=[world["teacher"].pk])).content.decode()
+
+    assert profile is not None
+    assert reverse("student-promote", args=[world["teacher"].pk, track.pk]) in body
+
+
+def test_somebody_with_no_student_record_is_told_why_there_is_no_grade(client, world):
+    """⚠ Not "no grades recorded" — grades hang off a student record, and staff
+    who were never enrolled have none. The wrong wording sends an administrator
+    hunting for a button that cannot exist."""
+    client.force_login(world["boss_user"])
+
+    body = client.get(reverse("person-detail", args=[world["teacher"].pk])).content.decode()
+
+    assert "Not enrolled as a student" in body
+
+
+def test_the_settings_page_lists_every_member_of_staff(client, world):
+    """⚠ It used to show the first eight and link to a staff page for the rest.
+    That page is gone, so a truncation here would simply hide people."""
+    with allow_unscoped("test"):
+        for i in range(12):
+            extra = Person.objects.create(
+                organization=world["org"], given_name=f"Staff{i}", family_name="Extra"
+            )
+            RoleAssignment.objects.create(
+                organization=world["org"],
+                person=extra,
+                role=Role.INSTRUCTOR,
+                scope_type=ScopeType.DOJO,
+                dojo=world["dojo"],
+            )
+
+    client.force_login(world["boss_user"])
+    body = client.get(reverse("org-settings")).content.decode()
+
+    for i in range(12):
+        assert f"Staff{i}" in body, f"Staff{i} missing from the settings page"

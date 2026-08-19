@@ -42,7 +42,7 @@ from apps.identity.models import (
     User,
 )
 from apps.identity.org_forms import DojoForm, StudentForm
-from apps.identity.permissions import ROLE_ACTIONS, Action, PermissionDenied, can, require
+from apps.identity.permissions import ROLE_ACTIONS, Action, PermissionDenied, require
 from apps.ranks.models import RankLadder, Style
 from apps.staffing.models import InstructorProfile
 
@@ -101,8 +101,10 @@ def organization_settings_view(request) -> HttpResponse:
         "identity/org_settings.html",
         {
             "organization": organization,
-            "staff": _role_rows(actor)[:8],
-            "staff_total": len(_role_rows(actor)),
+            # ⚠ Everybody, not the first eight. This is the only place staff
+            # are listed now — the separate staff page it used to overflow into
+            # is gone, and a silent truncation here would simply hide people.
+            "staff": _role_rows(actor),
             "may_assign_roles": _holds_anywhere(actor, Action.ROLE_ASSIGN),
             "styles": [
                 {
@@ -349,21 +351,6 @@ def _role_rows(actor):
 
 
 @login_required
-@require_http_methods(["GET"])
-def staff_list_view(request) -> HttpResponse:
-    """Who holds what — TODO plan §3."""
-    actor = request.actor
-    if not _holds_anywhere(actor, Action.ROLE_ASSIGN):
-        raise PermissionDenied(action=Action.ROLE_ASSIGN, actor=actor)
-
-    return render(
-        request,
-        "identity/staff_list.html",
-        {"rows": _role_rows(actor)},
-    )
-
-
-@login_required
 @require_http_methods(["GET", "POST"])
 def staff_create_view(request) -> HttpResponse:
     """Add a staff member with one or more roles.
@@ -451,87 +438,74 @@ def staff_create_view(request) -> HttpResponse:
             )
             % {"name": person.full_name, "count": len(roles)},
         )
-        return redirect("staff-list")
+        return redirect("person-detail", person_id=person.pk)
 
     return render(request, "identity/staff_form.html", {"form": form})
 
 
 @login_required
-@require_http_methods(["GET", "POST"])
-def staff_roles_view(request, person_id) -> HttpResponse:
+@require_POST
+def role_grant_view(request, person_id) -> HttpResponse:
     """Grant another role to somebody who already exists.
 
-    ⚠ This is the screen that makes it RBAC rather than a job title. Without it
-    an existing instructor could never become an administrator without being
-    created again as a second person.
+    ⚠ This is what makes it RBAC rather than a job title. Without it an existing
+    instructor could never become an administrator without being created again
+    as a second person.
+
+    POST only, and it lands back on the person's own page. It used to be a
+    screen of its own, which meant a second place a person could be looked at
+    and a second, slightly different set of things offered there.
     """
     from apps.identity.org_forms import RoleGrantForm
+    from apps.identity.profiles import person_page_context
 
     actor = request.actor
     if not _holds_anywhere(actor, Action.ROLE_ASSIGN):
         raise PermissionDenied(action=Action.ROLE_ASSIGN, actor=actor)
     person = get_object_or_404(Person.objects.for_actor(actor), pk=person_id)
 
-    form = RoleGrantForm(request.POST or None, actor=actor)
-    if request.method == "POST" and form.is_valid():
-        role = form.cleaned_data["role"]
-        as_org = form.cleaned_data["scope"] == "org" or role == Role.ORG_ADMIN
-        dojo = form.cleaned_data["dojo"]
-        if dojo is not None:
-            require(actor, Action.ROLE_ASSIGN, dojo, governance_model=_governance(dojo))
+    form = RoleGrantForm(request.POST, actor=actor)
+    if not form.is_valid():
+        context = person_page_context(person=person, actor=actor)
+        context["role_form"] = form
+        return render(request, "identity/person_detail.html", context)
 
-        existing = (
-            RoleAssignment.objects.for_actor(actor)
-            .filter(
-                person=person,
-                role=role,
-                scope_type=ScopeType.ORG if as_org else ScopeType.DOJO,
-                dojo=None if as_org else dojo,
-            )
-            .first()
-        )
-        if existing is not None and existing.revoked_at is None:
-            messages.error(request, _("They already hold that role."))
-        elif existing is not None:
-            # ⚠ Un-revoke rather than create a second row: the table is unique on
-            # (person, role, scope, dojo), so a second insert would fail.
-            existing.revoked_at = None
-            existing.save(update_fields=["revoked_at", "updated_at"])
-            audit.record_change("update", existing, actor=actor)
-            messages.success(request, _("Restored that role."))
-        else:
-            assignment = RoleAssignment.objects.for_actor(actor).create(
-                organization_id=actor.organization_id,
-                person=person,
-                role=role,
-                scope_type=ScopeType.ORG if as_org else ScopeType.DOJO,
-                dojo=None if as_org else dojo,
-            )
-            audit.record_change("create", assignment, actor=actor)
-            messages.success(request, _("Role added."))
-        return redirect("staff-roles", person_id=person.pk)
+    role = form.cleaned_data["role"]
+    as_org = form.cleaned_data["scope"] == "org" or role == Role.ORG_ADMIN
+    dojo = form.cleaned_data["dojo"]
+    if dojo is not None:
+        require(actor, Action.ROLE_ASSIGN, dojo, governance_model=_governance(dojo))
 
-    assignments = list(
+    existing = (
         RoleAssignment.objects.for_actor(actor)
-        .filter(person=person, revoked_at__isnull=True)
-        .select_related("dojo")
-        .order_by("role")
+        .filter(
+            person=person,
+            role=role,
+            scope_type=ScopeType.ORG if as_org else ScopeType.DOJO,
+            dojo=None if as_org else dojo,
+        )
+        .first()
     )
-    # ⚠ Presentation only — temporary_password_view checks ORG_EDIT itself.
-    # Menu visibility is not a control (SEC §2.2).
-    may_issue = can(
-        actor, Action.ORG_EDIT, _organization(actor), governance_model=GovernanceModel.CENTRAL
-    )
-    return render(
-        request,
-        "identity/staff_roles.html",
-        {
-            "person": person,
-            "assignments": assignments,
-            "form": form,
-            "may_issue_password": may_issue,
-        },
-    )
+    if existing is not None and existing.revoked_at is None:
+        messages.error(request, _("They already hold that role."))
+    elif existing is not None:
+        # ⚠ Un-revoke rather than create a second row: the table is unique on
+        # (person, role, scope, dojo), so a second insert would fail.
+        existing.revoked_at = None
+        existing.save(update_fields=["revoked_at", "updated_at"])
+        audit.record_change("update", existing, actor=actor)
+        messages.success(request, _("Restored that role."))
+    else:
+        assignment = RoleAssignment.objects.for_actor(actor).create(
+            organization_id=actor.organization_id,
+            person=person,
+            role=role,
+            scope_type=ScopeType.ORG if as_org else ScopeType.DOJO,
+            dojo=None if as_org else dojo,
+        )
+        audit.record_change("create", assignment, actor=actor)
+        messages.success(request, _("Role added."))
+    return redirect("person-detail", person_id=person.pk)
 
 
 @login_required
@@ -558,7 +532,7 @@ def temporary_password_view(request, person_id) -> HttpResponse:
     user = User.objects.filter(person=person).first()
     if user is None:
         messages.error(request, _("%(name)s has no sign-in.") % {"name": person.full_name})
-        return redirect("staff-roles", person_id=person.pk)
+        return redirect("person-detail", person_id=person.pk)
 
     # ⚠ Not on yourself. Somebody resetting their own password should use the
     # ordinary change screen; doing it here would drop them into the forced
@@ -568,30 +542,16 @@ def temporary_password_view(request, person_id) -> HttpResponse:
             request,
             _("Use the password screen to change your own password."),
         )
-        return redirect("staff-roles", person_id=person.pk)
+        return redirect("person-detail", person_id=person.pk)
 
     password = set_temporary_password(user=user, actor=actor)
 
-    assignments = list(
-        RoleAssignment.objects.for_actor(actor)
-        .filter(person=person, revoked_at__isnull=True)
-        .select_related("dojo")
-        .order_by("role")
-    )
-    from apps.identity.org_forms import RoleGrantForm
+    from apps.identity.profiles import person_page_context
 
-    return render(
-        request,
-        "identity/staff_roles.html",
-        {
-            "person": person,
-            "assignments": assignments,
-            "form": RoleGrantForm(actor=actor),
-            "temporary_password": password,
-            "handover_note": describe_handover(),
-            "may_issue_password": True,
-        },
-    )
+    context = person_page_context(person=person, actor=actor)
+    context["temporary_password"] = password
+    context["handover_note"] = describe_handover()
+    return render(request, "identity/person_detail.html", context)
 
 
 @login_required
@@ -627,10 +587,10 @@ def role_revoke_view(request, person_id, assignment_id) -> HttpResponse:
                 request,
                 _("This is the last organisation administrator. Add another first."),
             )
-            return redirect("staff-roles", person_id=person.pk)
+            return redirect("person-detail", person_id=person.pk)
 
     assignment.revoked_at = timezone.now()
     assignment.save(update_fields=["revoked_at", "updated_at"])
     audit.record_change("update", assignment, actor=actor)
     messages.success(request, _("Role revoked."))
-    return redirect("staff-roles", person_id=person.pk)
+    return redirect("person-detail", person_id=person.pk)
