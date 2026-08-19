@@ -67,6 +67,10 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          # ⚠ So the running container can say which commit it is — the badge in
+          # the UI reads this. Without it every build reports "dev".
+          build-args: |
+            REVISION=${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

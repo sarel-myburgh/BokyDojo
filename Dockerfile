@@ -57,8 +57,15 @@ USER bokydojo
 
 EXPOSE 8000
 
+# ⚠ Baked in at build time, and read by apps/core/version.py for the badge in
+# the corner. Without it a container has no way to say which commit it is, and
+# "I pulled and nothing changed" cannot be diagnosed from the screen. Last
+# layer-ish on purpose: it changes every build and would bust the cache above.
+ARG REVISION=dev
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    BOKYDOJO_REVISION=${REVISION} \
     DJANGO_SETTINGS_MODULE=config.settings.prod
 
 # ⚠ Python, not curl: the slim runtime has no curl and adding one for a

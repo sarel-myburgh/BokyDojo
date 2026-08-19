@@ -18,5 +18,24 @@
 </head>
 <body class="min-h-screen bg-gray-50 text-gray-900 antialiased">
     {% block body %}{% endblock %}
+
+    {% comment %}
+      Build badge — bottom left, on every screen including the login page.
+
+      ⚠ It shows the commit, not just the version number, and that is the point
+      of it. "I pulled the image and the old behaviour is still there" cannot be
+      answered from a version that only changes on a release: pulling an image
+      does not restart a running container, and a stale container is
+      indistinguishable from a bad build until you can read the revision off
+      the screen.
+
+      pointer-events-none so it can never sit on top of a button and swallow a
+      tap; select-all so the whole string can be copied into a bug report.
+    {% endcomment %}
+    <div class="pointer-events-none fixed bottom-0 left-0 z-50 px-2 py-1">
+      <span class="select-all bg-white/80 px-1.5 py-0.5 font-mono text-[10px] leading-none text-gray-400">
+        {{ app_version }}
+      </span>
+    </div>
 </body>
 </html>

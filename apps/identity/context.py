@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from apps.core.version import display_version
+
 from .mfa import should_encourage_mfa
 
 
@@ -14,6 +16,7 @@ def security_nudges(request) -> dict:
     mail to rescue them.
     """
     user = getattr(request, "user", None)
+    version = display_version()
     if user is None or not getattr(user, "is_authenticated", False):
-        return {"encourage_mfa": False}
-    return {"encourage_mfa": should_encourage_mfa(user)}
+        return {"encourage_mfa": False, "app_version": version}
+    return {"encourage_mfa": should_encourage_mfa(user), "app_version": version}
