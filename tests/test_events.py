@@ -231,9 +231,19 @@ def test_the_price_is_displayed_and_no_money_is_taken(client, world):
     body = client.get(public_url(world["event"])).content.decode()
 
     assert "USD 15.00" in body
+
     # ⚠ Nothing on this page collects payment details.
+    #
+    # ⚠ Matched on word boundaries, not as substrings. The page carries a CSRF
+    # token and the event's own 32-character secret, both random — "cvv" turns
+    # up inside one often enough to fail a build, which is exactly what it did.
+    # A test that fails on a coin toss teaches people to re-run it.
+    import re
+
     for banned in ("card number", "cvv", "stripe", "payway"):
-        assert banned not in body.lower()
+        assert not re.search(rf"\b{banned}\b", body, re.IGNORECASE), (
+            f"the public page mentions {banned!r}"
+        )
 
 
 def test_a_free_event_says_free(world):
