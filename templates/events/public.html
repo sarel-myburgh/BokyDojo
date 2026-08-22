@@ -35,6 +35,13 @@
     <div class="obi mt-2" aria-hidden="true"></div>
   </div>
 
+  {% if event.image %}
+    {# The poster. Served from our own origin by the event's token — never a
+       remote URL, which would leak every visitor to whoever hosts it. #}
+    <img src="{% url 'event-public-image' event.public_token 'image' %}" alt=""
+         class="mb-5 w-full border border-gray-200 object-cover">
+  {% endif %}
+
   <p class="eyebrow mb-1">{{ event.get_kind_display }}</p>
   <h1 class="text-2xl font-bold tracking-tight">{{ event.name }}</h1>
   {% if event.summary %}<p class="mt-1 text-gray-600">{{ event.summary }}</p>{% endif %}
@@ -70,6 +77,22 @@
         <dd class="min-w-0 flex-1">
           <span class="font-medium">{{ event.price_display }}</span>
           {% if event.payment_note %}<span class="block text-gray-600">{{ event.payment_note }}</span>{% endif %}
+          {% if event.payment_url %}
+            {# ⚠ The scheme is checked as http/https when it is saved. A
+               javascript: URL in this href would be scripting handed over by an
+               administrator who pasted something they were sent. #}
+            <a href="{{ event.payment_url }}" target="_blank" rel="noopener noreferrer external"
+               class="eyebrow mt-1 inline-block text-crimson-600 hover:underline">
+              {% translate "Pay with this link" %} →
+            </a>
+          {% endif %}
+          {% if event.payment_qr %}
+            <span class="mt-3 block">
+              <span class="eyebrow mb-1 block text-gray-500">{% translate "or scan to pay" %}</span>
+              <img src="{% url 'event-public-image' event.public_token 'payment_qr' %}" alt=""
+                   class="w-40 max-w-full border border-gray-200">
+            </span>
+          {% endif %}
         </dd>
       </div>
     </dl>
@@ -92,7 +115,7 @@
       <p class="mt-1 text-sm text-gray-600">{% translate "Please try again a little later." %}</p>
     </div>
   {% elif rsvp_open %}
-    <form method="post" class="panel mt-6 px-5 py-5">
+    <form method="post" enctype="multipart/form-data" class="panel mt-6 px-5 py-5">
       {% csrf_token %}
       <h2 class="mb-1 text-base font-bold tracking-tight">{% translate "Let us know you are coming" %}</h2>
       <p class="mb-4 text-sm text-gray-500">

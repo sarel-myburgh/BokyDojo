@@ -55,6 +55,7 @@
               {% endif %}
             </th>
           {% endfor %}
+          <th class="eyebrow px-4 py-3">{% translate "Attached" %}</th>
           <th class="eyebrow px-4 py-3">{% translate "Notes" %}</th>
         </tr>
       </thead>
@@ -67,6 +68,12 @@
             {% for cell in row.cells %}
               <td class="px-4 py-3">{{ cell|default:"—" }}</td>
             {% endfor %}
+            <td class="px-4 py-3">
+              {% for attachment in row.attachments %}
+                <a href="{% url 'rsvp-attachment' event.pk attachment.pk %}"
+                   class="block text-crimson-600 hover:underline">{{ attachment.label|default:_("file") }}</a>
+              {% empty %}—{% endfor %}
+            </td>
             <td class="px-4 py-3 text-gray-500">{{ row.rsvp.note|default:"" }}</td>
           </tr>
         {% endfor %}

@@ -644,3 +644,35 @@ def test_the_settings_page_lists_every_member_of_staff(client, world):
 
     for i in range(12):
         assert f"Staff{i}" in body, f"Staff{i} missing from the settings page"
+
+
+def test_a_photo_larger_than_the_in_memory_threshold_is_accepted(world):
+    """⚠ Nothing else here uses an image big enough to leave memory.
+
+    Django hands anything above FILE_UPLOAD_MAX_MEMORY_SIZE (2.5MB by default)
+    to the view as a TemporaryUploadedFile backed by a file on disk, and every
+    other upload test in this suite uses a 40x40 thumbnail — so the whole
+    temporary-file path was untested while most photographs taken on a phone go
+    down it.
+    """
+    import io
+    import os
+
+    from django.conf import settings
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    # Comfortably over the threshold, comfortably under the multipart limit.
+    side = 1000
+    buffer = io.BytesIO()
+    Image.frombytes("RGB", (side, side), os.urandom(side * side * 3)).save(buffer, format="PNG")
+    assert buffer.tell() > settings.FILE_UPLOAD_MAX_MEMORY_SIZE, (
+        "the fixture is not big enough to become a temporary file"
+    )
+    big = SimpleUploadedFile("big.png", buffer.getvalue(), content_type="image/png")
+
+    photo = upload_profile_photo(
+        person=world["teacher"], uploaded_file=big, actor=actor(world["teacher"])
+    )
+
+    assert photo is not None

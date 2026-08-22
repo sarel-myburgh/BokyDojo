@@ -82,6 +82,11 @@ urlpatterns = [
     # ⚠ The only route in the product an anonymous stranger may reach. Kept
     # together and away from everything else so it is obvious what is exposed.
     path("e/<str:token>/", event_views.event_public_view, name="event-public"),
+    path(
+        "e/<str:token>/<slug:which>.img",
+        event_views.event_public_image_view,
+        name="event-public-image",
+    ),
     path("events/", event_views.event_list_view, name="event-list"),
     path("events/new/", event_views.event_create_view, name="event-create"),
     path("events/<uuid:event_id>/", event_views.event_detail_view, name="event-detail"),
@@ -105,6 +110,11 @@ urlpatterns = [
         "events/<uuid:event_id>/form/<uuid:field_id>/delete/",
         event_views.event_form_field_delete_view,
         name="event-form-field-delete",
+    ),
+    path(
+        "events/<uuid:event_id>/attachments/<uuid:attachment_id>/",
+        event_views.rsvp_attachment_view,
+        name="rsvp-attachment",
     ),
     path("events/<uuid:event_id>/publish/", event_views.event_publish_view, name="event-publish"),
     path(

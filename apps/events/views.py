@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -16,13 +16,20 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django.views.decorators.vary import vary_on_cookie
 
 from apps.core import audit
+from apps.core.models import Document
 from apps.core.throttle import RSVP_POLICY, Throttled, enforce, register_failure
 from apps.identity.models import GovernanceModel, Organization
 from apps.identity.permissions import Action, PermissionDenied, can
 
 from .forms import EventForm, EventFormFieldForm, RsvpForm
-from .models import Event, EventFormField, EventRsvp
-from .public_access import published_event_by_token, questions_for, save_public_rsvp
+from .models import Event, EventFormField, EventRsvp, RsvpAttachment
+from .public_access import (
+    published_event_by_token,
+    questions_for,
+    read_public_document,
+    save_public_attachment,
+    save_public_rsvp,
+)
 
 
 def _organization(actor) -> Organization:
@@ -88,11 +95,14 @@ def _rsvp_counts(actor, events) -> dict:
 @require_http_methods(["GET", "POST"])
 def event_create_view(request):
     organization = _require_manage(request.actor)
-    form = EventForm(request.POST or None, actor=request.actor, organization=organization)
+    form = EventForm(
+        request.POST or None, request.FILES or None, actor=request.actor, organization=organization
+    )
 
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             event = form.save()
+            _store_event_images(event, form, actor=request.actor, organization=organization)
             audit.record_change("create", event, actor=request.actor)
         messages.success(request, _("Event created. Publish it when you are ready to share it."))
         return redirect("event-detail", event_id=event.pk)
@@ -106,12 +116,17 @@ def event_edit_view(request, event_id):
     organization = _require_manage(request.actor)
     event = get_object_or_404(Event.objects.for_actor(request.actor), pk=event_id)
     form = EventForm(
-        request.POST or None, instance=event, actor=request.actor, organization=organization
+        request.POST or None,
+        request.FILES or None,
+        instance=event,
+        actor=request.actor,
+        organization=organization,
     )
 
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             event = form.save()
+            _store_event_images(event, form, actor=request.actor, organization=organization)
             audit.record_change("update", event, actor=request.actor)
         messages.success(request, _("Event updated."))
         return redirect("event-detail", event_id=event.pk)
@@ -145,6 +160,33 @@ def event_detail_view(request, event_id):
             "public_url": request.build_absolute_uri(_public_path(event)),
         },
     )
+
+
+def _store_event_images(event: Event, form, *, actor, organization) -> None:
+    """Put the poster and the payment QR through the ordinary document path.
+
+    ⚠ Same validation as every other upload: magic bytes rather than the
+    filename, SVG refused, images re-encoded so EXIF — and the GPS in it — is
+    stripped. An administrator photographing a QR code on their own desk should
+    not be publishing their office coordinates with it.
+    """
+    from apps.core.documents import store
+
+    changed = []
+    for field_name in ("image", "payment_qr"):
+        uploaded = form.cleaned_data.get(field_name)
+        if not uploaded:
+            continue
+        document = store(
+            uploaded,
+            organization=organization,
+            kind=Document.Kind.EVENT_IMAGE,
+            actor=actor,
+        )
+        setattr(event, field_name, document)
+        changed.append(field_name)
+    if changed:
+        event.save(update_fields=[*changed, "updated_at"])
 
 
 def _public_path(event: Event) -> str:
@@ -265,7 +307,7 @@ def event_public_view(request, token):
                 status=429,
             )
 
-        form = RsvpForm(request.POST, questions=questions)
+        form = RsvpForm(request.POST, request.FILES, questions=questions)
         if not event.rsvps_are_open:
             form.add_error(None, _("Replies for this event are closed."))
         elif form.is_valid():
@@ -277,9 +319,21 @@ def event_public_view(request, token):
             except ValidationError as exc:
                 form.add_error(None, exc)
             else:
-                save_public_rsvp(rsvp)
-                submitted = True
-                form = RsvpForm(questions=questions)
+                try:
+                    with transaction.atomic():
+                        save_public_rsvp(rsvp)
+                        # ⚠ Inside the transaction and only after the reply
+                        # itself validated: a rejected form must not leave
+                        # files on disk with no row pointing at them.
+                        for field, uploaded in form.attachments():
+                            save_public_attachment(
+                                rsvp=rsvp, question=field, uploaded_file=uploaded
+                            )
+                except ValidationError as exc:
+                    form.add_error(None, exc)
+                else:
+                    submitted = True
+                    form = RsvpForm(questions=questions)
 
         # ⚠ Every POST counts, successful or not. This is a rate limit on a form
         # anybody can reach, not a failure counter: a valid submission is
@@ -352,6 +406,16 @@ def event_attendees_view(request, event_id):
     columns = _answer_columns(event, actor=request.actor)
     coming = [r for r in rsvps if r.status == EventRsvp.Status.COMING]
 
+    # ⚠ One query, attached in Python. The reverse relation is scoped and
+    # refuses to evaluate from a template without an actor.
+    by_rsvp: dict = {}
+    for attachment in (
+        RsvpAttachment.objects.for_actor(request.actor)
+        .filter(rsvp__event=event)
+        .select_related("document")
+    ):
+        by_rsvp.setdefault(attachment.rsvp_id, []).append(attachment)
+
     return render(
         request,
         "events/attendees.html",
@@ -359,7 +423,11 @@ def event_attendees_view(request, event_id):
             "event": event,
             "columns": columns,
             "rows": [
-                {"rsvp": rsvp, "cells": [_cell(rsvp, column["key"]) for column in columns]}
+                {
+                    "rsvp": rsvp,
+                    "cells": [_cell(rsvp, column["key"]) for column in columns],
+                    "attachments": by_rsvp.get(rsvp.pk, []),
+                }
                 for rsvp in rsvps
             ],
             "reply_count": len(coming),
@@ -484,3 +552,72 @@ def event_form_field_delete_view(request, event_id, field_id):
     question.delete()
     messages.success(request, _("Question removed from the form."))
     return redirect("event-form-builder", event_id=event.pk)
+
+
+# -- serving the pictures -----------------------------------------------------
+
+
+def _image_response(document, payload: bytes):
+    """⚠ inline, because it is an <img> — safe only because validate_upload
+    re-encoded it, so what is stored is genuinely the image type it claims. The
+    sandbox CSP below is the belt to that braces."""
+    response = HttpResponse(payload, content_type=document.content_type)
+    response["Content-Disposition"] = "inline"
+    response["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+def event_public_image_view(request, token, which):
+    """The poster and the payment QR, for whoever holds the invitation link.
+
+    ⚠ The only documents in the product served without a session, and they are
+    reachable only through the event's own secret token — the same key that
+    opens the invitation itself.
+    """
+    # ⚠ An explicit allowlist, not an if/else. Falling through to the QR for any
+    # unrecognised value would make the route answer to names it never had.
+    if which not in ("image", "payment_qr"):
+        raise Http404("No such image.")
+
+    event = _published_event(token)
+    document = event.image if which == "image" else event.payment_qr
+    # ⚠ The kind check is what stops this becoming a way to read any document at
+    # all: attaching a student photograph to an event must not make it publicly
+    # fetchable.
+    if document is None or document.kind != Document.Kind.EVENT_IMAGE:
+        raise Http404("No such image.")
+
+    return _image_response(document, read_public_document(document))
+
+
+@login_required
+def rsvp_attachment_view(request, event_id, attachment_id):
+    """A file somebody attached to their reply. Staff only.
+
+    ⚠ Goes through open_document, which authorises against ``may_read`` and
+    audits the read — including a refused one. For EVENT_ATTACHMENT that means
+    somebody who can administer the organisation, and nobody else: not the
+    person who uploaded it, and not anybody else holding the invitation link.
+    """
+    from apps.core.documents import open_document
+
+    event = get_object_or_404(Event.objects.for_actor(request.actor), pk=event_id)
+    attachment = get_object_or_404(
+        RsvpAttachment.objects.for_actor(request.actor)
+        .filter(rsvp__event=event)
+        .select_related("document"),
+        pk=attachment_id,
+    )
+    payload = open_document(
+        request.actor,
+        attachment.document,
+        governance_model=event.organization.governance_model or GovernanceModel.CENTRAL,
+    )
+    response = _image_response(attachment.document, payload)
+    # ⚠ attachment, not inline: this one is a stranger's file. A PDF rendered
+    # in-page would run its own JavaScript in our origin.
+    response["Content-Disposition"] = "attachment"
+    response["Cache-Control"] = "private, no-store"
+    return response

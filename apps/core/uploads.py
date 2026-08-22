@@ -32,6 +32,11 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+#: ⚠ A much lower cap for anything posted by somebody with no account. The
+#: public RSVP form is the only unauthenticated upload in the product; a payment
+#: screenshot is well under a megabyte, and the rate limit plus this number are
+#: together what stops the form being a way to fill the disk.
+MAX_PUBLIC_UPLOAD_BYTES = 4 * 1024 * 1024
 MAX_IMAGE_PIXELS = 50_000_000  # guards against decompression-bomb images
 
 

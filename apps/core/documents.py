@@ -92,6 +92,17 @@ def may_read(actor: Actor, document: Document, *, governance_model: str) -> bool
         return False
     if document.organization_id != actor.organization_id:
         return False
+    if document.kind == Document.Kind.EVENT_IMAGE:
+        # ⚠ A poster or a payment QR an administrator uploaded to show the
+        # public. Anyone in the organisation may see it; the public route
+        # serves it separately, keyed on the event token.
+        return True
+
+    if document.kind == Document.Kind.EVENT_ATTACHMENT:
+        # ⚠ Uploaded by a member of the public and never shown back to one.
+        # Only somebody who can administer the organisation may open it.
+        return any(Action.ORG_EDIT in ROLE_ACTIONS.get(role, set()) for role, _s, _d in actor.roles)
+
     if document.kind == Document.Kind.PROFILE_PHOTO:
         # ⚠ No consent record. See Document.Kind.PROFILE_PHOTO: this is a staff
         # profile picture, not a child's photograph, and whoever may view the

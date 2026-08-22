@@ -13,6 +13,23 @@ TEXT = "w-full border border-gray-300 bg-white px-3 py-2 text-sm"
 
 
 class EventForm(forms.ModelForm):
+    image = forms.ImageField(
+        label=_("Poster or photo"),
+        required=False,
+        widget=forms.ClearableFileInput(attrs={"accept": "image/*", "class": "text-sm"}),
+        help_text=_("Optional. Shown at the top of the invitation."),
+    )
+    payment_qr = forms.ImageField(
+        label=_("Payment QR code"),
+        required=False,
+        widget=forms.ClearableFileInput(attrs={"accept": "image/*", "class": "text-sm"}),
+        help_text=_("Optional. A screenshot of the QR code from your banking app."),
+    )
+    payment_url = forms.URLField(
+        required=False,
+        assume_scheme="https",
+        widget=forms.URLInput(attrs={"class": TEXT, "placeholder": "https://…"}),
+    )
     price = forms.DecimalField(
         label=_("Price"),
         required=False,
@@ -34,10 +51,10 @@ class EventForm(forms.ModelForm):
             "ends_at",
             "location_name",
             "address",
-            "latitude",
-            "longitude",
+            "plus_code",
             "price_currency",
             "payment_note",
+            "payment_url",
             "capacity",
             "rsvp_closes_at",
             "visibility",
@@ -52,8 +69,13 @@ class EventForm(forms.ModelForm):
             "ends_at": forms.DateTimeInput(attrs={"class": TEXT, "type": "datetime-local"}),
             "location_name": forms.TextInput(attrs={"class": TEXT}),
             "address": forms.Textarea(attrs={"class": TEXT, "rows": 2}),
-            "latitude": forms.NumberInput(attrs={"class": TEXT, "step": "any"}),
-            "longitude": forms.NumberInput(attrs={"class": TEXT, "step": "any"}),
+            "plus_code": forms.TextInput(
+                attrs={"class": TEXT, "placeholder": "HW4C+8Q Phnom Penh"}
+            ),
+            # ⚠ assume_scheme is set explicitly: Django 6 changes the default
+            # from http to https, and a silent change to what a pasted payment
+            # link resolves to is not something to inherit by accident.
+            "payment_url": forms.URLInput(attrs={"class": TEXT, "placeholder": "https://…"}),
             "price_currency": forms.TextInput(attrs={"class": TEXT, "maxlength": 3}),
             "payment_note": forms.TextInput(attrs={"class": TEXT}),
             "capacity": forms.NumberInput(attrs={"class": TEXT, "min": 0}),
@@ -70,8 +92,8 @@ class EventForm(forms.ModelForm):
             "ends_at": _("Ends"),
             "location_name": _("Place"),
             "address": _("Address"),
-            "latitude": _("Map pin — latitude"),
-            "longitude": _("Map pin — longitude"),
+            "plus_code": _("Plus Code"),
+            "payment_url": _("Payment link"),
             "price_currency": _("Currency"),
             "payment_note": _("How to pay"),
             "capacity": _("Places available"),
@@ -81,8 +103,13 @@ class EventForm(forms.ModelForm):
         help_texts = {
             "dojo": _("Leave blank for a whole-organisation event."),
             "summary": _("One line, shown at the top of the invitation."),
-            "latitude": _(
-                "Optional. In Google Maps, right-click the spot and click the numbers to copy them."
+            "plus_code": _(
+                "Optional. In Google Maps, tap the place — the Plus Code is the short code "
+                "under its name, like HW4C+8Q. Include the town after it."
+            ),
+            "payment_url": _(
+                "Optional. A link from your banking app — ABA Pay, KHQR, or similar. "
+                "It is shown on the invitation; no payment is taken or confirmed here."
             ),
             "payment_note": _("For example: pay at the door, or bank transfer details."),
             "capacity": _("0 means no limit."),
@@ -98,19 +125,30 @@ class EventForm(forms.ModelForm):
         self.organization = organization
         self.fields["dojo"].queryset = Dojo.objects.for_actor(actor).order_by("name")
         self.fields["dojo"].required = False
-        for optional in ("ends_at", "rsvp_closes_at", "latitude", "longitude"):
+        for optional in ("ends_at", "rsvp_closes_at", "plus_code", "payment_url"):
             self.fields[optional].required = False
         if self.instance.pk and self.instance.price_minor_units:
             self.fields["price"].initial = self.instance.price_minor_units / 100
 
-    def clean(self):
-        cleaned = super().clean()
-        # ⚠ Both or neither, checked here as well as on the model so the message
-        # lands on the field rather than as a page-level error.
-        lat, lon = cleaned.get("latitude"), cleaned.get("longitude")
-        if (lat is None) != (lon is None):
-            self.add_error("longitude", _("Enter both latitude and longitude, or neither."))
-        return cleaned
+    def clean_plus_code(self):
+        from .plus_codes import normalise, validate_plus_code
+
+        value = normalise(self.cleaned_data.get("plus_code") or "")
+        validate_plus_code(value)
+        return value
+
+    def clean_payment_url(self):
+        """⚠ http and https only.
+
+        Django's URLField accepts other schemes, and this value goes straight
+        into an href on a page anybody can open — a javascript: URL there is
+        cross-site scripting handed over by an administrator who pasted
+        something they were sent.
+        """
+        url = (self.cleaned_data.get("payment_url") or "").strip()
+        if url and not url.lower().startswith(("http://", "https://")):
+            raise forms.ValidationError(_("The link must start with http:// or https://."))
+        return url
 
     def save(self, commit=True):
         event = super().save(commit=False)
@@ -171,6 +209,22 @@ class RsvpForm(forms.ModelForm):
             raise forms.ValidationError(_("Between 1 and 50 people."))
         return size
 
+    def attachments(self) -> list:
+        """The uploaded files, paired with the question they answer.
+
+        ⚠ Returned rather than saved here. Storing them is the view's job,
+        because it happens only once the rest of the reply has validated — a
+        rejected form must not leave files behind.
+        """
+        pairs = []
+        for question in self.questions:
+            if question.kind != EventFormField.Kind.FILE:
+                continue
+            uploaded = self.cleaned_data.get(question.field_name)
+            if uploaded:
+                pairs.append((question, uploaded))
+        return pairs
+
     def answers(self) -> dict:
         """What was typed into the custom questions, keyed by field id.
 
@@ -181,6 +235,9 @@ class RsvpForm(forms.ModelForm):
         """
         collected = {}
         for question in self.questions:
+            if question.kind == EventFormField.Kind.FILE:
+                # Files are recorded as documents, not as JSON values.
+                continue
             value = self.cleaned_data.get(question.field_name)
             if value in (None, "", []):
                 continue
@@ -210,6 +267,16 @@ def _field_for(question: EventFormField) -> forms.Field:
         return forms.ChoiceField(
             choices=[("", "—")] + [(o, o) for o in question.option_list],
             widget=forms.Select(attrs={"class": TEXT}),
+            **common,
+        )
+    if kind == EventFormField.Kind.FILE:
+        # ⚠ Capped far below the 25MB the authenticated document path allows.
+        # This is a box anyone on the internet can post to; a screenshot of a
+        # payment confirmation is well under a megabyte.
+        return forms.FileField(
+            widget=forms.ClearableFileInput(
+                attrs={"class": "text-sm", "accept": "image/*,application/pdf"}
+            ),
             **common,
         )
     if kind == EventFormField.Kind.CHECKBOX:

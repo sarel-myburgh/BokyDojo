@@ -9,6 +9,7 @@ posts.
 from __future__ import annotations
 
 import datetime
+import os
 
 import pytest
 from django.urls import reverse
@@ -186,7 +187,20 @@ def test_the_map_is_a_link_and_never_an_embed(client, world):
     assert "maps.googleapis.com" not in body
 
 
-def test_the_pin_uses_coordinates_when_they_are_given(world):
+def test_the_pin_uses_a_plus_code_when_one_is_given(world):
+    """⚠ Plus code wins over coordinates and address — most precise first, and
+    it is the thing people in Cambodia actually exchange."""
+    with allow_unscoped("test"):
+        world["event"].plus_code = "HW4C+8Q Phnom Penh"
+        world["event"].latitude = 11.556400
+        world["event"].longitude = 104.928200
+        world["event"].save()
+
+    assert "HW4C%2B8Q" in world["event"].map_url
+
+
+def test_the_pin_still_uses_coordinates_when_there_is_no_plus_code(world):
+    """⚠ Rows created before Plus Codes existed keep working."""
     with allow_unscoped("test"):
         world["event"].latitude = 11.556400
         world["event"].longitude = 104.928200
@@ -334,8 +348,7 @@ def test_an_admin_can_create_an_event(client, world):
             "ends_at": "",
             "location_name": "Olympic Stadium",
             "address": "",
-            "latitude": "",
-            "longitude": "",
+            "plus_code": "",
             "price": "25",
             "price_currency": "USD",
             "payment_note": "Pay at the door",
@@ -678,3 +691,449 @@ def test_the_export_cannot_reach_another_organisation(client, world):
     response = client.get(reverse("event-attendees-export", args=[world["elsewhere_event"].pk]))
 
     assert response.status_code == 404
+
+
+# -- plus codes ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["HW4C+8Q Phnom Penh", "hw4c+8q phnom penh", "7P28HW4C+8Q", "6PH58QMF+FX"],
+)
+def test_a_good_plus_code_is_accepted(value):
+    from apps.events.plus_codes import validate_plus_code
+
+    validate_plus_code(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["not a code", "HW4C8Q Phnom Penh", "ABCD+EF Somewhere", "HW4C+", "+8Q"],
+)
+def test_a_bad_plus_code_is_refused(value):
+    """⚠ A, E, I, L, O, S, U and 0/1 are not in the alphabet — they are the
+    characters people confuse when copying a code off a shopfront."""
+    from django.core.exceptions import ValidationError
+
+    from apps.events.plus_codes import validate_plus_code
+
+    with pytest.raises(ValidationError):
+        validate_plus_code(value)
+
+
+def test_a_short_plus_code_needs_its_town(world):
+    """⚠ "HW4C+8Q" alone is ambiguous worldwide — it would open a map somewhere
+    plausible and wrong."""
+    from django.core.exceptions import ValidationError
+
+    from apps.events.plus_codes import validate_plus_code
+
+    with pytest.raises(ValidationError):
+        validate_plus_code("HW4C+8Q")
+
+
+def test_the_plus_code_is_upper_cased_but_the_town_is_left_alone(world):
+    from apps.events.plus_codes import normalise
+
+    assert normalise("hw4c+8q phnom penh") == "HW4C+8Q phnom penh"
+
+
+# -- payment link -------------------------------------------------------------
+
+
+def test_a_payment_link_shows_on_the_invitation(client, world):
+    with allow_unscoped("test"):
+        world["event"].payment_url = "https://pay.ababank.com/abc123"
+        world["event"].save()
+
+    body = client.get(public_url(world["event"])).content.decode()
+
+    assert "pay.ababank.com/abc123" in body
+    assert "Pay with this link" in body
+
+
+def test_a_payment_link_must_be_http_or_https(client, world):
+    """⚠ This value goes straight into an href on a page anybody can open.
+
+    ⚠ Tested with ftp://, not javascript:. Django's URLField already rejects
+    javascript: on its own, so that version of this test passed without the
+    check ever running — a mutation showed it. URLField *does* accept ftp, so
+    ftp is what proves our own restriction is doing the work.
+    """
+    client.force_login(world["boss_user"])
+
+    response = client.post(
+        reverse("event-create"),
+        {
+            "name": "Hostile",
+            "kind": "grading",
+            "dojo": "",
+            "summary": "",
+            "details": "",
+            "starts_at": "2027-01-01T09:00",
+            "ends_at": "",
+            "location_name": "",
+            "address": "",
+            "plus_code": "",
+            "price": "0",
+            "price_currency": "USD",
+            "payment_note": "",
+            "payment_url": "ftp://evil.example.com/pay",
+            "capacity": 0,
+            "rsvp_closes_at": "",
+            "visibility": "private",
+        },
+    )
+
+    assert response.status_code == 200, "the hostile link was accepted"
+    with allow_unscoped("test"):
+        assert not Event.objects.filter(name="Hostile").exists()
+
+
+def test_nothing_here_confirms_a_payment(world):
+    """⚠ Worth stating: this is a link, not an integration. Nothing in the model
+    records that money arrived, and no screen should imply it did."""
+    field_names = {f.name for f in Event._meta.get_fields()}
+
+    assert not field_names & {"is_paid", "paid_at", "payment_status", "transaction_id"}
+
+
+# -- public file attachments --------------------------------------------------
+
+
+def an_image(name="proof.png"):
+    import io
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (40, 40), "navy").save(buffer, format="PNG")
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
+
+
+@pytest.fixture
+def file_question(world, settings, tmp_path):
+    from apps.events.models import EventFormField
+
+    settings.MEDIA_ROOT = tmp_path / "media"
+    with allow_unscoped("test"):
+        return EventFormField.objects.create(
+            event=world["event"],
+            label="Proof of payment",
+            kind=EventFormField.Kind.FILE,
+            is_required=False,
+            order=0,
+        )
+
+
+def test_a_file_question_puts_an_upload_on_the_public_form(client, world, file_question):
+    body = client.get(public_url(world["event"])).content.decode()
+
+    assert "Proof of payment" in body
+    assert 'type="file"' in body
+    assert 'enctype="multipart/form-data"' in body
+
+
+def test_there_is_no_upload_unless_an_admin_added_one(client, world):
+    """⚠ Off by default. A public file upload is the highest-risk surface in the
+    product and it only exists when somebody deliberately asks for one."""
+    body = client.get(public_url(world["event"])).content.decode()
+
+    assert 'type="file"' not in body
+
+
+def test_somebody_can_attach_a_file_to_their_reply(client, world, file_question):
+    from apps.events.models import RsvpAttachment
+
+    client.post(
+        public_url(world["event"]),
+        {
+            "name": "Dara",
+            "email": "d@example.com",
+            "party_size": 1,
+            "phone": "",
+            "note": "",
+            file_question.field_name: an_image(),
+        },
+    )
+
+    with allow_unscoped("test"):
+        attachment = RsvpAttachment.objects.get()
+    assert attachment.label == "Proof of payment"
+    assert attachment.document.kind == "event_attachment"
+
+
+def test_an_svg_attachment_is_refused(client, world, file_question):
+    """⚠ SVG is a script container that renders as a picture. There is no safe
+    way to serve an attacker-supplied one from our own origin."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from apps.events.models import RsvpAttachment
+
+    client.post(
+        public_url(world["event"]),
+        {
+            "name": "Dara",
+            "email": "d@example.com",
+            "party_size": 1,
+            "phone": "",
+            "note": "",
+            file_question.field_name: SimpleUploadedFile(
+                "x.svg",
+                b"<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>",
+                content_type="image/svg+xml",
+            ),
+        },
+    )
+
+    with allow_unscoped("test"):
+        assert not RsvpAttachment.objects.exists()
+
+
+def test_a_file_pretending_to_be_an_image_is_refused(client, world, file_question):
+    """⚠ The filename and the Content-Type are both attacker-controlled. The
+    first bytes decide what the file actually is."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from apps.events.models import RsvpAttachment
+
+    client.post(
+        public_url(world["event"]),
+        {
+            "name": "Dara",
+            "email": "d@example.com",
+            "party_size": 1,
+            "phone": "",
+            "note": "",
+            file_question.field_name: SimpleUploadedFile(
+                "payload.png", b"<?php system($_GET[0]); ?>", content_type="image/png"
+            ),
+        },
+    )
+
+    with allow_unscoped("test"):
+        assert not RsvpAttachment.objects.exists()
+
+
+def test_an_oversized_attachment_is_refused(client, world, file_question, monkeypatch):
+    """⚠ Capped far below the authenticated limit: this is a box anybody on the
+    internet can post to, and the cap plus the rate limit are together what stop
+    it being a way to fill the disk.
+
+    ⚠ The cap is lowered for the test rather than the file made enormous. Two
+    earlier attempts tested something else entirely: PNG magic bytes followed by
+    zeros were refused as a broken image, and a genuinely huge one was truncated
+    in transit and refused as a truncated image. Both passed while the cap did
+    nothing, and both were caught by mutating the cap away. Shrinking the limit
+    exercises the limit.
+    """
+    import io
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    from apps.events.models import RsvpAttachment
+
+    monkeypatch.setattr("apps.core.uploads.MAX_PUBLIC_UPLOAD_BYTES", 8 * 1024)
+
+    buffer = io.BytesIO()
+    Image.frombytes("RGB", (200, 200), os.urandom(200 * 200 * 3)).save(buffer, format="PNG")
+    assert buffer.tell() > 8 * 1024, "the fixture is not over the lowered cap"
+    oversized = SimpleUploadedFile("big.png", buffer.getvalue(), content_type="image/png")
+
+    response = client.post(
+        public_url(world["event"]),
+        {
+            "name": "Dara",
+            "email": "d@example.com",
+            "party_size": 1,
+            "phone": "",
+            "note": "",
+            file_question.field_name: oversized,
+        },
+    )
+
+    assert "too big" in response.content.decode(), "no size message was shown"
+    with allow_unscoped("test"):
+        assert not RsvpAttachment.objects.exists()
+
+
+def test_an_attachment_within_the_cap_is_accepted(client, world, file_question):
+    """⚠ The other half. A cap that refuses everything is not a cap."""
+    from apps.events.models import RsvpAttachment
+
+    client.post(
+        public_url(world["event"]),
+        {
+            "name": "Dara",
+            "email": "d@example.com",
+            "party_size": 1,
+            "phone": "",
+            "note": "",
+            file_question.field_name: an_image(),
+        },
+    )
+
+    with allow_unscoped("test"):
+        assert RsvpAttachment.objects.count() == 1
+
+
+def test_an_attachment_is_never_served_to_the_public(client, world, file_question):
+    """⚠ Not even to the person who uploaded it. A public upload that is
+    publicly readable is a file-hosting service with our name on it."""
+    from apps.events.models import RsvpAttachment
+
+    client.post(
+        public_url(world["event"]),
+        {
+            "name": "Dara",
+            "email": "d@example.com",
+            "party_size": 1,
+            "phone": "",
+            "note": "",
+            file_question.field_name: an_image(),
+        },
+    )
+    with allow_unscoped("test"):
+        attachment = RsvpAttachment.objects.get()
+
+    client.logout()
+    response = client.get(reverse("rsvp-attachment", args=[world["event"].pk, attachment.pk]))
+
+    assert response.status_code in (302, 403), "an anonymous visitor could read the upload"
+
+
+def test_an_instructor_cannot_read_an_attachment(client, world, file_question):
+    """⚠ EVENT_ATTACHMENT is released only to somebody who can administer the
+    organisation."""
+    from apps.core.documents import may_read
+    from apps.core.models import Document
+    from apps.identity.actors import actor_for_user
+
+    with allow_unscoped("test"):
+        document = Document.objects.create(
+            organization=world["org"],
+            kind=Document.Kind.EVENT_ATTACHMENT,
+            original_filename="proof.png",
+            content_type="image/png",
+            byte_size=10,
+            checksum="x" * 64,
+            storage_key="k",
+        )
+
+    assert not may_read(actor_for_user(world["teacher_user"]), document, governance_model="central")
+    assert may_read(actor_for_user(world["boss_user"]), document, governance_model="central")
+
+
+def test_staff_can_open_an_attachment(client, world, file_question):
+    from apps.events.models import RsvpAttachment
+
+    client.post(
+        public_url(world["event"]),
+        {
+            "name": "Dara",
+            "email": "d@example.com",
+            "party_size": 1,
+            "phone": "",
+            "note": "",
+            file_question.field_name: an_image(),
+        },
+    )
+    with allow_unscoped("test"):
+        attachment = RsvpAttachment.objects.get()
+
+    client.force_login(world["boss_user"])
+    response = client.get(reverse("rsvp-attachment", args=[world["event"].pk, attachment.pk]))
+
+    assert response.status_code == 200
+    # ⚠ attachment, never inline: a stranger's PDF rendered in-page would run
+    # its own JavaScript in our origin.
+    assert "attachment" in response["Content-Disposition"]
+
+
+# -- event poster and payment QR ----------------------------------------------
+
+
+def test_a_poster_is_served_only_through_the_event_token(client, world, settings, tmp_path):
+    from apps.core.documents import store
+    from apps.core.models import Document
+    from apps.identity.actors import actor_for_user
+
+    settings.MEDIA_ROOT = tmp_path / "media"
+    with allow_unscoped("test"):
+        document = store(
+            an_image("poster.png"),
+            organization=world["org"],
+            kind=Document.Kind.EVENT_IMAGE,
+            actor=actor_for_user(world["boss_user"]),
+        )
+        world["event"].image = document
+        world["event"].save()
+
+    good = client.get(reverse("event-public-image", args=[world["event"].public_token, "image"]))
+    wrong = client.get(reverse("event-public-image", args=[new_public_token(), "image"]))
+
+    assert good.status_code == 200
+    assert good["Content-Type"] == "image/png"
+    assert wrong.status_code == 404
+
+
+def test_the_image_route_answers_only_to_its_two_names(client, world, settings, tmp_path):
+    """⚠ An allowlist, not an if/else — falling through to the QR for any
+    unrecognised value would make the route answer to names it never had.
+
+    ⚠ The QR has to actually exist for this to prove anything. Without it the
+    fall-through returns 404 for its own reasons and the test passes whether or
+    not the allowlist is there — which a mutation demonstrated.
+    """
+    from apps.core.documents import store
+    from apps.core.models import Document
+    from apps.identity.actors import actor_for_user
+
+    settings.MEDIA_ROOT = tmp_path / "media"
+    with allow_unscoped("test"):
+        world["event"].payment_qr = store(
+            an_image("qr.png"),
+            organization=world["org"],
+            kind=Document.Kind.EVENT_IMAGE,
+            actor=actor_for_user(world["boss_user"]),
+        )
+        world["event"].save()
+
+    real = client.get(
+        reverse("event-public-image", args=[world["event"].public_token, "payment_qr"])
+    )
+    made_up = client.get(
+        reverse("event-public-image", args=[world["event"].public_token, "anything"])
+    )
+
+    assert real.status_code == 200, "the QR should be served under its own name"
+    assert made_up.status_code == 404
+
+
+def test_the_public_image_route_serves_only_event_images(client, world, settings, tmp_path):
+    """⚠ The kind check is what stops this route becoming a way to read any
+    document at all. Attaching a student photograph to an event must not make it
+    publicly fetchable.
+    """
+    from apps.core.documents import store
+    from apps.core.models import Document
+    from apps.identity.actors import actor_for_user
+
+    settings.MEDIA_ROOT = tmp_path / "media"
+    with allow_unscoped("test"):
+        smuggled = store(
+            an_image("child.png"),
+            organization=world["org"],
+            kind=Document.Kind.PHOTO,
+            actor=actor_for_user(world["boss_user"]),
+        )
+        world["event"].image = smuggled
+        world["event"].save()
+
+    response = client.get(
+        reverse("event-public-image", args=[world["event"].public_token, "image"])
+    )
+
+    assert response.status_code == 404, "a non-event document was served publicly"

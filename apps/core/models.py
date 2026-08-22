@@ -272,6 +272,16 @@ class Document(TenantScopedModel):
         #: by anything reading student photographs — the kiosk grid queries
         #: kind=PHOTO and is untouched by this.
         PROFILE_PHOTO = "profile_photo", _("Profile picture")
+        #: An event poster and a payment QR code. ⚠ Both are shown on a page
+        #: anonymous strangers can open, so they are the only document kinds
+        #: that are ever served without a session — see events/public_access.py.
+        #: They are put there deliberately by an administrator; they are not
+        #: anybody's personal data.
+        EVENT_IMAGE = "event_image", _("Event image")
+        #: A file attached to a public RSVP — proof of payment, typically.
+        #: ⚠ The opposite: uploaded by a stranger and never served back to one.
+        #: Staff only.
+        EVENT_ATTACHMENT = "event_attachment", _("Event attachment")
         OTHER = "other", _("Other")
 
     tenant_org_path = "organization_id"

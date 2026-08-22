@@ -15,7 +15,7 @@
   {% translate "Everything here appears on the invitation, and nothing else does." %}
 </p>
 
-<form method="post" class="panel px-5 py-5">
+<form method="post" enctype="multipart/form-data" class="panel px-5 py-5">
   {% csrf_token %}
   {% if form.non_field_errors %}
     <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
