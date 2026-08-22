@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% comment %}
+  The public invitation — plan §3.
+
+  ⚠ This is the only page in BokyDojo an anonymous stranger can open, and it
+  extends base.html rather than app/base.html deliberately: no navigation, no
+  account menu, no links into the application. There is nowhere to go from here.
+
+  ⚠ Every value on this page comes from the Event row. Nothing here walks a
+  relation to a person, a student, or an attendance record — see the note in
+  apps/events/models.py. The containment is structural, not a matter of being
+  careful with what we print.
+{% endcomment %}
+
+{% block title %}{{ event.name }}{% endblock %}
+
+{% block extra_head %}
+  {% if event.visibility != "public" %}
+    {# ⚠ A secret link that turns up in search results is not secret. #}
+    <meta name="robots" content="noindex, nofollow">
+  {% endif %}
+  {# No referrer: the token is in the URL, and a referrer header would hand it
+     to Google the moment somebody clicks through to the map. #}
+  <meta name="referrer" content="no-referrer">
+{% endblock %}
+
+{% block body %}
+<main class="mx-auto w-full max-w-xl px-4 py-10">
+  <div class="mb-6">
+    <p class="wordmark text-xs">
+      <span class="wordmark-strong">BOKY</span><span class="wordmark-light">DOJO</span>
+    </p>
+    <div class="obi mt-2" aria-hidden="true"></div>
+  </div>
+
+  <p class="eyebrow mb-1">{{ event.get_kind_display }}</p>
+  <h1 class="text-2xl font-bold tracking-tight">{{ event.name }}</h1>
+  {% if event.summary %}<p class="mt-1 text-gray-600">{{ event.summary }}</p>{% endif %}
+
+  <div class="panel mt-6 px-5 py-4">
+    <dl class="divide-y divide-gray-100 text-sm">
+      <div class="flex gap-4 py-2">
+        <dt class="w-24 shrink-0 text-gray-500">{% translate "When" %}</dt>
+        <dd class="min-w-0 flex-1 font-medium">
+          {{ event.starts_at|date:"l j F Y" }}<br>
+          {{ event.starts_at|date:"H:i" }}{% if event.ends_at %} – {{ event.ends_at|date:"H:i" }}{% endif %}
+        </dd>
+      </div>
+      {% if event.location_name or event.address %}
+        <div class="flex gap-4 py-2">
+          <dt class="w-24 shrink-0 text-gray-500">{% translate "Where" %}</dt>
+          <dd class="min-w-0 flex-1">
+            {% if event.location_name %}<span class="font-medium">{{ event.location_name }}</span>{% endif %}
+            {% if event.address %}<span class="block text-gray-600">{{ event.address|linebreaksbr }}</span>{% endif %}
+            {% if event.map_url %}
+              {# ⚠ A link out, not an embedded map: framing Google here would load
+                 their script into this page and report every visitor to them. #}
+              <a href="{{ event.map_url }}" target="_blank" rel="noopener noreferrer external"
+                 class="eyebrow mt-1 inline-block text-crimson-600 hover:underline">
+                {% translate "Open in Google Maps" %} →
+              </a>
+            {% endif %}
+          </dd>
+        </div>
+      {% endif %}
+      <div class="flex gap-4 py-2">
+        <dt class="w-24 shrink-0 text-gray-500">{% translate "Price" %}</dt>
+        <dd class="min-w-0 flex-1">
+          <span class="font-medium">{{ event.price_display }}</span>
+          {% if event.payment_note %}<span class="block text-gray-600">{{ event.payment_note }}</span>{% endif %}
+        </dd>
+      </div>
+    </dl>
+    {% if event.details %}
+      <div class="mt-3 border-t border-gray-200 pt-3 text-sm whitespace-pre-line">{{ event.details }}</div>
+    {% endif %}
+  </div>
+
+  {# -- the reply form ---------------------------------------------------- #}
+  {% if submitted %}
+    <div class="panel mt-6 border-l-2 border-l-green-700 px-5 py-4">
+      <p class="font-semibold text-green-900">{% translate "Thank you — your reply has been received." %}</p>
+      <p class="mt-1 text-sm text-gray-600">
+        {% translate "There is nothing else to do. Keep this page if you want the details to hand." %}
+      </p>
+    </div>
+  {% elif throttled %}
+    <div class="panel mt-6 border-l-2 border-l-amber-500 px-5 py-4">
+      <p class="font-semibold text-amber-900">{% translate "Too many replies from here just now." %}</p>
+      <p class="mt-1 text-sm text-gray-600">{% translate "Please try again a little later." %}</p>
+    </div>
+  {% elif rsvp_open %}
+    <form method="post" class="panel mt-6 px-5 py-5">
+      {% csrf_token %}
+      <h2 class="mb-1 text-base font-bold tracking-tight">{% translate "Let us know you are coming" %}</h2>
+      <p class="mb-4 text-sm text-gray-500">
+        {% translate "We only use this to know who to expect." %}
+      </p>
+      {% if form.non_field_errors %}
+        <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+      {% endif %}
+      {% for field in form %}
+        <div class="mb-4">
+          <label for="{{ field.id_for_label }}" class="eyebrow mb-1 block">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<p class="mt-1 text-xs text-gray-500">{{ field.help_text }}</p>{% endif %}
+          {% for error in field.errors %}<p class="mt-1 text-xs text-red-700">{{ error }}</p>{% endfor %}
+        </div>
+      {% endfor %}
+      <button type="submit" class="w-full bg-gray-900 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+        {% translate "Send my reply" %}
+      </button>
+    </form>
+  {% else %}
+    <div class="panel mt-6 px-5 py-4">
+      <p class="text-sm text-gray-600">{% translate "Replies for this event are closed." %}</p>
+    </div>
+  {% endif %}
+</main>
+{% endblock %}

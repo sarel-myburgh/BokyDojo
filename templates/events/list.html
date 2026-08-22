@@ -1,0 +1,61 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Events" %} — BokyDojo{% endblock %}
+
+{% block content %}
+<div class="mb-1 flex items-baseline gap-2">
+  <h1 class="text-2xl font-bold tracking-tight">{% translate "Events" %}</h1>
+  {% if may_manage %}
+    <a href="{% url 'event-create' %}" class="eyebrow ml-auto text-crimson-600 hover:underline">
+      {% translate "Add an event" %}
+    </a>
+  {% endif %}
+</div>
+<p class="mb-6 text-sm text-gray-500">
+  {% translate "Gradings, competitions, seminars — anything with a date and a guest list. Each one can produce an invitation people reply to." %}
+</p>
+
+<h2 class="eyebrow mb-2">{% translate "Coming up" %}</h2>
+<div class="panel divide-y divide-gray-200 mb-8">
+  {% for row in upcoming %}
+    <a href="{% url 'event-detail' row.event.pk %}" class="flex items-start gap-4 px-4 py-3 active:bg-gray-50">
+      <span class="w-16 shrink-0 text-sm font-semibold tabular-nums">{{ row.event.starts_at|date:"j M" }}</span>
+      <span class="min-w-0 flex-1">
+        <span class="block truncate font-medium">{{ row.event.name }}</span>
+        <span class="block text-sm text-gray-500">
+          {{ row.event.get_kind_display }}
+          {% if row.event.dojo %} · {{ row.event.dojo.name }}{% endif %}
+          {% if row.event.location_name %} · {{ row.event.location_name }}{% endif %}
+        </span>
+      </span>
+      <span class="shrink-0 text-right">
+        {% if row.event.is_published %}
+          <span class="eyebrow block text-green-700">{% translate "published" %}</span>
+        {% else %}
+          <span class="eyebrow block text-gray-400">{% translate "draft" %}</span>
+        {% endif %}
+        {% if row.rsvps %}
+          <span class="eyebrow block text-gray-500">
+            {% blocktranslate count counter=row.rsvps %}{{ counter }} reply{% plural %}{{ counter }} replies{% endblocktranslate %}
+          </span>
+        {% endif %}
+      </span>
+    </a>
+  {% empty %}
+    <p class="px-4 py-6 text-center text-sm text-gray-500">{% translate "Nothing coming up." %}</p>
+  {% endfor %}
+</div>
+
+{% if past %}
+  <h2 class="eyebrow mb-2">{% translate "Past" %}</h2>
+  <div class="panel divide-y divide-gray-200">
+    {% for row in past %}
+      <a href="{% url 'event-detail' row.event.pk %}" class="flex items-start gap-4 px-4 py-3 text-gray-500 active:bg-gray-50">
+        <span class="w-16 shrink-0 text-sm tabular-nums">{{ row.event.starts_at|date:"j M y" }}</span>
+        <span class="min-w-0 flex-1 truncate">{{ row.event.name }}</span>
+      </a>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

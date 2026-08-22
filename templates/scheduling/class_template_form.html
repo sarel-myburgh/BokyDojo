@@ -1,0 +1,57 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% if is_new %}{% translate "Add a class" %}{% else %}{{ template.name }}{% endif %} — BokyDojo{% endblock %}
+
+{% block content %}
+<p class="mb-2 text-sm">
+  <a href="{% url 'dojo-edit' dojo.pk %}" class="eyebrow hover:text-gray-900">&larr; {{ dojo.name }}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">
+  {% if is_new %}{% translate "Add a class" %}{% else %}{% translate "Edit class" %}{% endif %}
+</h1>
+<p class="mb-6 text-sm text-gray-500">
+  {% translate "A class that repeats every week. The calendar is filled in for you." %}
+</p>
+
+<form method="post" class="panel px-5 py-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  {% for field in form %}
+    {% if field.name != "days" %}
+      {% include "identity/_form_field.html" with field=field %}
+    {% endif %}
+  {% endfor %}
+
+  {% comment %}
+    Days get their own block. This is the field that decides when the class
+    actually happens, and it is a row of checkboxes rather than the RFC 5545
+    string underneath it — nobody should be asked to type FREQ=WEEKLY;BYDAY=MO.
+  {% endcomment %}
+  <fieldset class="mb-4 border-t border-gray-200 pt-4">
+    <legend class="eyebrow mb-2">{{ form.days.label }}</legend>
+    <div class="flex flex-wrap gap-2">
+      {% for choice in form.days %}
+        <label class="cursor-pointer">
+          {{ choice.tag }}
+          <span class="inline-block border border-gray-300 bg-white px-3 py-2 text-sm peer-checked:border-gray-900 peer-checked:bg-gray-900 peer-checked:text-white">
+            {{ choice.choice_label }}
+          </span>
+        </label>
+      {% endfor %}
+    </div>
+    {% if form.days.help_text %}<p class="mt-2 text-xs text-gray-500">{{ form.days.help_text }}</p>{% endif %}
+    {% for error in form.days.errors %}<p class="mt-1 text-xs text-red-700">{{ error }}</p>{% endfor %}
+  </fieldset>
+
+  <div class="flex items-center gap-3">
+    <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+      {% translate "Save" %}
+    </button>
+    <a href="{% url 'dojo-edit' dojo.pk %}" class="text-sm text-gray-500 hover:underline">{% translate "Cancel" %}</a>
+  </div>
+</form>
+{% endblock %}

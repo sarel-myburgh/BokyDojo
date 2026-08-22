@@ -1,0 +1,119 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ event.name }} — BokyDojo{% endblock %}
+
+{% block content %}
+<p class="mb-2 text-sm">
+  <a href="{% url 'event-list' %}" class="eyebrow hover:text-gray-900">&larr; {% translate "Events" %}</a>
+</p>
+<div class="mb-1 flex items-baseline gap-2">
+  <h1 class="text-2xl font-bold tracking-tight">{{ event.name }}</h1>
+  {% if may_manage %}
+    <a href="{% url 'event-edit' event.pk %}" class="eyebrow ml-auto text-crimson-600 hover:underline">{% translate "Edit" %}</a>
+  {% endif %}
+</div>
+<p class="mb-6 text-sm text-gray-500">
+  {{ event.get_kind_display }} · {{ event.starts_at|date:"l j F Y, H:i" }}
+  {% if event.dojo %} · {{ event.dojo.name }}{% endif %}
+</p>
+
+{% comment %}
+  ⚠ The sharing panel says plainly what the link does, because "anyone with the
+  link" is a security decision being made by somebody who is not thinking about
+  security — they are thinking about telling parents about a grading.
+{% endcomment %}
+<div class="panel mb-6 px-5 py-4">
+  <h2 class="mb-3 text-base font-bold tracking-tight">{% translate "The invitation" %}</h2>
+
+  {% if event.is_published %}
+    <p class="eyebrow mb-1">{% translate "Share this link" %}</p>
+    <p class="mb-3 select-all break-all border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-sm">{{ public_url }}</p>
+    {% if event.visibility == "public" %}
+      <p class="mb-3 border-l-2 border-amber-500 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        {% translate "This event is public: search engines are allowed to list it, and anybody may open it." %}
+      </p>
+    {% else %}
+      <p class="mb-3 text-sm text-gray-500">
+        {% translate "Only people you send this link to can open it, and search engines are asked to ignore it. Treat it like a password — anyone who has it can see the event and reply." %}
+      </p>
+    {% endif %}
+  {% else %}
+    <p class="mb-3 text-sm text-gray-500">
+      {% translate "Not published yet. Nobody can open the link until you publish it." %}
+    </p>
+  {% endif %}
+
+  {% if may_manage %}
+    <div class="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-3">
+      <form method="post" action="{% url 'event-publish' event.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+          {% if event.is_published %}{% translate "Unpublish" %}{% else %}{% translate "Publish" %}{% endif %}
+        </button>
+      </form>
+      <form method="post" action="{% url 'event-new-link' event.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="eyebrow text-gray-500 underline hover:text-gray-900">
+          {% translate "Issue a new link" %}
+        </button>
+      </form>
+      <span class="text-xs text-gray-500">
+        {% translate "Issuing a new link stops the old one working — use it if a link went to the wrong people." %}
+      </span>
+    </div>
+  {% endif %}
+</div>
+
+<div class="panel mb-6 px-5 py-4">
+  <h2 class="mb-3 text-base font-bold tracking-tight">{% translate "Details" %}</h2>
+  <dl class="divide-y divide-gray-100 text-sm">
+    <div class="flex gap-4 py-2">
+      <dt class="w-28 shrink-0 text-gray-500">{% translate "When" %}</dt>
+      <dd class="min-w-0 flex-1">
+        {{ event.starts_at|date:"j F Y, H:i" }}{% if event.ends_at %} – {{ event.ends_at|date:"H:i" }}{% endif %}
+      </dd>
+    </div>
+    <div class="flex gap-4 py-2">
+      <dt class="w-28 shrink-0 text-gray-500">{% translate "Where" %}</dt>
+      <dd class="min-w-0 flex-1">{{ event.location_name|default:"—" }}{% if event.address %}<span class="block text-gray-500">{{ event.address|linebreaksbr }}</span>{% endif %}</dd>
+    </div>
+    <div class="flex gap-4 py-2">
+      <dt class="w-28 shrink-0 text-gray-500">{% translate "Price" %}</dt>
+      <dd class="min-w-0 flex-1">{{ event.price_display }}{% if event.payment_note %} <span class="text-gray-500">· {{ event.payment_note }}</span>{% endif %}</dd>
+    </div>
+    <div class="flex gap-4 py-2">
+      <dt class="w-28 shrink-0 text-gray-500">{% translate "Places" %}</dt>
+      <dd class="min-w-0 flex-1">{% if event.capacity %}{{ coming_count }} / {{ event.capacity }}{% else %}{{ coming_count }} {% translate "coming" %}{% endif %}</dd>
+    </div>
+  </dl>
+</div>
+
+<div class="panel px-5 py-4">
+  <h2 class="mb-3 text-base font-bold tracking-tight">{% translate "Replies" %}</h2>
+  {% if rsvps %}
+    <ul class="divide-y divide-gray-100 text-sm">
+      {% for rsvp in rsvps %}
+        <li class="flex items-start gap-3 py-2">
+          <span class="min-w-0 flex-1">
+            <span class="block font-medium">{{ rsvp.name }}{% if rsvp.party_size > 1 %} <span class="text-gray-500">×{{ rsvp.party_size }}</span>{% endif %}</span>
+            <span class="block text-gray-500">{{ rsvp.email|default:rsvp.phone }}</span>
+            {% if rsvp.note %}<span class="block text-gray-500">{{ rsvp.note }}</span>{% endif %}
+          </span>
+          {% if may_manage %}
+            <form method="post" action="{% url 'rsvp-delete' event.pk rsvp.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="eyebrow shrink-0 text-gray-500 underline hover:text-red-700">{% translate "delete" %}</button>
+            </form>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="mt-3 text-xs text-gray-500">
+      {% translate "These people are not members — this is what they typed into the form. Delete a reply if somebody asks you to." %}
+    </p>
+  {% else %}
+    <p class="text-sm text-gray-400">{% translate "No replies yet." %}</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% if is_new %}{% translate "Add an event" %}{% else %}{{ event.name }}{% endif %} — BokyDojo{% endblock %}
+
+{% block content %}
+<p class="mb-2 text-sm">
+  <a href="{% if is_new %}{% url 'event-list' %}{% else %}{% url 'event-detail' event.pk %}{% endif %}"
+     class="eyebrow hover:text-gray-900">&larr; {% translate "Back" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">
+  {% if is_new %}{% translate "Add an event" %}{% else %}{% translate "Edit event" %}{% endif %}
+</h1>
+<p class="mb-6 text-sm text-gray-500">
+  {% translate "Everything here appears on the invitation, and nothing else does." %}
+</p>
+
+<form method="post" class="panel px-5 py-5">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+    <div class="mb-4 border-l-2 border-red-700 bg-red-50 px-3 py-2 text-sm text-red-900">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {% for field in form %}{% include "identity/_form_field.html" with field=field %}{% endfor %}
+  <div class="flex items-center gap-3">
+    <button type="submit" class="bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-white active:bg-gray-700">
+      {% translate "Save" %}
+    </button>
+    <a href="{% url 'event-list' %}" class="text-sm text-gray-500 hover:underline">{% translate "Cancel" %}</a>
+  </div>
+</form>
+{% endblock %}

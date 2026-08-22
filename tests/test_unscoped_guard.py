@@ -40,6 +40,13 @@ ALLOWED_SUFFIXES = (
 ALLOWED_FILES: set[str] = {
     "apps/core/scoping.py",  # defines allow_unscoped — must not match itself
     "apps/identity/actors.py",  # builds actor scope from user's own role assignments
+    # ⚠ The public RSVP page. A stranger holding an invitation link has no
+    # login, no organisation and therefore no Actor, so there is nothing to
+    # scope by — the secret token *is* the authorisation. Confined to this one
+    # file, which does nothing else, so the hole stays four lines long and any
+    # unscoped access added elsewhere under apps/events/ still fails this test.
+    # See test_events.py for what pins its behaviour.
+    "apps/events/public_access.py",
 }
 
 

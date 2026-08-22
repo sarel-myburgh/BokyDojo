@@ -279,10 +279,18 @@ def dojo_edit_view(request, dojo_id) -> HttpResponse:
         )
         return redirect("dojo-edit", dojo_id=dojo.pk)
 
+    from apps.scheduling.schedule_views import schedule_rows
+
     return render(
         request,
         "identity/dojo_form.html",
-        {"form": form, "dojo": dojo, "is_new": False},
+        {
+            "form": form,
+            "dojo": dojo,
+            "is_new": False,
+            # The dojo's own timetable, edited from this page — plan §1.4.
+            "schedule": schedule_rows(dojo=dojo, actor=actor),
+        },
     )
 
 

@@ -8,6 +8,7 @@ from django.views.generic import RedirectView, TemplateView
 from apps.attendance import kiosk_views
 from apps.attendance import views as attendance_views
 from apps.core import help_views
+from apps.events import views as event_views
 from apps.identity import (
     consent_views,
     guardian_views,
@@ -22,6 +23,7 @@ from apps.identity import views as identity_views
 from apps.imports import views as import_views
 from apps.ranks import ladder_views
 from apps.ranks import views as rank_views
+from apps.scheduling import schedule_views
 from apps.scheduling import views as scheduling_views
 from apps.staffing import grade_views as staffing_grade_views
 from apps.staffing import views as staffing_views
@@ -76,6 +78,42 @@ urlpatterns = [
         "password-reset/complete/",
         password_reset_views.password_reset_complete_view,
         name="password-reset-complete",
+    ),
+    # ⚠ The only route in the product an anonymous stranger may reach. Kept
+    # together and away from everything else so it is obvious what is exposed.
+    path("e/<str:token>/", event_views.event_public_view, name="event-public"),
+    path("events/", event_views.event_list_view, name="event-list"),
+    path("events/new/", event_views.event_create_view, name="event-create"),
+    path("events/<uuid:event_id>/", event_views.event_detail_view, name="event-detail"),
+    path("events/<uuid:event_id>/edit/", event_views.event_edit_view, name="event-edit"),
+    path("events/<uuid:event_id>/publish/", event_views.event_publish_view, name="event-publish"),
+    path(
+        "events/<uuid:event_id>/new-link/", event_views.event_new_link_view, name="event-new-link"
+    ),
+    path(
+        "events/<uuid:event_id>/rsvps/<uuid:rsvp_id>/delete/",
+        event_views.rsvp_delete_view,
+        name="rsvp-delete",
+    ),
+    path(
+        "settings/dojos/<uuid:dojo_id>/classes/new/",
+        schedule_views.class_template_create_view,
+        name="class-template-create",
+    ),
+    path(
+        "settings/dojos/<uuid:dojo_id>/classes/<uuid:template_id>/edit/",
+        schedule_views.class_template_edit_view,
+        name="class-template-edit",
+    ),
+    path(
+        "settings/dojos/<uuid:dojo_id>/classes/<uuid:template_id>/end/",
+        schedule_views.class_template_end_view,
+        name="class-template-end",
+    ),
+    path(
+        "settings/dojos/<uuid:dojo_id>/schedule/refresh/",
+        schedule_views.dojo_schedule_refresh_view,
+        name="dojo-schedule-refresh",
     ),
     path("help/", help_views.help_index_view, name="help"),
     path("help/<slug:slug>/", help_views.help_guide_view, name="help-guide"),

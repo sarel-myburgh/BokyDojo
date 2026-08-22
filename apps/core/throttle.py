@@ -78,6 +78,16 @@ MFA_POLICY = LockoutPolicy(
     escalation=(60, 5 * 60, 30 * 60, 60 * 60),
 )
 
+#: Public RSVP submissions. ⚠ The only unauthenticated write in the product, so
+#: the counter is per source address and deliberately tight: a form anyone can
+#: post to is a spam relay and a storage-filling primitive if it is not.
+#: Generous enough that a family replying for four children in a row is fine.
+RSVP_POLICY = LockoutPolicy(
+    max_attempts=8,
+    window_seconds=60 * 60,
+    escalation=(5 * 60, 30 * 60, 2 * 60 * 60),
+)
+
 API_POLICY = LockoutPolicy(
     max_attempts=10,
     window_seconds=60,
