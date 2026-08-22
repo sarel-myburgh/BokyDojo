@@ -156,13 +156,19 @@ def test_a_public_event_is_allowed_to_be_indexed(client, world):
     assert "noindex" not in body
 
 
-def test_the_page_sends_no_referrer_so_the_token_does_not_leak_to_google(client, world):
+def test_the_page_keeps_the_token_out_of_other_sites_referrers(client, world):
     """⚠ The token is in the URL. Clicking through to the map would otherwise
-    hand the whole secret address to Google in the Referer header."""
+    hand the whole secret address to Google in the Referer header.
+
+    ⚠ This test used to assert "no-referrer" and so locked the bug in: that
+    policy makes the browser send "Origin: null" on the page's own form post,
+    which Django's CSRF check refuses. "same-origin" sends nothing to another
+    site and a proper origin to us.
+    """
     body = client.get(public_url(world["event"])).content.decode()
 
     assert 'name="referrer"' in body
-    assert "no-referrer" in body
+    assert "same-origin" in body
 
 
 def test_the_public_page_offers_no_way_into_the_application(client, world):
@@ -1147,3 +1153,69 @@ def test_the_public_image_route_serves_only_event_images(client, world, settings
     )
 
     assert response.status_code == 404, "a non-event document was served publicly"
+
+
+# -- the two bugs that reached a published page -------------------------------
+
+
+def test_the_public_page_leaks_no_template_comments(client, world):
+    """⚠ Django's {# #} is single-line only; a multi-line one renders as text.
+
+    Four of them shipped to the top of a live invitation. The existing guard
+    against this enumerates pages in the attendance and report tests, and the
+    public event page was in neither — a page nobody had added to the list.
+    """
+    body = client.get(public_url(world["event"])).content.decode()
+
+    assert "{#" not in body
+    assert "endcomment" not in body
+    assert "referrer header" not in body, "a comment about the referrer is being rendered"
+
+
+def test_a_browser_style_post_is_not_rejected_as_cross_site(client, world):
+    """⚠ The regression that made every reply fail with 403 Forbidden.
+
+    The page carried <meta name="referrer" content="no-referrer">, which makes
+    browsers send "Origin: null" on its own form post, and Django's CSRF check
+    refuses a null origin. curl sends no Origin at all, so every test and every
+    manual walk-through passed while the form was broken for real people.
+
+    This posts with an Origin header, the way a browser does.
+    """
+    from django.test import Client
+
+    csrf_client = Client(enforce_csrf_checks=True)
+    page = csrf_client.get(public_url(world["event"]))
+    token = page.cookies["csrftoken"].value
+
+    response = csrf_client.post(
+        public_url(world["event"]),
+        {
+            "name": "Dara",
+            "email": "d@example.com",
+            "party_size": 1,
+            "phone": "",
+            "note": "",
+            "csrfmiddlewaretoken": token,
+        },
+        HTTP_ORIGIN="http://testserver",
+    )
+
+    assert response.status_code != 403, "a browser-shaped reply was refused as cross-site"
+    with allow_unscoped("test"):
+        assert EventRsvp.objects.filter(event=world["event"]).exists()
+
+
+def test_the_page_still_keeps_the_token_away_from_other_sites(client, world):
+    """⚠ The reason the policy exists at all. It may not be relaxed to nothing:
+    the token is in the URL, and the map link goes to Google."""
+    body = client.get(public_url(world["event"])).content.decode()
+
+    assert 'name="referrer"' in body
+    assert "same-origin" in body
+    assert "no-referrer" not in body, "no-referrer breaks the form's own CSRF check"
+    # And every outbound link carries its own suppression besides.
+    for line in body.splitlines():
+        if "google.com/maps" in line or "event.payment_url" in line:
+            continue
+    assert 'rel="noopener noreferrer external"' in body

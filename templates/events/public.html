@@ -21,9 +21,21 @@
     {# ⚠ A secret link that turns up in search results is not secret. #}
     <meta name="robots" content="noindex, nofollow">
   {% endif %}
-  {# No referrer: the token is in the URL, and a referrer header would hand it
-     to Google the moment somebody clicks through to the map. #}
-  <meta name="referrer" content="no-referrer">
+  {% comment %}
+    ⚠ same-origin, NOT no-referrer, and the difference is not cosmetic.
+
+    The token is in this page's URL, so it must never travel to Google when
+    somebody taps through to the map — that is what a referrer policy is for
+    here. But "no-referrer" also makes the browser send "Origin: null" on this
+    page's own form post, and Django's CSRF check rejects a null origin: every
+    reply came back 403 Forbidden. curl never sends an Origin header, so the
+    tests and the manual walk-through both missed it.
+
+    "same-origin" sends the full referrer only to us and nothing at all to
+    another site, which protects the token and leaves the form working. The
+    outbound links carry rel="noreferrer" of their own besides.
+  {% endcomment %}
+  <meta name="referrer" content="same-origin">
 {% endblock %}
 
 {% block body %}
@@ -36,8 +48,10 @@
   </div>
 
   {% if event.image %}
-    {# The poster. Served from our own origin by the event's token — never a
-       remote URL, which would leak every visitor to whoever hosts it. #}
+    {% comment %}
+      The poster. Served from our own origin by the event's token — never a
+      remote URL, which would leak every visitor to whoever hosts it.
+    {% endcomment %}
     <img src="{% url 'event-public-image' event.public_token 'image' %}" alt=""
          class="mb-5 w-full border border-gray-200 object-cover">
   {% endif %}
@@ -62,8 +76,10 @@
             {% if event.location_name %}<span class="font-medium">{{ event.location_name }}</span>{% endif %}
             {% if event.address %}<span class="block text-gray-600">{{ event.address|linebreaksbr }}</span>{% endif %}
             {% if event.map_url %}
-              {# ⚠ A link out, not an embedded map: framing Google here would load
-                 their script into this page and report every visitor to them. #}
+              {% comment %}
+                ⚠ A link out, not an embedded map: framing Google here would
+                load their script into this page and report every visitor.
+              {% endcomment %}
               <a href="{{ event.map_url }}" target="_blank" rel="noopener noreferrer external"
                  class="eyebrow mt-1 inline-block text-crimson-600 hover:underline">
                 {% translate "Open in Google Maps" %} →
@@ -78,9 +94,11 @@
           <span class="font-medium">{{ event.price_display }}</span>
           {% if event.payment_note %}<span class="block text-gray-600">{{ event.payment_note }}</span>{% endif %}
           {% if event.payment_url %}
-            {# ⚠ The scheme is checked as http/https when it is saved. A
-               javascript: URL in this href would be scripting handed over by an
-               administrator who pasted something they were sent. #}
+            {% comment %}
+              ⚠ The scheme is checked as http/https when it is saved. A
+              javascript: URL in this href would be scripting handed over by an
+              administrator who pasted something they were sent.
+            {% endcomment %}
             <a href="{{ event.payment_url }}" target="_blank" rel="noopener noreferrer external"
                class="eyebrow mt-1 inline-block text-crimson-600 hover:underline">
               {% translate "Pay with this link" %} →
