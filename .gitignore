@@ -52,3 +52,9 @@ desktop.ini
 *.swp
 *~
 
+# ---------------------------------------------------------------------------
+# Local handoff notes. ⚠ Deliberately untracked: it carries machine paths and a
+# throwaway development password, and it describes the working session rather
+# than the product. The tracked equivalents are TODO.md and project_plan.md.
+# ---------------------------------------------------------------------------
+/HANDOFF.md
