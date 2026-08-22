@@ -416,3 +416,265 @@ def test_the_token_is_long_enough_to_be_a_secret():
 
     assert len(tokens) == 200
     assert all(len(t) >= 30 for t in tokens)
+
+
+# -- custom questions ---------------------------------------------------------
+
+
+@pytest.fixture
+def question(world):
+    from apps.events.models import EventFormField
+
+    with allow_unscoped("test"):
+        return EventFormField.objects.create(
+            event=world["event"],
+            label="Current grade",
+            kind=EventFormField.Kind.TEXT,
+            is_required=True,
+            order=0,
+        )
+
+
+def test_a_custom_question_appears_on_the_public_form(client, world, question):
+    body = client.get(public_url(world["event"])).content.decode()
+
+    assert "Current grade" in body
+
+
+def test_a_required_custom_question_is_enforced(client, world, question):
+    client.post(
+        public_url(world["event"]),
+        {"name": "Dara", "email": "d@example.com", "party_size": 1, "phone": "", "note": ""},
+    )
+
+    with allow_unscoped("test"):
+        assert not EventRsvp.objects.filter(event=world["event"]).exists()
+
+
+def test_the_answer_is_stored_against_the_reply(client, world, question):
+    client.post(
+        public_url(world["event"]),
+        {
+            "name": "Dara",
+            "email": "d@example.com",
+            "party_size": 1,
+            "phone": "",
+            "note": "",
+            question.field_name: "3rd Kyu",
+        },
+    )
+
+    with allow_unscoped("test"):
+        rsvp = EventRsvp.objects.get(event=world["event"])
+    assert rsvp.answers[str(question.pk)]["value"] == "3rd Kyu"
+    # ⚠ The label is copied in beside the id so a later rename does not turn
+    # this answer into a value nobody can interpret.
+    assert rsvp.answers[str(question.pk)]["label"] == "Current grade"
+
+
+def test_one_events_questions_never_appear_on_another(client, world):
+    """⚠ The form is built per request from this event's own questions. A
+    class-level field would leak one event's form onto the other's page."""
+    from apps.events.models import EventFormField
+
+    with allow_unscoped("test"):
+        other = Event.objects.create(
+            organization=world["org"],
+            name="Other Event",
+            starts_at=timezone.now() + datetime.timedelta(days=5),
+            is_published=True,
+        )
+        EventFormField.objects.create(event=other, label="Weight category", order=0)
+
+    body = client.get(public_url(world["event"])).content.decode()
+
+    assert "Weight category" not in body
+
+
+def test_a_choice_question_offers_only_its_own_options(client, world):
+    from apps.events.models import EventFormField
+
+    with allow_unscoped("test"):
+        EventFormField.objects.create(
+            event=world["event"],
+            label="T-shirt size",
+            kind=EventFormField.Kind.CHOICE,
+            options="Small\nMedium\nLarge",
+            order=1,
+        )
+
+    body = client.get(public_url(world["event"])).content.decode()
+
+    assert "T-shirt size" in body
+    for size in ("Small", "Medium", "Large"):
+        assert size in body
+
+
+def test_a_choice_question_needs_at_least_two_options(world):
+    from django.core.exceptions import ValidationError
+
+    from apps.events.models import EventFormField
+
+    field = EventFormField(
+        event=world["event"], label="Pick", kind=EventFormField.Kind.CHOICE, options="Only one"
+    )
+
+    with pytest.raises(ValidationError):
+        field.clean()
+
+
+def test_an_instructor_cannot_change_the_form(client, world):
+    client.force_login(world["teacher_user"])
+
+    assert client.get(reverse("event-form-builder", args=[world["event"].pk])).status_code == 403
+
+
+def test_an_admin_can_add_a_question(client, world):
+    from apps.events.models import EventFormField
+
+    client.force_login(world["boss_user"])
+
+    client.post(
+        reverse("event-form-builder", args=[world["event"].pk]),
+        {"label": "Any allergies?", "kind": "paragraph", "help_text": "", "options": ""},
+    )
+
+    with allow_unscoped("test"):
+        assert EventFormField.objects.filter(event=world["event"], label="Any allergies?").exists()
+
+
+def test_removing_a_question_keeps_answers_already_given(client, world, question):
+    """⚠ Deleting a question changes what is asked next. It is not permission to
+    rewrite what people already told you."""
+    client.post(
+        public_url(world["event"]),
+        {
+            "name": "Dara",
+            "email": "d@example.com",
+            "party_size": 1,
+            "phone": "",
+            "note": "",
+            question.field_name: "3rd Kyu",
+        },
+    )
+    client.force_login(world["boss_user"])
+
+    client.post(reverse("event-form-field-delete", args=[world["event"].pk, question.pk]))
+
+    body = client.get(reverse("event-attendees", args=[world["event"].pk])).content.decode()
+    assert "3rd Kyu" in body, "an answer disappeared when its question was removed"
+    assert "no longer asked" in body
+
+
+# -- who is coming ------------------------------------------------------------
+
+
+def test_the_attendee_list_counts_replies_and_heads(client, world):
+    """⚠ Two different numbers. One family replying for four is one line and
+    four people, and the door needs the second."""
+    with allow_unscoped("test"):
+        EventRsvp.objects.create(event=world["event"], name="A", email="a@e.com", party_size=4)
+        EventRsvp.objects.create(event=world["event"], name="B", email="b@e.com", party_size=1)
+    client.force_login(world["boss_user"])
+
+    response = client.get(reverse("event-attendees", args=[world["event"].pk]))
+
+    assert response.context["reply_count"] == 2
+    assert response.context["head_count"] == 5
+
+
+def test_the_attendee_list_shows_custom_answers(client, world, question):
+    with allow_unscoped("test"):
+        EventRsvp.objects.create(
+            event=world["event"],
+            name="Dara",
+            email="d@e.com",
+            answers={str(question.pk): {"label": "Current grade", "value": "3rd Kyu"}},
+        )
+    client.force_login(world["boss_user"])
+
+    body = client.get(reverse("event-attendees", args=[world["event"].pk])).content.decode()
+
+    assert "Current grade" in body
+    assert "3rd Kyu" in body
+
+
+def test_the_attendee_list_is_scoped_to_the_organisation(client, world):
+    client.force_login(world["boss_user"])
+
+    response = client.get(reverse("event-attendees", args=[world["elsewhere_event"].pk]))
+
+    assert response.status_code == 404
+
+
+# -- the spreadsheet ----------------------------------------------------------
+
+
+def test_the_export_downloads_as_a_spreadsheet(client, world, question):
+    with allow_unscoped("test"):
+        EventRsvp.objects.create(
+            event=world["event"],
+            name="Dara Sok",
+            email="dara@example.com",
+            party_size=2,
+            answers={str(question.pk): {"label": "Current grade", "value": "3rd Kyu"}},
+        )
+    client.force_login(world["boss_user"])
+
+    response = client.get(reverse("event-attendees-export", args=[world["event"].pk]))
+    body = response.content.decode()
+
+    assert response.status_code == 200
+    assert "text/csv" in response["Content-Type"]
+    assert "attachment" in response["Content-Disposition"]
+    assert "Dara Sok" in body
+    assert "Current grade" in body
+    assert "3rd Kyu" in body
+
+
+def test_the_export_neutralises_spreadsheet_formulas(client, world, question):
+    """⚠ These values were typed by anonymous members of the public. A cell
+    starting with "=" is a formula that runs when an administrator opens the
+    file in Excel — this is the one export in the product fed by strangers."""
+    with allow_unscoped("test"):
+        EventRsvp.objects.create(
+            event=world["event"],
+            name="=cmd|'/c calc'!A1",
+            email="x@example.com",
+            answers={str(question.pk): {"label": "Current grade", "value": "+1+1"}},
+        )
+    client.force_login(world["boss_user"])
+
+    body = client.get(reverse("event-attendees-export", args=[world["event"].pk])).content.decode()
+
+    assert "\"'=cmd" in body or "'=cmd" in body
+    assert "'+1+1" in body
+    for line in body.splitlines()[1:]:
+        for cell in line.split(","):
+            stripped = cell.strip().strip('"')
+            assert not stripped.startswith(("=", "+", "@")), f"unescaped formula cell: {cell!r}"
+
+
+def test_the_export_is_audited(client, world):
+    """⚠ csv_report_response writes the audit entry before releasing the file,
+    and refuses the download if that write fails. A list of people is leaving
+    the system; who took it and when is the record that matters afterwards."""
+    from apps.core.models import AuditLog
+
+    with allow_unscoped("test"):
+        EventRsvp.objects.create(event=world["event"], name="A", email="a@e.com")
+        before = AuditLog.objects.count()
+    client.force_login(world["boss_user"])
+
+    client.get(reverse("event-attendees-export", args=[world["event"].pk]))
+
+    with allow_unscoped("test"):
+        assert AuditLog.objects.count() > before
+
+
+def test_the_export_cannot_reach_another_organisation(client, world):
+    client.force_login(world["boss_user"])
+
+    response = client.get(reverse("event-attendees-export", args=[world["elsewhere_event"].pk]))
+
+    assert response.status_code == 404

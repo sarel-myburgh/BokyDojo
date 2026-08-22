@@ -163,6 +163,69 @@ class Event(TenantScopedModel):
         return timezone.now() < (self.ends_at or self.starts_at)
 
 
+class EventFormField(TenantScopedModel):
+    """An extra question on one event's reply form — plan §3.
+
+    ⚠ Deliberately per event, not a reusable form library. A grading asks for a
+    licence number and a current grade; a competition asks for weight and
+    category; a social asks about dietary needs. A shared form would grow every
+    question any event ever needed and show all of them to everybody.
+
+    ⚠ Whoever adds a question here is choosing what personal data a member of
+    the public hands over, and the form is the only place it is ever explained.
+    The builder screen says so. Nothing in code can stop somebody asking for a
+    passport number, but nothing should make it look routine either.
+    """
+
+    tenant_org_path = "event__organization_id"
+    same_organization_fields = ("event",)
+
+    class Kind(models.TextChoices):
+        TEXT = "text", _("Short answer")
+        PARAGRAPH = "paragraph", _("Long answer")
+        NUMBER = "number", _("Number")
+        CHOICE = "choice", _("Pick one")
+        CHECKBOX = "checkbox", _("Tick box")
+
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="form_fields")
+    label = models.CharField(_("question"), max_length=120)
+    kind = models.CharField(
+        _("answer type"), max_length=20, choices=Kind.choices, default=Kind.TEXT
+    )
+    help_text = models.CharField(_("hint"), max_length=200, blank=True)
+    is_required = models.BooleanField(_("required"), default=False)
+    #: One option per line for CHOICE. Stored as text rather than a related
+    #: table: these are half a dozen words that only this question ever uses.
+    options = models.TextField(_("options"), blank=True)
+    order = models.PositiveSmallIntegerField(_("order"), default=0)
+
+    class Meta:
+        verbose_name = _("event form question")
+        verbose_name_plural = _("event form questions")
+        ordering = ("order", "created_at")
+
+    def __str__(self) -> str:
+        return self.label
+
+    @property
+    def option_list(self) -> list[str]:
+        return [line.strip() for line in (self.options or "").splitlines() if line.strip()]
+
+    @property
+    def field_name(self) -> str:
+        """⚠ Keyed on the primary key, never on the label.
+
+        A label can be renamed or repeated; answers already stored under it
+        would then be orphaned or collide silently.
+        """
+        return f"q_{self.pk.hex if hasattr(self.pk, 'hex') else self.pk}"
+
+    def clean(self):
+        super().clean()
+        if self.kind == self.Kind.CHOICE and len(self.option_list) < 2:
+            raise ValidationError({"options": _("Give at least two options, one per line.")})
+
+
 class EventRsvp(TenantScopedModel):
     """Somebody replying to an invitation.
 
@@ -190,6 +253,13 @@ class EventRsvp(TenantScopedModel):
     status = models.CharField(
         _("status"), max_length=12, choices=Status.choices, default=Status.COMING
     )
+    #: Answers to this event's own questions, keyed by field id.
+    #:
+    #: ⚠ Never queried into. JSONField's ``__contains`` raises NotSupportedError
+    #: on SQLite, which is what the tests run on, so a filter written against
+    #: this would pass in development and fail in production. It is read and
+    #: written whole, for display and for the export.
+    answers = models.JSONField(_("answers"), default=dict, blank=True)
 
     class Meta:
         verbose_name = _("RSVP")

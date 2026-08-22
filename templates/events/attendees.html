@@ -1,0 +1,84 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% comment %}
+  Who is coming — plan §3. The list an organiser works from on the day, so the
+  headline numbers are replies and heads: one family replying for four is one
+  line and four people, and the door needs the second number.
+{% endcomment %}
+
+{% block title %}{% translate "Who is coming" %} — {{ event.name }}{% endblock %}
+
+{% block content %}
+<p class="mb-2 text-sm">
+  <a href="{% url 'event-detail' event.pk %}" class="eyebrow hover:text-gray-900">&larr; {{ event.name }}</a>
+</p>
+<div class="mb-1 flex items-baseline gap-2">
+  <h1 class="text-2xl font-bold tracking-tight">{% translate "Who is coming" %}</h1>
+  <a href="{% url 'event-attendees-export' event.pk %}" class="eyebrow ml-auto text-crimson-600 hover:underline">
+    {% translate "Download spreadsheet" %}
+  </a>
+</div>
+<p class="mb-6 text-sm text-gray-500">
+  {{ event.name }} · {{ event.starts_at|date:"j F Y, H:i" }}
+</p>
+
+<div class="panel mb-6 grid grid-cols-2 divide-x divide-gray-200">
+  <div class="px-5 py-4">
+    <p class="eyebrow mb-1">{% translate "Replies" %}</p>
+    <p class="text-3xl font-bold tabular-nums tracking-tight">{{ reply_count }}</p>
+  </div>
+  <div class="px-5 py-4">
+    <p class="eyebrow mb-1">{% translate "People expected" %}</p>
+    <p class="text-3xl font-bold tabular-nums tracking-tight">
+      {{ head_count }}{% if event.capacity %}<span class="text-lg text-gray-400"> / {{ event.capacity }}</span>{% endif %}
+    </p>
+  </div>
+</div>
+
+{% if rows %}
+  {# Wide tables scroll inside their own box rather than the page. #}
+  <div class="panel overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-200 text-left">
+          <th class="eyebrow px-4 py-3">{% translate "Name" %}</th>
+          <th class="eyebrow px-4 py-3">{% translate "Contact" %}</th>
+          <th class="eyebrow px-4 py-3 text-right">{% translate "People" %}</th>
+          {% for column in columns %}
+            <th class="eyebrow px-4 py-3 whitespace-nowrap">
+              {{ column.label }}
+              {% if not column.is_live %}
+                <span class="block font-normal normal-case tracking-normal text-gray-400">
+                  {% translate "no longer asked" %}
+                </span>
+              {% endif %}
+            </th>
+          {% endfor %}
+          <th class="eyebrow px-4 py-3">{% translate "Notes" %}</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for row in rows %}
+          <tr class="{% if row.rsvp.status != 'coming' %}text-gray-400 line-through{% endif %}">
+            <td class="px-4 py-3 font-medium">{{ row.rsvp.name }}</td>
+            <td class="px-4 py-3 text-gray-500">{{ row.rsvp.email|default:row.rsvp.phone }}</td>
+            <td class="px-4 py-3 text-right tabular-nums">{{ row.rsvp.party_size }}</td>
+            {% for cell in row.cells %}
+              <td class="px-4 py-3">{{ cell|default:"—" }}</td>
+            {% endfor %}
+            <td class="px-4 py-3 text-gray-500">{{ row.rsvp.note|default:"" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="mt-3 text-xs text-gray-500">
+    {% translate "These people are not members — this is what they typed into the reply form." %}
+  </p>
+{% else %}
+  <p class="border border-dashed border-gray-300 px-4 py-10 text-center text-sm text-gray-500">
+    {% translate "Nobody has replied yet." %}
+  </p>
+{% endif %}
+{% endblock %}

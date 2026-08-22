@@ -86,6 +86,26 @@ urlpatterns = [
     path("events/new/", event_views.event_create_view, name="event-create"),
     path("events/<uuid:event_id>/", event_views.event_detail_view, name="event-detail"),
     path("events/<uuid:event_id>/edit/", event_views.event_edit_view, name="event-edit"),
+    path(
+        "events/<uuid:event_id>/attendees/",
+        event_views.event_attendees_view,
+        name="event-attendees",
+    ),
+    path(
+        "events/<uuid:event_id>/attendees/export/",
+        event_views.event_attendees_export_view,
+        name="event-attendees-export",
+    ),
+    path(
+        "events/<uuid:event_id>/form/",
+        event_views.event_form_builder_view,
+        name="event-form-builder",
+    ),
+    path(
+        "events/<uuid:event_id>/form/<uuid:field_id>/delete/",
+        event_views.event_form_field_delete_view,
+        name="event-form-field-delete",
+    ),
     path("events/<uuid:event_id>/publish/", event_views.event_publish_view, name="event-publish"),
     path(
         "events/<uuid:event_id>/new-link/", event_views.event_new_link_view, name="event-new-link"

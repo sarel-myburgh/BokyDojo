@@ -7,7 +7,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.identity.models import Dojo
 
-from .models import Event, EventRsvp
+from .models import Event, EventFormField, EventRsvp
 
 TEXT = "w-full border border-gray-300 bg-white px-3 py-2 text-sm"
 
@@ -153,8 +153,102 @@ class RsvpForm(forms.ModelForm):
             "email": _("Either an email or a phone number is enough."),
         }
 
+    def __init__(self, *args, questions=None, **kwargs):
+        """``questions`` are this event's own extra fields, appended in order.
+
+        ⚠ Built per instance rather than declared on the class: two events open
+        at once have different questions, and a class-level field would leak one
+        event's form onto the other's page.
+        """
+        super().__init__(*args, **kwargs)
+        self.questions = list(questions or [])
+        for question in self.questions:
+            self.fields[question.field_name] = _field_for(question)
+
     def clean_party_size(self):
         size = self.cleaned_data.get("party_size") or 1
         if size < 1 or size > 50:
             raise forms.ValidationError(_("Between 1 and 50 people."))
         return size
+
+    def answers(self) -> dict:
+        """What was typed into the custom questions, keyed by field id.
+
+        ⚠ Stored against the question's id and label together. The id is what
+        matches an answer to its question; the label is copied in so a rename —
+        or a deleted question — does not turn last month's replies into
+        anonymous values nobody can interpret.
+        """
+        collected = {}
+        for question in self.questions:
+            value = self.cleaned_data.get(question.field_name)
+            if value in (None, "", []):
+                continue
+            collected[str(question.pk)] = {"label": question.label, "value": value}
+        return collected
+
+    def custom_fields(self):
+        """The bound custom fields, for rendering them apart from the fixed ones."""
+        return [self[question.field_name] for question in self.questions]
+
+
+def _field_for(question: EventFormField) -> forms.Field:
+    """One Django field for one admin-defined question."""
+    common = {
+        "label": question.label,
+        "required": question.is_required,
+        "help_text": question.help_text,
+    }
+    kind = question.kind
+    if kind == EventFormField.Kind.PARAGRAPH:
+        return forms.CharField(
+            max_length=1000, widget=forms.Textarea(attrs={"class": TEXT, "rows": 3}), **common
+        )
+    if kind == EventFormField.Kind.NUMBER:
+        return forms.IntegerField(widget=forms.NumberInput(attrs={"class": TEXT}), **common)
+    if kind == EventFormField.Kind.CHOICE:
+        return forms.ChoiceField(
+            choices=[("", "—")] + [(o, o) for o in question.option_list],
+            widget=forms.Select(attrs={"class": TEXT}),
+            **common,
+        )
+    if kind == EventFormField.Kind.CHECKBOX:
+        # ⚠ required on a tick box means "must be ticked" — that is what it means
+        # in HTML too, and it is how a waiver acknowledgement has to behave.
+        return forms.BooleanField(widget=forms.CheckboxInput(), **common)
+    # ⚠ Capped. This is a public text box and the only thing between it and a
+    # database full of somebody's novel is this number.
+    return forms.CharField(max_length=200, widget=forms.TextInput(attrs={"class": TEXT}), **common)
+
+
+class EventFormFieldForm(forms.ModelForm):
+    """Adding a question to an event's form."""
+
+    class Meta:
+        model = EventFormField
+        fields = ("label", "kind", "help_text", "options", "is_required")
+        widgets = {
+            "label": forms.TextInput(attrs={"class": TEXT, "autofocus": True}),
+            "kind": forms.Select(attrs={"class": TEXT}),
+            "help_text": forms.TextInput(attrs={"class": TEXT}),
+            "options": forms.Textarea(attrs={"class": TEXT, "rows": 4}),
+        }
+        labels = {
+            "label": _("Question"),
+            "kind": _("Answer type"),
+            "help_text": _("Hint below the question"),
+            "options": _("Options"),
+            "is_required": _("They must answer this"),
+        }
+        help_texts = {
+            "label": _('What you want to ask — "Current grade", "Any allergies?"'),
+            "options": _('Only for "Pick one". One option per line.'),
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        kind = cleaned.get("kind")
+        options = [ln.strip() for ln in (cleaned.get("options") or "").splitlines() if ln.strip()]
+        if kind == EventFormField.Kind.CHOICE and len(options) < 2:
+            self.add_error("options", _("Give at least two options, one per line."))
+        return cleaned

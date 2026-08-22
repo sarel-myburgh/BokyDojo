@@ -21,7 +21,7 @@ apps/events/ makes that test fail — which is the point.
 
 from __future__ import annotations
 
-from .models import Event, EventRsvp
+from .models import Event, EventFormField, EventRsvp
 
 
 def published_event_by_token(token: str) -> Event | None:
@@ -33,6 +33,21 @@ def published_event_by_token(token: str) -> Event | None:
         .select_related("organization", "dojo")
         .filter(public_token=token, is_published=True)
         .first()
+    )
+
+
+def questions_for(event: Event) -> list[EventFormField]:
+    """The extra questions on one event's form.
+
+    ⚠ Scoped by the event, which was itself resolved from the secret token — so
+    the organisation is decided by the token here too. The reverse relation
+    cannot be used directly: it refuses to evaluate without an actor, and a
+    stranger has none.
+    """
+    return list(
+        EventFormField.objects.unscoped("public invitation: questions of a token-resolved event")
+        .filter(event=event)
+        .order_by("order", "created_at")
     )
 
 

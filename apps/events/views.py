@@ -20,9 +20,9 @@ from apps.core.throttle import RSVP_POLICY, Throttled, enforce, register_failure
 from apps.identity.models import GovernanceModel, Organization
 from apps.identity.permissions import Action, PermissionDenied, can
 
-from .forms import EventForm, RsvpForm
-from .models import Event, EventRsvp
-from .public_access import published_event_by_token, save_public_rsvp
+from .forms import EventForm, EventFormFieldForm, RsvpForm
+from .models import Event, EventFormField, EventRsvp
+from .public_access import published_event_by_token, questions_for, save_public_rsvp
 
 
 def _organization(actor) -> Organization:
@@ -226,6 +226,11 @@ def _published_event(token: str) -> Event:
     return event
 
 
+def _questions(event: Event) -> list:
+    """This event's own questions — see public_access.questions_for."""
+    return questions_for(event)
+
+
 @csrf_protect
 @vary_on_cookie
 @require_http_methods(["GET", "POST"])
@@ -238,7 +243,8 @@ def event_public_view(request, token):
     with personal data in it.
     """
     event = _published_event(token)
-    form = RsvpForm()
+    questions = _questions(event)
+    form = RsvpForm(questions=questions)
     submitted = False
 
     if request.method == "POST":
@@ -252,19 +258,20 @@ def event_public_view(request, token):
                 "events/public.html",
                 {
                     "event": event,
-                    "form": RsvpForm(),
+                    "form": RsvpForm(questions=questions),
                     "throttled": True,
                     "rsvp_open": event.rsvps_are_open,
                 },
                 status=429,
             )
 
-        form = RsvpForm(request.POST)
+        form = RsvpForm(request.POST, questions=questions)
         if not event.rsvps_are_open:
             form.add_error(None, _("Replies for this event are closed."))
         elif form.is_valid():
             rsvp = form.save(commit=False)
             rsvp.event = event
+            rsvp.answers = form.answers()
             try:
                 rsvp.full_clean(validate_unique=False, validate_constraints=False)
             except ValidationError as exc:
@@ -272,7 +279,7 @@ def event_public_view(request, token):
             else:
                 save_public_rsvp(rsvp)
                 submitted = True
-                form = RsvpForm()
+                form = RsvpForm(questions=questions)
 
         # ⚠ Every POST counts, successful or not. This is a rate limit on a form
         # anybody can reach, not a failure counter: a valid submission is
@@ -289,3 +296,191 @@ def event_public_view(request, token):
             "rsvp_open": event.rsvps_are_open,
         },
     )
+
+
+# -- who is coming ------------------------------------------------------------
+
+
+def _answer_columns(event: Event, *, actor) -> list:
+    """The questions to show as columns, live ones first.
+
+    ⚠ Includes questions that have since been deleted, recovered from the
+    answers themselves. Somebody who replied to a question that was later
+    removed still answered it, and dropping the column would quietly discard
+    what they said.
+    """
+    live = list(
+        EventFormField.objects.for_actor(actor).filter(event=event).order_by("order", "created_at")
+    )
+    columns = [{"key": str(q.pk), "label": q.label, "is_live": True} for q in live]
+    seen = {c["key"] for c in columns}
+
+    for rsvp in EventRsvp.objects.for_actor(actor).filter(event=event):
+        for key, answer in (rsvp.answers or {}).items():
+            if key in seen:
+                continue
+            seen.add(key)
+            columns.append(
+                {
+                    "key": key,
+                    "label": (answer or {}).get("label") or _("(deleted question)"),
+                    "is_live": False,
+                }
+            )
+    return columns
+
+
+def _cell(rsvp: EventRsvp, key: str):
+    answer = (rsvp.answers or {}).get(key)
+    if not isinstance(answer, dict):
+        return ""
+    value = answer.get("value")
+    if isinstance(value, bool):
+        return _("Yes") if value else _("No")
+    return "" if value is None else value
+
+
+@login_required
+def event_attendees_view(request, event_id):
+    """Who is coming — the list an organiser works from on the day."""
+    event = get_object_or_404(
+        Event.objects.for_actor(request.actor).select_related("dojo"), pk=event_id
+    )
+    rsvps = list(
+        EventRsvp.objects.for_actor(request.actor).filter(event=event).order_by("created_at")
+    )
+    columns = _answer_columns(event, actor=request.actor)
+    coming = [r for r in rsvps if r.status == EventRsvp.Status.COMING]
+
+    return render(
+        request,
+        "events/attendees.html",
+        {
+            "event": event,
+            "columns": columns,
+            "rows": [
+                {"rsvp": rsvp, "cells": [_cell(rsvp, column["key"]) for column in columns]}
+                for rsvp in rsvps
+            ],
+            "reply_count": len(coming),
+            "head_count": sum(r.party_size for r in coming),
+            "may_manage": can(
+                request.actor,
+                Action.ORG_EDIT,
+                _organization(request.actor),
+                governance_model=GovernanceModel.CENTRAL,
+            ),
+        },
+    )
+
+
+@login_required
+def event_attendees_export_view(request, event_id):
+    """The same list as a spreadsheet.
+
+    ⚠ Goes through csv_report_response, which audits the export before releasing
+    the file and neutralises leading =, +, - and @ in every cell. That matters
+    more here than anywhere else in the product: these values were typed by
+    anonymous members of the public, and a cell beginning with "=" is a formula
+    that runs when an administrator opens the file in Excel.
+    """
+    from apps.core.reports import csv_report_response
+
+    event = get_object_or_404(Event.objects.for_actor(request.actor), pk=event_id)
+    rsvps = list(
+        EventRsvp.objects.for_actor(request.actor).filter(event=event).order_by("created_at")
+    )
+    columns = _answer_columns(event, actor=request.actor)
+
+    header = [
+        str(_("Name")),
+        str(_("Email")),
+        str(_("Phone")),
+        str(_("People")),
+        str(_("Status")),
+        str(_("Replied")),
+        str(_("Notes")),
+    ] + [column["label"] for column in columns]
+
+    rows = [
+        [
+            rsvp.name,
+            rsvp.email,
+            rsvp.phone,
+            rsvp.party_size,
+            rsvp.get_status_display(),
+            timezone.localtime(rsvp.created_at).strftime("%Y-%m-%d %H:%M"),
+            rsvp.note,
+        ]
+        + [_cell(rsvp, column["key"]) for column in columns]
+        for rsvp in rsvps
+    ]
+
+    slug = "".join(c if c.isalnum() else "-" for c in event.name).strip("-").lower() or "event"
+    return csv_report_response(
+        filename=f"{slug}-replies.csv",
+        header=header,
+        rows=rows,
+        actor=request.actor,
+    )
+
+
+# -- building the form --------------------------------------------------------
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def event_form_builder_view(request, event_id):
+    """Add and remove the questions on this event's reply form."""
+    _require_manage(request.actor)
+    event = get_object_or_404(Event.objects.for_actor(request.actor), pk=event_id)
+    form = EventFormFieldForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        question = form.save(commit=False)
+        question.event = event
+        last = (
+            EventFormField.objects.for_actor(request.actor)
+            .filter(event=event)
+            .order_by("-order")
+            .first()
+        )
+        question.order = (last.order + 1) if last else 0
+        question.save()
+        audit.record_change("create", question, actor=request.actor)
+        messages.success(request, _("Question added to the form."))
+        return redirect("event-form-builder", event_id=event.pk)
+
+    return render(
+        request,
+        "events/form_builder.html",
+        {
+            "event": event,
+            "form": form,
+            "questions": list(
+                EventFormField.objects.for_actor(request.actor)
+                .filter(event=event)
+                .order_by("order", "created_at")
+            ),
+            "public_url": request.build_absolute_uri(_public_path(event)),
+        },
+    )
+
+
+@login_required
+@require_POST
+def event_form_field_delete_view(request, event_id, field_id):
+    """⚠ Removes the question, never the answers.
+
+    Replies already given keep what they said — the attendee list recovers the
+    column from the answers themselves. Deleting a question is a change to what
+    is asked next, not permission to rewrite what people already told you.
+    """
+    _require_manage(request.actor)
+    event = get_object_or_404(Event.objects.for_actor(request.actor), pk=event_id)
+    question = get_object_or_404(
+        EventFormField.objects.for_actor(request.actor).filter(event=event), pk=field_id
+    )
+    question.delete()
+    messages.success(request, _("Question removed from the form."))
+    return redirect("event-form-builder", event_id=event.pk)

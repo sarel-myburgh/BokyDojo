@@ -103,7 +103,9 @@
       {% endif %}
       {% for field in form %}
         <div class="mb-4">
-          <label for="{{ field.id_for_label }}" class="eyebrow mb-1 block">{{ field.label }}</label>
+          <label for="{{ field.id_for_label }}" class="eyebrow mb-1 block">
+            {{ field.label }}{% if field.field.required %} <span class="text-crimson-600" aria-hidden="true">*</span>{% endif %}
+          </label>
           {{ field }}
           {% if field.help_text %}<p class="mt-1 text-xs text-gray-500">{{ field.help_text }}</p>{% endif %}
           {% for error in field.errors %}<p class="mt-1 text-xs text-red-700">{{ error }}</p>{% endfor %}
