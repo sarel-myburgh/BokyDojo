@@ -3,7 +3,7 @@
 # TODO 0.1.7 — dev, test, lint, migrate, seed, backup, restore
 # =============================================================================
 
-.PHONY: dev test lint format migrate seed backup restore shell check venv install bandit audit
+.PHONY: dev test lint format migrate seed backup restore shell check venv install bandit audit bump
 
 # -- Interpreter ---------------------------------------------------------------
 #
@@ -95,6 +95,11 @@ restore:
 # ⚠ Both of these are CI's and were previously invisible locally, which is how a
 # mark_safe call reached CI having passed `make check`. Every gate CI runs must
 # be runnable here, or "green locally" means nothing.
+# ⚠ Run before every push. The patch number goes up each time so the badge in
+# the running app can be compared against what was deployed.
+bump:
+	$(PYTHON) scripts/bump-version.py
+
 bandit:
 	$(PYTHON) -m bandit -r apps/ -c pyproject.toml --severity-level medium
 

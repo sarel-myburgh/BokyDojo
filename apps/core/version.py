@@ -13,9 +13,17 @@ import os
 import subprocess
 from functools import lru_cache
 
-#: Bumped by hand. Not derived from git tags: this is the number a person quotes
-#: in a bug report, and it should not change every commit.
-VERSION = "0.1"
+#: MAJOR.MINOR.PATCH, and the rule for changing it is not the usual one.
+#:
+#: ⚠ The PATCH number goes up by one on **every push**, whether the change is a
+#: feature or a typo. That is deliberate: the number exists so somebody looking
+#: at a running container can say which build it is and whether it moved, and a
+#: version that only changes on a release cannot answer that. Run
+#: ``make bump`` — it is one command precisely so it does not get skipped.
+#:
+#: ⚠ MAJOR and MINOR change only when Sarel asks. Do not decide on your own that
+#: a change is big enough to be 0.2.
+VERSION = "0.1.0"
 
 
 @lru_cache(maxsize=1)

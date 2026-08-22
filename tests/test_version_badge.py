@@ -8,6 +8,9 @@ answerable.
 
 from __future__ import annotations
 
+import pathlib
+import re
+
 import pytest
 from django.urls import reverse
 
@@ -46,18 +49,76 @@ def user():
         return User.objects.create_user("mei@example.com", PASSWORD, person=person)
 
 
-def test_the_version_starts_at_0_1():
-    assert VERSION == "0.1"
+def test_the_version_is_three_numbers():
+    """⚠ MAJOR.MINOR.PATCH, checked so a hand-edit cannot leave "0.1" or
+    "0.1.0-rc1" behind — the bump script matches this shape exactly and silently
+    does nothing if it does not find it."""
+    import re
+
+    assert re.fullmatch(r"\d+\.\d+\.\d+", VERSION), VERSION
 
 
-def test_the_badge_shows_the_version_and_the_commit(monkeypatch):
+def test_the_bump_script_moves_the_patch_number(tmp_path, monkeypatch):
+    """⚠ The command that has to be run before every push. If it stops working,
+    the badge silently stops moving and stale containers become invisible
+    again."""
+    import subprocess
+    import sys
+
+    source = pathlib.Path("apps/core/version.py").read_text(encoding="utf-8")
+    try:
+        for expected in ("0.0.1", "0.0.2"):
+            pathlib.Path("apps/core/version.py").write_text(
+                re.sub(r'VERSION = "[^"]+"', f'VERSION = "{_previous(expected)}"', source),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [sys.executable, "scripts/bump-version.py"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            assert result.stdout.strip() == expected
+    finally:
+        pathlib.Path("apps/core/version.py").write_text(source, encoding="utf-8")
+
+
+def _previous(version: str) -> str:
+    major, minor, patch = (int(p) for p in version.split("."))
+    return f"{major}.{minor}.{patch - 1}"
+
+
+def test_the_bump_script_can_raise_minor_and_major(tmp_path):
+    """⚠ Only ever on request — never a judgement call made here."""
+    import subprocess
+    import sys
+
+    source = pathlib.Path("apps/core/version.py").read_text(encoding="utf-8")
+    try:
+        for flag, expected in (("--minor", "0.4.0"), ("--major", "1.0.0")):
+            pathlib.Path("apps/core/version.py").write_text(
+                re.sub(r'VERSION = "[^"]+"', 'VERSION = "0.3.7"', source), encoding="utf-8"
+            )
+            result = subprocess.run(
+                [sys.executable, "scripts/bump-version.py", flag],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            assert result.stdout.strip() == expected
+    finally:
+        pathlib.Path("apps/core/version.py").write_text(source, encoding="utf-8")
+
+
+def test_the_badge_shows_all_three_numbers_and_the_commit(monkeypatch):
     """⚠ The commit is the load-bearing half. A version number that only moves on
     a release cannot tell you whether the container restarted."""
     build_revision.cache_clear()
     monkeypatch.setenv("BOKYDOJO_REVISION", "abcdef1234567890")  # pragma: allowlist secret
 
     try:
-        assert display_version() == "v0.1 (abcdef1)"
+        assert display_version() == f"v{VERSION} (abcdef1)"
+        assert display_version().count(".") == 2
     finally:
         build_revision.cache_clear()
 
