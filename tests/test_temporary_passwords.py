@@ -305,7 +305,7 @@ def test_logging_out_is_still_possible_while_held(client, world):
     assert client.post(reverse("logout")).status_code in (302, 200)
 
 
-def test_a_temporary_password_does_not_bypass_a_second_factor(client, world, settings):
+def test_a_temporary_password_defers_but_never_bypasses_a_second_factor(client, world, settings):
     """⚠ It replaces the first factor and nothing else.
 
     Enforcement is switched on *after* issuing: with it on beforehand the
@@ -322,11 +322,28 @@ def test_a_temporary_password_does_not_bypass_a_second_factor(client, world, set
         )
     settings.MFA_ENFORCEMENT_ENABLED = True
 
-    response = client.post(reverse("login"), {"email": "mei@example.com", "password": password})
+    response = client.post(
+        reverse("login"), {"email": "mei@example.com", "password": password}, follow=True
+    )
 
-    # Sent to the second factor, not to the application.
-    assert response.status_code == 302
-    assert "2fa" in response["Location"]
+    # ⚠ The password change comes first now, and that is the fix rather than a
+    # regression: a temporary password is a secret the administrator also knows,
+    # and sending somebody to set up an authenticator app first leaves it live
+    # for the length of the enrolment — permanently, if they give up halfway.
+    assert response.request["PATH_INFO"] == reverse("password-change")
+    assert reverse("mfa-setup") not in [step[0] for step in response.redirect_chain]
+
+    # ⚠ And the second factor is deferred, not skipped. The application is still
+    # closed until they enrol; only the order changed.
+    chosen = "a-passphrase-they-picked"  # pragma: allowlist secret
+    client.post(
+        reverse("password-change"),
+        {"old_password": password, "new_password1": chosen, "new_password2": chosen},
+    )
+
+    landed = client.get(reverse("today"))
+    assert landed.status_code == 302
+    assert "2fa" in landed["Location"], "MFA was skipped rather than deferred"
 
 
 # -- the password policy -------------------------------------------------------

@@ -393,6 +393,27 @@ def test_the_student_page_offers_archiving_to_an_instructor(client, world):
     assert reverse("student-archive", args=[world["child"].pk]) in body
 
 
+def test_the_student_page_offers_removal_to_an_org_admin(client, world):
+    """⚠ Students never appear in the staff list, so this was the only page an
+    administrator could reach one from — and it offered archiving and no way to
+    remove. The control existed and was unreachable, which is indistinguishable
+    from broken."""
+    client.force_login(world["boss_user"])
+
+    body = client.get(reverse("student-detail", args=[world["child"].pk])).content.decode()
+
+    assert reverse("person-delete", args=[world["child"].pk]) in body
+
+
+def test_the_student_page_hides_removal_from_an_instructor(client, world):
+    client.force_login(world["teacher_user"])
+
+    body = client.get(reverse("student-detail", args=[world["child"].pk])).content.decode()
+
+    assert reverse("person-delete", args=[world["child"].pk]) not in body
+    assert reverse("student-archive", args=[world["child"].pk]) in body
+
+
 def test_the_person_page_offers_removal_only_to_those_who_may(client, world):
     client.force_login(world["boss_user"])
     allowed = client.get(reverse("person-detail", args=[world["teacher"].pk])).content.decode()

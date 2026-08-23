@@ -403,3 +403,131 @@ def test_the_banner_links_to_enrolment_and_security_settings_reaches_it_too(clie
     body = client.get(reverse("today")).content.decode()
 
     assert body.count(reverse("mfa-setup")) >= 2, "expected the banner link and the menu link"
+
+
+# -- the shipped default, and the order things happen in ----------------------
+
+
+def test_the_env_templates_state_the_default_explicitly():
+    """⚠ Both templates were silent about this switch, so a deployment that had
+    been set to true by hand — back when enforcement was the design — kept that
+    value through every later release with nothing on screen or in the file to
+    say so. It surfaced as "MFA is still compulsory" on a build where the code
+    default had been false for days.
+
+    Writing it out means the value is visible in the file and has to be changed
+    on purpose.
+    """
+    import pathlib as _pathlib
+
+    for name in (".env.example", "scripts/init-env.sh"):
+        text = _pathlib.Path(name).read_text(encoding="utf-8")
+        assert "DJANGO_MFA_ENFORCEMENT=false" in text, f"{name} does not state the default"
+        assert "DJANGO_MFA_ENFORCEMENT=true" not in text, f"{name} ships it switched on"
+
+
+def test_the_code_default_is_off_in_every_settings_module():
+    """⚠ Asserted against the source, because no test can observe it otherwise.
+
+    config/settings/test.py pins the value to False for the suite's own
+    convenience, so every test runs with enforcement off regardless of what base
+    and prod actually default to. Flipping base back to True therefore breaks
+    nothing in the suite while making the product compulsory again — which a
+    mutation demonstrated. This reads the line instead.
+    """
+    import pathlib as _pathlib
+    import re as _re
+
+    for name in ("config/settings/base.py", "config/settings/prod.py"):
+        text = _pathlib.Path(name).read_text(encoding="utf-8")
+        match = _re.search(
+            r'MFA_ENFORCEMENT_ENABLED = env_bool\("DJANGO_MFA_ENFORCEMENT", (\w+)\)', text
+        )
+        assert match, f"{name} no longer sets the switch the expected way"
+        assert match.group(1) == "False", (
+            f"{name} defaults MFA enforcement to {match.group(1)} — it must ship off"
+        )
+
+
+def test_a_temporary_password_is_changed_before_enrolment_even_when_enforced(
+    client, world, settings
+):
+    """⚠ The ordering bug behind the report, reproduced with enforcement ON.
+
+    A temporary password is a secret the administrator also knows. Sending
+    somebody to set up an authenticator app before they replace it leaves that
+    shared secret live for the length of the enrolment, and permanently if they
+    abandon it halfway. The password change goes first; the enrolment screen is
+    waiting immediately afterwards.
+    """
+    from apps.identity.actors import actor_for_user
+    from apps.identity.passwords import set_temporary_password
+
+    settings.MFA_ENFORCEMENT_ENABLED = True
+
+    with allow_unscoped("test"):
+        newcomer = Person.objects.create(
+            organization=world["org"], given_name="Andy", family_name="Kent"
+        )
+        RoleAssignment.objects.create(
+            organization=world["org"],
+            person=newcomer,
+            role=Role.ORG_ADMIN,
+            scope_type=ScopeType.ORG,
+        )
+        RoleAssignment.objects.create(
+            organization=world["org"],
+            person=newcomer,
+            role=Role.DOJO_ADMIN,
+            scope_type=ScopeType.DOJO,
+            dojo=Dojo.objects.for_organization(world["org"].pk).first(),
+        )
+        user = User.objects.create_user("andy@example.com", PASSWORD, person=newcomer)
+
+    temporary = set_temporary_password(user=user, actor=actor_for_user(world["boss_user"]))
+
+    signed_in = client.post(
+        reverse("login"),
+        {"email": "andy@example.com", "password": temporary},
+        follow=True,
+    )
+
+    assert signed_in.request["PATH_INFO"] == reverse("password-change")
+    assert reverse("mfa-setup") not in [step[0] for step in signed_in.redirect_chain]
+
+    chosen = "a-passphrase-andy-picked"  # pragma: allowlist secret
+    client.post(
+        reverse("password-change"),
+        {"old_password": temporary, "new_password1": chosen, "new_password2": chosen},
+    )
+
+    # ⚠ Deferred, never skipped: with enforcement on, the app stays shut until
+    # he enrols.
+    after = client.get(reverse("today"))
+    assert after.status_code == 302
+    assert "2fa" in after["Location"]
+
+
+def test_a_confirmed_second_factor_is_still_demanded_first(client, world, settings):
+    """⚠ The line the reordering must not cross.
+
+    Enrolment is provisioning and can wait behind a password change. A
+    *confirmed* credential is authentication, and nothing — including choosing a
+    new password — may happen on a half-authenticated session.
+    """
+    from apps.identity.actors import actor_for_user
+    from apps.identity.passwords import set_temporary_password
+
+    settings.MFA_ENFORCEMENT_ENABLED = True
+    credential = ensure_credential(world["boss_user"])
+    confirm_credential(credential, current_totp(credential.totp_secret))
+
+    with allow_unscoped("test"):
+        other = User.objects.get(pk=world["teacher_user"].pk)
+    temporary = set_temporary_password(user=world["boss_user"], actor=actor_for_user(other))
+
+    response = client.post(
+        reverse("login"), {"email": "ops@example.com", "password": temporary}, follow=True
+    )
+
+    assert response.request["PATH_INFO"] == reverse("mfa-challenge")

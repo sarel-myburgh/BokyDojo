@@ -168,11 +168,26 @@ def login_view(request) -> HttpResponse:
         return render(request, "auth/login.html", context, status=401)
 
     credential = get_credential(user)
-    if user_requires_mfa(user) or (credential is not None and credential.is_confirmed):
-        if credential is None:
-            credential = ensure_credential(user)
+
+    # ⚠ A confirmed second factor is *authentication* and always comes first.
+    # Nothing else may happen on a half-authenticated session.
+    if credential is not None and credential.is_confirmed:
         _begin_pending_mfa(request, user, context["next"])
-        return redirect("mfa-challenge" if credential.is_confirmed else "mfa-setup")
+        return redirect("mfa-challenge")
+
+    # ⚠ Enrolment is provisioning, not authentication, and it waits behind a
+    # forced password change.
+    #
+    # Somebody signing in with a temporary password is using a secret their
+    # administrator also knows. Sending them to set up an authenticator app
+    # first leaves that shared password live for however long the enrolment
+    # takes — and if they give up halfway, permanently. Changing it first closes
+    # that in one step; the enrolment screen is waiting immediately afterwards
+    # because the middleware still requires it.
+    if user_requires_mfa(user) and not user.must_change_password:
+        credential = ensure_credential(user)
+        _begin_pending_mfa(request, user, context["next"])
+        return redirect("mfa-setup")
 
     return _finish_login(request, user, mfa_verified=False)
 

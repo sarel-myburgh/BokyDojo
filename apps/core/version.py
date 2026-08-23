@@ -23,7 +23,7 @@ from functools import lru_cache
 #:
 #: ⚠ MAJOR and MINOR change only when Sarel asks. Do not decide on your own that
 #: a change is big enough to be 0.2.
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 
 
 @lru_cache(maxsize=1)

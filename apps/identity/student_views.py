@@ -589,6 +589,12 @@ def student_detail_view(request, person_id):
             # them while archiving is not.
             "may_archive": can(actor, Action.STUDENT_ARCHIVE, profile, governance_model=governance),
             "is_archived": profile.status == ARCHIVE_STATUS,
+            # ⚠ Students are never in the staff list, so without this the only
+            # way to remove one was to type the URL. Archiving was reachable and
+            # removal was not, which read as "removal is broken".
+            "may_delete": can(
+                actor, Action.PERSON_DELETE, profile.person, governance_model=governance
+            ),
             "may_award_rank": can(actor, Action.RANK_AWARD, profile, governance_model=governance),
             "status_form": StudentStatusTransitionForm(current_status=profile.status),
             "attendance": attendance,

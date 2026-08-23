@@ -26,10 +26,17 @@ class MfaEnforcementMiddleware:
             return self.get_response(request)
         user = getattr(request, "user", None)
         url_name = resolve(request.path_info).url_name
+        # ⚠ Deferred while a forced password change is outstanding — see the
+        # note in the login view. The temporary password is a secret the
+        # administrator also knows, and replacing it comes before setting up an
+        # authenticator app. This middleware runs before the password-change one,
+        # so without this check it wins and the order is reversed.
+        must_change = bool(getattr(user, "must_change_password", False))
         if (
             user is not None
             and user.is_authenticated
             and url_name not in MFA_ALLOWED_URL_NAMES
+            and not must_change
             and user_requires_mfa(user)
             and MFA_VERIFIED_AT_KEY not in request.session
         ):

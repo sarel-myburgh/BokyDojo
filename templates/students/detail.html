@@ -35,6 +35,15 @@
   student off the roll when they stop coming is a thing the person teaching
   them needs to do; editing their medical record is not.
 {% endcomment %}
+{% if may_delete %}
+  <p class="mb-4 text-sm">
+    <a href="{% url 'person-delete' profile.person_id %}" class="text-red-800 underline hover:text-red-900">
+      {% translate "Remove this person from the organisation" %}
+    </a>
+    <span class="text-gray-500">— {% translate "stronger than archiving; read the page before confirming" %}</span>
+  </p>
+{% endif %}
+
 {% if may_archive %}
   <div class="mb-4 rounded-lg border border-gray-200 bg-white px-4 py-3">
     {% if is_archived %}

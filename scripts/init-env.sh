@@ -81,6 +81,13 @@ SMTP_USE_TLS=true
 BOKYDOJO_HTTP_PORT=8080
 BOKYDOJO_HTTPS_PORT=8443
 
+# Two-step verification. ⚠ false is the shipped behaviour: enrolment is
+# encouraged and never required. Setting this true locks privileged users out
+# until they enrol an authenticator app, which is unrecoverable if the phone is
+# lost and there is no working SMTP. Written explicitly rather than omitted so
+# that it is visible in the file and has to be changed on purpose.
+DJANGO_MFA_ENFORCEMENT=false
+
 # The domain Caddy serves and requests a certificate for. Leave as localhost for
 # a local trial (Caddy issues an internal self-signed certificate).
 DOMAIN=localhost
