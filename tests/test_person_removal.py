@@ -430,3 +430,100 @@ def test_the_page_never_offers_to_remove_yourself(client, world):
     body = client.get(reverse("person-detail", args=[world["boss"].pk])).content.decode()
 
     assert reverse("person-delete", args=[world["boss"].pk]) not in body
+
+
+# -- the two ways a person could go missing from the staff list ---------------
+
+
+def test_a_removed_person_is_gone_from_the_staff_list(client, world):
+    """⚠ The reported bug. RoleAssignment is not soft-deletable, so every query
+    joining to Person had to remember to exclude removed ones by itself. The
+    staff list did not, so removed people stayed listed — and 404ed on the
+    click, because Person's own manager had already stopped returning them."""
+    delete_person(person=world["teacher"], actor=actor(world["boss_user"]))
+    client.force_login(world["boss_user"])
+
+    body = client.get(reverse("org-settings")).content.decode()
+
+    assert "Mei" not in body
+    assert reverse("person-detail", args=[world["teacher"].pk]) not in body
+
+
+def test_no_scoped_role_query_can_surface_a_removed_person(world):
+    """⚠ Fixed at the manager rather than at the call site, because there were a
+    dozen call sites and no way to tell which had remembered."""
+    from apps.identity.models import RoleAssignment
+
+    delete_person(person=world["teacher"], actor=actor(world["boss_user"]))
+
+    for_actor = RoleAssignment.objects.for_actor(actor(world["boss_user"])).filter(
+        person=world["teacher"]
+    )
+    for_org = RoleAssignment.objects.for_organization(world["org"].pk).filter(
+        person=world["teacher"]
+    )
+
+    assert not for_actor.exists()
+    assert not for_org.exists()
+
+
+def test_actor_construction_still_sees_its_own_assignments(world):
+    """⚠ The one path that must keep reading them unfiltered: it uses unscoped()
+    and guards on the person's deleted_at itself. Filtering there would be
+    harmless today and wrong the moment the guard moved."""
+    rebuilt = actor(world["boss_user"])
+
+    assert rebuilt.organization_id == world["org"].pk
+    assert rebuilt.roles
+
+
+def test_revoking_every_role_does_not_hide_somebody(client, world):
+    """⚠ The second thing reported, and it is not the same as removal.
+
+    Taking the last role away used to drop somebody off this page entirely:
+    still in the database, still reachable by anyone who knew the URL, but with
+    no route back to grant them another role or remove them properly.
+    """
+    from apps.identity.models import RoleAssignment
+
+    with allow_unscoped("test"):
+        RoleAssignment.objects.filter(person=world["teacher"]).update(revoked_at=timezone.now())
+    client.force_login(world["boss_user"])
+
+    body = client.get(reverse("org-settings")).content.decode()
+
+    assert "Mei" in body, "somebody with no roles fell off the staff list"
+    assert reverse("person-detail", args=[world["teacher"].pk]) in body
+    assert "no roles" in body
+
+
+def test_somebody_with_no_roles_can_be_given_one_again(client, world):
+    """⚠ The point of keeping them listed."""
+    from apps.identity.models import RoleAssignment
+
+    with allow_unscoped("test"):
+        RoleAssignment.objects.filter(person=world["teacher"]).update(revoked_at=timezone.now())
+    client.force_login(world["boss_user"])
+
+    client.post(
+        reverse("role-grant", args=[world["teacher"].pk]),
+        {"role": Role.INSTRUCTOR, "scope": "dojo", "dojo": str(world["dojo"].pk)},
+    )
+
+    with allow_unscoped("test"):
+        assert RoleAssignment.objects.filter(
+            person=world["teacher"], revoked_at__isnull=True
+        ).exists()
+
+
+def test_revoking_a_role_leaves_the_person_alone(world):
+    """⚠ Revoking a role is not deleting a person, and nothing should blur it."""
+    from apps.identity.models import RoleAssignment
+
+    with allow_unscoped("test"):
+        RoleAssignment.objects.filter(person=world["teacher"]).update(revoked_at=timezone.now())
+        world["teacher"].refresh_from_db()
+        login = User.objects.get(pk=world["teacher_user"].pk)
+
+    assert not world["teacher"].is_deleted
+    assert login.is_active is True

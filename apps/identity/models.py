@@ -282,6 +282,32 @@ class ScopeType(models.TextChoices):
     DOJO = "dojo", _("Dojo")
 
 
+class LivePersonQuerySet(ScopedQuerySet):
+    """Scoped queryset that also hides rows belonging to a removed person.
+
+    ⚠ At the manager rather than at each call site, and the difference is not
+    style. RoleAssignment is not itself soft-deletable, so every query joining
+    to Person had to remember ``person__deleted_at__isnull=True`` on its own.
+    One of them did; the staff list did not, and removed people kept appearing
+    there — clickable, and 404ing, because Person's own manager had already
+    stopped returning them. There were a dozen such call sites and no way to
+    know which had got it right.
+
+    ⚠ Not applied to ``unscoped()``: actor construction reads assignments that
+    way, and it guards on the person's deleted_at itself.
+    """
+
+    def for_actor(self, actor) -> LivePersonQuerySet:
+        return super().for_actor(actor).filter(person__deleted_at__isnull=True)
+
+    def for_organization(self, organization_id) -> LivePersonQuerySet:
+        return super().for_organization(organization_id).filter(person__deleted_at__isnull=True)
+
+
+class LivePersonManager(models.Manager.from_queryset(LivePersonQuerySet)):
+    pass
+
+
 class RoleAssignment(TenantScopedModel):
     """A (person, role, scope) triple. A person may hold several.
 
@@ -316,7 +342,7 @@ class RoleAssignment(TenantScopedModel):
     granted_at = models.DateTimeField(default=timezone.now)
     revoked_at = models.DateTimeField(null=True, blank=True)
 
-    objects = ScopedManager()
+    objects = LivePersonManager()
 
     class Meta:
         verbose_name = _("role assignment")

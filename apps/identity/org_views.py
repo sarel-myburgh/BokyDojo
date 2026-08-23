@@ -343,19 +343,32 @@ def student_create_view(request) -> HttpResponse:
 
 
 def _role_rows(actor):
-    """Everybody holding a live staff role, with all of their roles."""
+    """Everybody who holds — or has held — a staff role in this organisation.
+
+    ⚠ Revoked assignments are counted when deciding *who* to list, and ignored
+    when deciding *what they can do*. Take somebody's last role away and they
+    used to disappear from this page altogether: still in the database, still
+    able to be looked up by anyone who knew the URL, but with no route back to
+    grant them another role or remove them properly. Revoking a role is not
+    deleting a person, and the screen should not blur the two.
+
+    ⚠ Removed people are excluded, but not by anything written here — see
+    LivePersonManager. This query used to show them and 404 on the click,
+    because Person's own manager had already stopped returning them.
+    """
     from apps.identity.org_forms import STAFF_ROLES
 
     assignments = (
         RoleAssignment.objects.for_actor(actor)
-        .filter(revoked_at__isnull=True, role__in=STAFF_ROLES)
+        .filter(role__in=STAFF_ROLES)
         .select_related("person", "dojo")
         .order_by("person__family_name", "person__given_name")
     )
     people: dict = {}
     for assignment in assignments:
         entry = people.setdefault(assignment.person_id, {"person": assignment.person, "roles": []})
-        entry["roles"].append(assignment)
+        if assignment.revoked_at is None:
+            entry["roles"].append(assignment)
     return list(people.values())
 
 

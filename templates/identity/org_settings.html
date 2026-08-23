@@ -126,7 +126,16 @@
     {% for row in staff %}
       <a href="{% url 'person-detail' row.person.pk %}" class="flex items-start gap-4 px-4 py-3 active:bg-gray-50">
         <span class="min-w-0 flex-1">
-          <span class="block truncate font-medium">{{ row.person.full_name }}</span>
+          <span class="block truncate font-medium">
+            {{ row.person.full_name }}
+            {% if not row.roles %}
+              {% comment %}
+                ⚠ Listed on purpose. Revoking every role does not delete
+                somebody, and hiding them here left no way to grant another.
+              {% endcomment %}
+              <span class="eyebrow text-amber-700">{% translate "no roles" %}</span>
+            {% endif %}
+          </span>
           <span class="block text-sm text-gray-500">
             {% for a in row.roles %}{{ a.get_role_display }}{% if not forloop.last %} · {% endif %}{% endfor %}
           </span>
