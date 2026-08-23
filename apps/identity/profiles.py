@@ -210,10 +210,19 @@ def person_page_context(*, person: Person, actor: Actor) -> dict:
     from apps.staffing.grade_forms import StaffGradeForm
 
     may_record_grade = administers_person(actor, person)
+    # ⚠ Never on yourself: delete_person refuses it anyway, and offering a
+    # button that always fails is worse than not offering it.
+    may_delete = not is_self(actor, person) and can(
+        actor,
+        Action.PERSON_DELETE,
+        person,
+        governance_model=_governance(person),
+    )
     return {
         "person": person,
         "photo": current_profile_photo(person=person, actor=actor),
         "may_record_grade": may_record_grade,
+        "may_delete": may_delete,
         "grade_form": StaffGradeForm(actor=actor, person=person) if may_record_grade else None,
         "is_self": is_self(actor, person),
         "may_edit": may_edit_person(actor, person),

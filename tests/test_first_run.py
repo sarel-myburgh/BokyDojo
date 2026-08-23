@@ -81,6 +81,31 @@ def test_setup_creates_org_dojo_owner_and_mandatory_admin_role(client, settings)
     assert login.url == reverse("mfa-setup")
 
 
+def test_the_first_owner_signs_straight_in_by_default(client, settings):
+    """⚠ The very first sign-in on a brand new installation, with the shipped
+    settings rather than forced ones.
+
+    The test above deliberately turns enforcement ON to check that path still
+    works. Nothing checked the default, which is the one every real deployment
+    uses — so "MFA is compulsory on first sign in" could be reported twice while
+    the suite stayed green.
+    """
+    assert settings.MFA_ENFORCEMENT_ENABLED is False, "the shipped default is off"
+
+    client.post(reverse("first-run"), payload())
+    user = User.objects.get(email="owner@example.com")
+
+    login = client.post(
+        reverse("login"),
+        {"email": user.email, "password": PASSWORD},
+        follow=True,
+    )
+
+    assert login.request["PATH_INFO"] != reverse("mfa-setup")
+    assert reverse("mfa-setup") not in [step[0] for step in login.redirect_chain]
+    assert client.get(reverse("today")).status_code == 200
+
+
 def test_setup_closes_permanently_after_installation(client):
     client.post(reverse("first-run"), payload())
 

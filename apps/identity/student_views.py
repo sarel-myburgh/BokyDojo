@@ -34,7 +34,7 @@ from .forms import (
     StudentSegmentCreateForm,
     StudentStatusTransitionForm,
 )
-from .lifecycle import bulk_transition_student_status, transition_student_status
+from .lifecycle import ARCHIVE_STATUS, bulk_transition_student_status, transition_student_status
 from .medical import view_do_not_spar
 from .models import (
     ConsentPolicy,
@@ -584,6 +584,11 @@ def student_detail_view(request, person_id):
             "may_change_status": can(
                 actor, Action.PERSON_EDIT, profile, governance_model=governance
             ),
+            # ⚠ A narrower right than may_change_status: instructors hold it and
+            # do not hold PERSON_EDIT, so the status form above is closed to
+            # them while archiving is not.
+            "may_archive": can(actor, Action.STUDENT_ARCHIVE, profile, governance_model=governance),
+            "is_archived": profile.status == ARCHIVE_STATUS,
             "may_award_rank": can(actor, Action.RANK_AWARD, profile, governance_model=governance),
             "status_form": StudentStatusTransitionForm(current_status=profile.status),
             "attendance": attendance,

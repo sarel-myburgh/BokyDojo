@@ -30,6 +30,14 @@ class Action:
     PERSON_EDIT = "person.edit"
     PERSON_CREATE = "person.create"
     PERSON_EXPORT = "person.export"
+    #: ⚠ Removing somebody from the organisation entirely. Its own action rather
+    #: than part of PERSON_EDIT, because editing a phone number and erasing a
+    #: colleague are not the same power — front desk holds the first.
+    PERSON_DELETE = "person.delete"
+    #: ⚠ Taking a student off the active roll. Narrower than PERSON_EDIT on
+    #: purpose: instructors need this and must not thereby gain the right to
+    #: edit medical records, which PERSON_EDIT carries.
+    STUDENT_ARCHIVE = "student.archive"
 
     MEDICAL_VIEW = "medical.view"
     MEDICAL_EDIT = "medical.edit"
@@ -71,6 +79,8 @@ class Action:
 ROLE_ACTIONS: dict[str, set[str]] = {
     Role.ORG_ADMIN: {
         Action.ORG_EDIT,
+        Action.PERSON_DELETE,
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.DOJO_EDIT,
         Action.DOJO_CREATE,
@@ -98,6 +108,9 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         Action.REPORT_VIEW_FINANCIAL,
     },
     Role.DOJO_ADMIN: {
+        # ⚠ Archives students but cannot delete a person — that stays with an
+        # organisation administrator, because it reaches across every dojo.
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.DOJO_EDIT,
         Action.PERSON_VIEW,
@@ -123,6 +136,7 @@ ROLE_ACTIONS: dict[str, set[str]] = {
         Action.REPORT_VIEW_FINANCIAL,
     },
     Role.INSTRUCTOR: {
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.PERSON_VIEW,
         Action.MEDICAL_VIEW,  # allergies matter mid-class

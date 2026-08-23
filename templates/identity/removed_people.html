@@ -1,0 +1,36 @@
+{% extends "app/base.html" %}
+{% load i18n %}
+
+{% block title %}{% translate "Removed people" %} — BokyDojo{% endblock %}
+
+{% block content %}
+<p class="mb-2 text-sm">
+  <a href="{% url 'org-settings' %}" class="text-gray-500 hover:underline">← {% translate "Organization settings" %}</a>
+</p>
+<h1 class="text-2xl font-bold tracking-tight mb-1">{% translate "Removed people" %}</h1>
+<p class="mb-6 text-sm text-gray-500">
+  {% translate "Everyone who has been removed. Their history is still in the record, and you can bring them back." %}
+</p>
+
+<div class="panel divide-y divide-gray-200">
+  {% for person in people %}
+    <div class="flex items-center gap-4 px-4 py-3">
+      <span class="min-w-0 flex-1">
+        <span class="block truncate font-medium">{{ person.full_name }}</span>
+        <span class="block text-sm text-gray-500">
+          {% blocktranslate with when=person.deleted_at|date:"j M Y" %}Removed {{ when }}{% endblocktranslate %}
+          {% if person.deleted_by %} · {{ person.deleted_by.full_name }}{% endif %}
+        </span>
+      </span>
+      <form method="post" action="{% url 'person-restore' person.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="eyebrow text-crimson-600 underline hover:text-crimson-700">
+          {% translate "bring back" %}
+        </button>
+      </form>
+    </div>
+  {% empty %}
+    <p class="px-4 py-6 text-center text-sm text-gray-500">{% translate "Nobody has been removed." %}</p>
+  {% endfor %}
+</div>
+{% endblock %}

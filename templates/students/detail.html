@@ -27,6 +27,40 @@
   </div>
 </header>
 
+{% comment %}
+  Archiving — plan §3.
+
+  ⚠ Separate from "change student status", and offered to instructors, who do
+  not hold PERSON_EDIT and therefore cannot use that form at all. Taking a
+  student off the roll when they stop coming is a thing the person teaching
+  them needs to do; editing their medical record is not.
+{% endcomment %}
+{% if may_archive %}
+  <div class="mb-4 rounded-lg border border-gray-200 bg-white px-4 py-3">
+    {% if is_archived %}
+      <p class="text-sm text-gray-600">
+        {% translate "Archived — off the active roll. Everything they did is still here." %}
+      </p>
+      <form method="post" action="{% url 'student-unarchive' profile.person_id %}" class="mt-2">
+        {% csrf_token %}
+        <button type="submit" class="text-sm font-medium text-crimson-600 underline">
+          {% translate "Put back on the active roll" %}
+        </button>
+      </form>
+    {% else %}
+      <p class="text-sm text-gray-600">
+        {% translate "Stopped training? Archive them. They come off the roll and out of class lists, and nothing they did is lost." %}
+      </p>
+      <form method="post" action="{% url 'student-archive' profile.person_id %}" class="mt-2">
+        {% csrf_token %}
+        <button type="submit" class="text-sm font-medium text-crimson-600 underline">
+          {% translate "Archive this student" %}
+        </button>
+      </form>
+    {% endif %}
+  </div>
+{% endif %}
+
 {% if may_change_status %}
 <details class="mt-4 rounded-xl border border-gray-200 bg-white">
   <summary class="cursor-pointer px-4 py-3 font-medium">{% translate "Change student status" %}</summary>

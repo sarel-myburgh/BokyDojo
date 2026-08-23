@@ -106,6 +106,7 @@ def organization_settings_view(request) -> HttpResponse:
             # is gone, and a silent truncation here would simply hide people.
             "staff": _role_rows(actor),
             "may_assign_roles": _holds_anywhere(actor, Action.ROLE_ASSIGN),
+            "may_delete_people": _holds_anywhere(actor, Action.PERSON_DELETE),
             "styles": [
                 {
                     "style": style,

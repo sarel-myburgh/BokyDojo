@@ -15,6 +15,7 @@ from apps.identity import (
     org_views,
     photo_views,
     profile_views,
+    removal_views,
     student_views,
 )
 from apps.identity import password_reset as password_reset_views
@@ -204,6 +205,27 @@ urlpatterns = [
         "people/<uuid:person_id>/grades/<uuid:grade_id>/delete/",
         staffing_grade_views.staff_grade_delete_view,
         name="staff-grade-delete",
+    ),
+    path(
+        "people/<uuid:person_id>/remove/",
+        removal_views.person_delete_view,
+        name="person-delete",
+    ),
+    path(
+        "people/<uuid:person_id>/restore/",
+        removal_views.person_restore_view,
+        name="person-restore",
+    ),
+    path("settings/removed/", removal_views.removed_people_view, name="removed-people"),
+    path(
+        "students/<uuid:person_id>/archive/",
+        removal_views.student_archive_view,
+        name="student-archive",
+    ),
+    path(
+        "students/<uuid:person_id>/unarchive/",
+        removal_views.student_unarchive_view,
+        name="student-unarchive",
     ),
     path(
         "people/<uuid:person_id>/edit/",

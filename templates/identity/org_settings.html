@@ -140,4 +140,13 @@
     {% endfor %}
   </div>
 {% endif %}
+
+{% if may_delete_people %}
+  <p class="mt-4 text-sm">
+    <a href="{% url 'removed-people' %}" class="text-gray-500 underline hover:text-gray-900">
+      {% translate "Removed people" %}
+    </a>
+    <span class="text-gray-500">— {% translate "bring somebody back" %}</span>
+  </p>
+{% endif %}
 {% endblock %}

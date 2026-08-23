@@ -93,4 +93,21 @@
     </form>
   </div>
 {% endif %}
+
+{% if may_delete %}
+  {% comment %}
+    ⚠ Last on the page, visually quiet, and it opens a confirmation rather than
+    acting. Destructive controls should be findable, not prominent.
+  {% endcomment %}
+  <div class="mt-8 border-t border-gray-200 pt-5">
+    <p class="eyebrow mb-1">{% translate "Removing them" %}</p>
+    <p class="mb-3 text-sm text-gray-500">
+      {% translate "Takes them out of the app and stops their sign-in. Their history is kept and it can be undone." %}
+    </p>
+    <a href="{% url 'person-delete' person.pk %}"
+       class="inline-block border border-red-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-widest text-red-800 active:bg-red-50">
+      {% translate "Remove from the organisation" %}
+    </a>
+  </div>
+{% endif %}
 {% endblock %}

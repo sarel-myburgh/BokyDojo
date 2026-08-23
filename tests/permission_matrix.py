@@ -11,6 +11,8 @@ DOJO = ScopeType.DOJO
 MATRIX: dict[tuple[str, str, str], set[str]] = {
     (Role.ORG_ADMIN, ORG, CENTRAL): {
         Action.ORG_EDIT,
+        Action.PERSON_DELETE,
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.DOJO_EDIT,
         Action.DOJO_CREATE,
@@ -39,6 +41,8 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
     },
     (Role.ORG_ADMIN, ORG, FEDERATED): {
         Action.ORG_EDIT,
+        Action.PERSON_DELETE,
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.DOJO_EDIT,
         Action.DOJO_CREATE,
@@ -55,6 +59,8 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
     },
     (Role.ORG_ADMIN, DOJO, CENTRAL): {
         Action.ORG_EDIT,
+        Action.PERSON_DELETE,
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.DOJO_EDIT,
         Action.DOJO_CREATE,
@@ -83,6 +89,8 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
     },
     (Role.ORG_ADMIN, DOJO, FEDERATED): {
         Action.ORG_EDIT,
+        Action.PERSON_DELETE,
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.DOJO_EDIT,
         Action.DOJO_CREATE,
@@ -110,6 +118,7 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
         Action.REPORT_VIEW_FINANCIAL,
     },
     (Role.DOJO_ADMIN, ORG, CENTRAL): {
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.DOJO_EDIT,
         Action.PERSON_VIEW,
@@ -135,6 +144,7 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
         Action.REPORT_VIEW_FINANCIAL,
     },
     (Role.DOJO_ADMIN, ORG, FEDERATED): {
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.DOJO_EDIT,
         Action.PERSON_VIEW,
@@ -148,6 +158,7 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
         Action.REPORT_VIEW,
     },
     (Role.DOJO_ADMIN, DOJO, CENTRAL): {
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.DOJO_EDIT,
         Action.PERSON_VIEW,
@@ -173,6 +184,7 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
         Action.REPORT_VIEW_FINANCIAL,
     },
     (Role.DOJO_ADMIN, DOJO, FEDERATED): {
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.DOJO_EDIT,
         Action.PERSON_VIEW,
@@ -198,6 +210,7 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
         Action.REPORT_VIEW_FINANCIAL,
     },
     (Role.INSTRUCTOR, ORG, CENTRAL): {
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.PERSON_VIEW,
         Action.MEDICAL_VIEW,
@@ -210,6 +223,7 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
         Action.REPORT_VIEW,
     },
     (Role.INSTRUCTOR, ORG, FEDERATED): {
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.PERSON_VIEW,
         Action.ATTENDANCE_VIEW,
@@ -220,6 +234,7 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
         Action.REPORT_VIEW,
     },
     (Role.INSTRUCTOR, DOJO, CENTRAL): {
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.PERSON_VIEW,
         Action.MEDICAL_VIEW,
@@ -232,6 +247,7 @@ MATRIX: dict[tuple[str, str, str], set[str]] = {
         Action.REPORT_VIEW,
     },
     (Role.INSTRUCTOR, DOJO, FEDERATED): {
+        Action.STUDENT_ARCHIVE,
         Action.DOJO_VIEW,
         Action.PERSON_VIEW,
         Action.MEDICAL_VIEW,
