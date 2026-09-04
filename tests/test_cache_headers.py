@@ -67,7 +67,15 @@ def test_every_signed_in_page_is_covered_not_just_the_one_i_thought_of(client, u
     so testing one page would prove nothing about the rest."""
     client.force_login(user)
 
-    for name in ("today", "calendar", "student-list", "org-settings", "account", "help"):
+    for name in (
+        "today",
+        "calendar",
+        "student-list",
+        "student-qr-cards",
+        "org-settings",
+        "account",
+        "help",
+    ):
         response = client.get(reverse(name))
         assert response.status_code == 200, name
         assert "no-store" in response.get("Cache-Control", ""), name

@@ -254,6 +254,7 @@ def student_list_view(request):
             # checks the same action itself. This only stops offering a button
             # that would refuse.
             "may_add_student": _holds_anywhere(actor, Action.PERSON_CREATE),
+            "may_print_qr_cards": _holds_anywhere(actor, Action.ATTENDANCE_RECORD),
             "bulk_status_form": StudentBulkStatusForm(actor=actor),
         },
     )

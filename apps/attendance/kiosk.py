@@ -45,6 +45,8 @@ ALLOWED_ROUTES = frozenset(
     {
         "kiosk",
         "kiosk-mark",
+        "kiosk-scan",
+        "kiosk-scan-confirm",
         "kiosk-exit",
         "attendance-sync",  # the offline queue flushing the taps
         "student-photo",  # the faces already on the grid

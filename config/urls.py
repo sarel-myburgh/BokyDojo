@@ -254,6 +254,7 @@ urlpatterns = [
     ),
     path("students/new/", org_views.student_create_view, name="student-create"),
     path("students/", student_views.student_list_view, name="student-list"),
+    path("students/qr-cards/", kiosk_views.student_qr_cards_view, name="student-qr-cards"),
     path(
         "students/segments/save/",
         student_views.student_segment_create_view,
@@ -363,6 +364,16 @@ urlpatterns = [
         "sessions/<uuid:session_id>/check-in/finish/",
         kiosk_views.kiosk_exit_view,
         name="kiosk-exit",
+    ),
+    path(
+        "check-in/scan/<uuid:person_id>/",
+        kiosk_views.kiosk_scan_view,
+        name="kiosk-scan",
+    ),
+    path(
+        "check-in/scan/<uuid:person_id>/confirm/",
+        kiosk_views.kiosk_scan_confirm_view,
+        name="kiosk-scan-confirm",
     ),
     path(
         "api/attendance/sessions/<uuid:session_id>/sync/",

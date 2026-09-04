@@ -21,6 +21,7 @@ from django.utils import timezone
 
 from apps.attendance import kiosk
 from apps.attendance.models import AttendanceRecord
+from apps.core.models import AuditLog
 from apps.core.scoping import allow_unscoped
 from apps.identity.models import (
     Dojo,
@@ -190,6 +191,103 @@ def test_a_malformed_student_id_is_a_400_not_a_500(client, world):
     )
 
     assert response.status_code == 400
+
+
+# -- QR cards -----------------------------------------------------------------
+
+
+def test_printable_qr_cards_show_first_names_only(client, world):
+    client.force_login(world["user"])
+
+    response = client.get(reverse("student-qr-cards"))
+    body = response.content.decode()
+
+    assert response.status_code == 200
+    assert body.count("<svg") == 2
+    assert "Bopha" in body
+    assert "Sokha" in body
+    assert "Bopha Chan" not in body
+    assert "Sokha Chan" not in body
+
+
+def test_printing_qr_cards_is_audited(client, world):
+    client.force_login(world["user"])
+
+    response = client.get(reverse("student-qr-cards"))
+
+    assert response.status_code == 200
+    entry = AuditLog.objects.get(
+        action="export",
+        subject_type="student_qr_cards",
+        subject_id=str(world["org"].pk),
+    )
+    assert entry.actor_person_id == world["user"].person_id
+    assert entry.note == "2 card(s)"
+
+
+def test_printable_qr_cards_require_attendance_permission(client, world):
+    with allow_unscoped("test setup"):
+        officer = Person.objects.create(
+            organization=world["org"], given_name="Safe", family_name="Guard"
+        )
+        RoleAssignment.objects.create(
+            organization=world["org"],
+            person=officer,
+            role=Role.SAFEGUARDING,
+            scope_type=ScopeType.DOJO,
+            dojo=world["dojo"],
+        )
+        user = User.objects.create_user(
+            email="safeguarding@example.com", password=PASSWORD, person=officer
+        )
+    client.force_login(user)
+
+    assert client.get(reverse("student-qr-cards")).status_code == 403
+
+
+def test_scanning_a_qr_card_confirms_the_student(client, world):
+    client.force_login(world["user"])
+    open_kiosk(client, world["session"])
+    student = world["students"][0]
+
+    response = client.get(reverse("kiosk-scan", args=[student.pk]))
+    body = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Bopha" in body
+    assert "Chan" not in body
+    assert reverse("kiosk-scan-confirm", args=[student.pk]) in body
+    assert reverse("student-list") not in body
+    assert reverse("today") not in body
+
+    response = client.post(reverse("kiosk-scan-confirm", args=[student.pk]))
+
+    assert response.status_code == 302
+    assert response["Location"] == reverse("kiosk", args=[world["session"].pk])
+    with allow_unscoped("test read"):
+        record = AttendanceRecord.objects.get(session=world["session"], student=student)
+    assert record.status == AttendanceRecord.Status.PRESENT
+    assert record.method == AttendanceRecord.Method.KIOSK_QR
+
+
+def test_qr_scan_requires_the_active_kiosk_lock(client, world):
+    client.force_login(world["user"])
+
+    response = client.get(reverse("kiosk-scan", args=[world["students"][0].pk]))
+
+    assert response.status_code == 404
+
+
+def test_qr_pages_do_not_leak_template_comments(client, world):
+    client.force_login(world["user"])
+
+    card_body = client.get(reverse("student-qr-cards")).content.decode()
+    open_kiosk(client, world["session"])
+    scan_body = client.get(reverse("kiosk-scan", args=[world["students"][0].pk])).content.decode()
+
+    for body in (card_body, scan_body):
+        assert "{#" not in body
+        assert "Mobile-first" not in body
 
 
 # -- the lock -----------------------------------------------------------------

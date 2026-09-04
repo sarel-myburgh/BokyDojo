@@ -265,6 +265,27 @@ def test_posting_the_roster_saves_attendance(client, world):
     assert records[second.pk] == AttendanceRecord.Status.ABSENT
 
 
+def test_posting_a_twenty_student_roster_is_one_fast_submit(client, world):
+    students = list(world["students"])
+    students.extend(
+        make_student(world["org"], f"Roster{index}", world["dojo_a"]) for index in range(18)
+    )
+    client.force_login(world["instructor"])
+    payload = {f"status_{student.pk}": AttendanceRecord.Status.PRESENT for student in students}
+
+    started = time.monotonic()
+    response = client.post(reverse("roster", args=[world["session"].pk]), payload)
+    elapsed = time.monotonic() - started
+
+    assert response.status_code == 302
+    assert elapsed < 30
+    with allow_unscoped("assertion"):
+        assert (
+            AttendanceRecord.objects.unscoped("assertion").filter(session=world["session"]).count()
+            == 20
+        )
+
+
 def test_posting_an_unknown_status_is_ignored(client, world):
     client.force_login(world["instructor"])
     student = world["students"][0]

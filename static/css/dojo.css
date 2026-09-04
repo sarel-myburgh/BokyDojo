@@ -132,3 +132,37 @@ body {
 [x-cloak] {
     display: none !important;
 }
+
+/* -- Printable student QR cards ---------------------------------------------- */
+.qr-code svg {
+    width: 9rem;
+    height: 9rem;
+    max-width: 100%;
+}
+
+@media print {
+    body {
+        background: #fff !important;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+
+    .qr-card-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.25in;
+    }
+
+    .qr-card {
+        min-height: 3.25in;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .qr-code svg {
+        width: 2.25in;
+        height: 2.25in;
+    }
+}

@@ -19,11 +19,14 @@ import uuid
 from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.translation import gettext as _
-from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from apps.core import audit
 from apps.core.throttle import (
     LOGIN_POLICY,
     Throttled,
@@ -31,9 +34,10 @@ from apps.core.throttle import (
     register_failure,
     register_success,
 )
-from apps.identity.models import GovernanceModel, StudentProfile
-from apps.identity.permissions import Action, require
+from apps.identity.models import Dojo, GovernanceModel, StudentProfile
+from apps.identity.permissions import Action, PermissionDenied, can, require
 from apps.identity.photos import current_student_photo
+from apps.identity.qr import svg_for
 from apps.scheduling.models import ClassSession
 
 from . import kiosk
@@ -55,6 +59,138 @@ def _get_session(actor, session_id) -> ClassSession:
         ),
         pk=session_id,
     )
+
+
+def _locked_session(request) -> ClassSession:
+    """Return the class currently protected by the hand-around lock."""
+    session_id = kiosk.locked_session_id(request)
+    if not session_id:
+        # A printed card is only meaningful while the instructor is running
+        # check-in. Do not reveal whether a person id belongs to this tenant.
+        raise Http404
+    session = _get_session(request.actor, session_id)
+    require(
+        request.actor,
+        Action.ATTENDANCE_RECORD,
+        session,
+        governance_model=_governance(session),
+    )
+    return session
+
+
+def _roster_entry(session, actor, person_id):
+    entry = next(
+        (
+            entry
+            for entry in session_roster(session=session, actor=actor)
+            if entry.student.pk == person_id
+        ),
+        None,
+    )
+    if entry is None:
+        # A card from another dojo or tenant is indistinguishable from a card
+        # that is not in this class. Keep both cases a quiet 404.
+        raise Http404
+    return entry
+
+
+@login_required
+@never_cache
+@require_GET
+def student_qr_cards_view(request) -> HttpResponse:
+    """Print first-name-only QR cards for students in the actor's scope."""
+    actor = request.actor
+    dojos = Dojo.objects.for_actor(actor).select_related("organization").order_by("pk")
+    dojo = next(
+        (
+            dojo
+            for dojo in dojos
+            if can(
+                actor,
+                Action.ATTENDANCE_RECORD,
+                dojo,
+                governance_model=dojo.organization.governance_model or GovernanceModel.CENTRAL,
+            )
+        ),
+        None,
+    )
+    if dojo is None:
+        raise PermissionDenied(action=Action.ATTENDANCE_RECORD, actor=actor)
+    require(
+        actor,
+        Action.ATTENDANCE_RECORD,
+        dojo,
+        governance_model=dojo.organization.governance_model or GovernanceModel.CENTRAL,
+    )
+
+    cards = []
+    profiles = (
+        StudentProfile.objects.for_actor(actor)
+        .select_related("person", "person__organization", "home_dojo")
+        .order_by("person__family_name", "person__given_name")
+    )
+    for profile in profiles:
+        governance = profile.person.organization.governance_model or GovernanceModel.CENTRAL
+        require(actor, Action.PERSON_VIEW, profile, governance_model=governance)
+        scan_url = request.build_absolute_uri(reverse("kiosk-scan", args=[profile.person_id]))
+        cards.append(
+            {
+                "name": profile.person.display_name,
+                "dojo": profile.home_dojo.name if profile.home_dojo else "",
+                "qr_svg": svg_for(scan_url, scale=4),
+            }
+        )
+
+    audit.record(
+        "export",
+        actor=actor,
+        subject_type="student_qr_cards",
+        subject_id=str(actor.organization_id),
+        note=f"{len(cards)} card(s)",
+        strict=True,
+    )
+    return render(request, "attendance/qr_cards.html", {"cards": cards})
+
+
+@login_required
+@never_cache
+@require_GET
+def kiosk_scan_view(request, person_id) -> HttpResponse:
+    """Show a confirmation page for a card scanned during check-in."""
+    session = _locked_session(request)
+    entry = _roster_entry(session, request.actor, person_id)
+    return render(
+        request,
+        "attendance/kiosk_scan.html",
+        {
+            "session": session,
+            "student": entry.student,
+            "already_marked": entry.record is not None,
+            "already_checked_in": entry.record is not None
+            and entry.record.status in AttendanceRecord.ATTENDED_STATUSES,
+        },
+    )
+
+
+@login_required
+@require_POST
+def kiosk_scan_confirm_view(request, person_id) -> HttpResponse:
+    """Record a scanned card after the instructor confirms it."""
+    session = _locked_session(request)
+    entry = _roster_entry(session, request.actor, person_id)
+    mark_attendance(
+        session=session,
+        student=entry.student,
+        status=AttendanceRecord.Status.PRESENT,
+        actor=request.actor,
+        method=AttendanceRecord.Method.KIOSK_QR,
+    )
+    complete_session(session, actor=request.actor)
+    messages.success(
+        request,
+        _("%(name)s is checked in.") % {"name": entry.student.display_name},
+    )
+    return redirect("kiosk", session_id=session.pk)
 
 
 def _tiles(session, actor):

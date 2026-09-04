@@ -228,7 +228,7 @@ Search/filter by dojo, rank, status, age, attendance drop-off. Student profile p
 
 ### 5.2 Attendance
 - **Instructor roster view** — big touch targets, whole class on one screen, offline-first, one tap per student, "mark all present" then deselect absentees.
-- **Kiosk mode** — tablet at the door, student enters PIN or scans a QR/card. Locked-down browser mode.
+- **Supervised check-in** — instructor's carried phone/tablet, first-name/photo grid, with printable QR cards as a secondary path. The session is locked until the instructor's password ends it.
 - Late/excused states, retroactive editing (with audit), bulk import from CSV for migration.
 - Attendance drives: grading eligibility, drop-in billing, retention alerts ("hasn't attended in 21 days").
 
@@ -380,7 +380,7 @@ From the competitive research, three structural advantages fall out of decisions
 
 ## 10. Key Decisions Needed From You
 
-1. **Attendance capture** — instructor roster only, or kiosk self-check-in too? (Research says kiosk is a top-praised feature; recommend both, roster first.)
+1. ~~Attendance capture~~ — **decided: both.** The roster remains available, and supervised self-check-in runs on the instructor's carried phone/tablet; see §13.2 and D1.
 2. **Booking** — are classes drop-in, or do students reserve spots with capacity limits?
 3. **Payroll** — calculate pay amounts, or just report hours?
 4. ~~Recurring billing model~~ — **decided: invoice + reminder + parent pays.**
@@ -504,27 +504,29 @@ A dojo owner who can run Docker Compose is rare. Realistically the self-host tie
 
 Implementation: a single `visibility_policy` resolver consulted by every queryset, not scattered `if` statements. Both models share one schema — `federated` withholds fields rather than storing them elsewhere. Write the permission matrix as a test fixture early; it's the thing most likely to leak.
 
-### 13.2 Attendance & kiosk configuration `DECIDED`
+### 13.2 Attendance & kiosk configuration `RESCOPED BY D1`
 
-Settings resolve through a hierarchy, each level overriding the last where permitted:
+The Phase 1 check-in deployment is the instructor's own phone or tablet,
+carried through the queue while the instructor supervises. The authentication
+is their signed-in session; `KioskLockMiddleware` keeps that session on the
+check-in grid until the instructor's password ends it.
 
-```
-Org default → Dojo → ClassTemplate → ClassSession (instructor, live) → Student (individual override)
-```
+The Phase 1 surface is intentionally small:
 
-**`kiosk_display_mode`** ∈ `{photo_grid, name_list, both}`
-- `photo_grid` — tap your own face. Required for young children; also the fastest for everyone.
-- `name_list` — searchable names, better for large adult classes and students without a photo on file.
-- Instructor can flip this **live at the kiosk** without an admin, because reality varies by class.
+- A first-name-only photo/name grid for the current session. Students without
+  photo consent remain on the same grid as name tiles.
+- Printable first-name-only QR cards as a secondary path. A native camera scan
+  opens a confirmation page on the supervised device; only the confirmation
+  POST records `KIOSK_QR` attendance through the canonical attendance service.
+- No device-bound token, PIN, unattended wall-tablet mode, live mode switch, or
+  ±X-minute session chooser. Those controls belonged to the earlier
+  unattended-kiosk design and were dropped by D1 rather than silently left
+  half-implemented.
 
-**`pin_policy`** ∈ `{off, optional, required}`
-- Set per class *and* overridable per student (a specific student may be required to PIN even when the class isn't — useful where a parent disputes attendance, or for an adult who wants their check-ins non-spoofable).
-- Resolution rule: **the stricter of class policy and student override wins.** A class set to `off` cannot downgrade a student marked `required`.
-- PINs are 4–6 digits, hashed, rate-limited, lockout after N failures, and resettable by a dojo admin. They are a convenience control, not a security boundary — never let a PIN alone unlock anything beyond marking oneself present.
-
-**Kiosk hardening:** device-bound token rather than a user session, scoped to one dojo, no access to any record beyond the roster of sessions starting within ±X minutes, no PII beyond first name and photo on screen, auto-return to the grid after each check-in, and a physical-presence assumption (never expose kiosk endpoints to the open internet without the device token).
-
-Photo grid makes student photos operationally required — so photo consent (§2.3) gates it, and a student without consent falls back to name entry automatically.
+If a permanently mounted, unattended kiosk is wanted later, its device token,
+session selection, PIN policy, and physical-presence controls must return as a
+separate design and security review. They are not implied by the supervised
+Phase 1 flow.
 
 ### 13.3 Notifications: email, Telegram, WhatsApp `DECIDED — with a cost caveat`
 

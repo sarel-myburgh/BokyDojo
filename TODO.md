@@ -270,7 +270,14 @@ OUTPUT
   `agent/*` branches are deleted, and the `BokyDojo-*` directories are gone.
   Work directly here. The multi-agent section below is retained as a record of
   how to set the fan-out up again, not as a description of the current state.
-- **Current phase:** Phase 0 complete / Phase 1 in progress
+- **Current phase:** Phase 1 code-complete; exit validation pending
+- **Phase 1 status (2026-09-04):** The QR-card secondary check-in path is now
+  implemented and tested, including printable first-name-only cards, a
+  supervised scan confirmation page, and canonical `KIOSK_QR` attendance
+  records. The remaining unchecked items are deliberately external: a human
+  speed dry-run (`1.6.6`) and the four pilot-dojo exit-gate checks (`1.12.1`–
+  `1.12.4`). They cannot be truthfully ticked from this checkout without a
+  real dojo, real data, training, feedback, and a spreadsheet cutover.
 - ⚠ **This session — the app was serving no static files at all.**
   `STATICFILES_DIRS` was never set, and no app ships its own `static/` dir, so
   the finders never looked in the project-level `static/` tree. Every asset
@@ -307,6 +314,11 @@ OUTPUT
   holder onwards. `.test` is RFC 6761 reserved so a misconfigured demo cannot
   mail a real person; change `DEMO_EMAIL_DOMAIN` in the seed command if you want
   a different one. Students still get generated addresses — most never log in.
+- **Latest implementation:** printable first-name-only QR cards and a locked,
+  confirmation-based QR scan path are complete. The scan writes attendance only
+  after a CSRF-protected POST and returns to the supervised check-in grid. The
+  20-student roster path also has a one-request regression check; the human
+  under-30-second result is still pending.
 - **Last completed:** offline attendance `1.6.1`–`1.6.5`: installable PWA shell,
   IndexedDB queue, CSRF-protected and tenant-scoped sync endpoint, idempotent
   replay, optimistic conflict detection, visible pending/conflict state, and a
@@ -501,8 +513,9 @@ OUTPUT
 - **Human dry-run debt:** install the PWA on the intended phone/tablet, mark a
   real 20-person roster with networking disabled, reconnect, and time the full
   instructor interaction. The automated 20-mark queue/reconnect and endpoint
-  checks pass, but the human `1.6.6` under-30-second target is intentionally not
-  ticked from a test-client timing.
+  checks pass, and the roster path now has a one-request 20-student regression
+  check (`tests/test_attendance_views.py`). The human `1.6.6` under-30-second
+  target is intentionally not ticked from test-client timing.
 - **`1.11.2` is done.** The view, template and CSV export were already on disk
   but the report was **unreachable** — no route in `config/urls.py`, no link
   from the other two reports. Now routed at `/reports/ranks/` as
@@ -922,8 +935,8 @@ OUTPUT
     worth remembering: `b"\x00\x01\x02"` is **valid UTF-8** and cp1252 takes it
     too, so it does not test a decode failure at all — `0x81`/`0x8d` do.
 - **`1.10` is complete — attendance, rank history and presets all landed.**
-  ⚠ **Import is now the only Phase 1 block finished end to end; the `1.7.x`
-  kiosk is all that remains.**
+  ⚠ **All Phase 1 code paths are now implemented; only the human speed check
+  and the real pilot exit gate remain.**
   - ⚠ **Both new importers go through the existing service, not the tables.**
     Attendance calls `mark_attendance` — which is why an imported row carries
     `Method.IMPORT`, gets the enrolment/visiting rule, the row lock and the
@@ -1024,10 +1037,16 @@ OUTPUT
   - ⚠ **I shipped the multi-line `{# #}` bug again**, twice, in the kiosk
     template — and `test_pages_contain_no_leaked_template_comments` did not catch
     it because that test *enumerates URLs* and did not know the page existed. The
-    kiosk is now in its list. **Add every new page to it.**
-  - 22 tests in `tests/test_kiosk.py`, checked against four broken variants (lock
-    not blocking, any student markable, exit without a password, a GET able to
-    lock the device).
+    kiosk is now in its list. **Add every new page to it.** The QR-card and scan
+    pages have their own no-leak regression check.
+  - The kiosk test module now covers the locked grid, QR-card rendering and scan
+    confirmation, cross-roster refusal, password exit, throttling, and the
+    GET-cannot-lock invariant.
+- **`1.7.11` is now complete.** Staff with attendance-record permission can print
+  first-name-only QR cards from the student directory. Scanning one while a
+  supervised check-in session is locked opens a confirmation page; the POST
+  writes the canonical `KIOSK_QR` method and returns to the grid. No student
+  name or other PII is placed in the QR payload.
 - **`1.9.3`/`1.9.4` are done — Phase 1 has no code left in it.** A draft time
   entry appears the moment a class's attendance is taken, and `/timesheet/` shows
   the instructor their week.
@@ -1148,9 +1167,12 @@ OUTPUT
   - 15 tests in `tests/test_ladder_editing.py`, checked against three broken
     variants (dojo ladder ignored, awarded belt deletable, single-pass
     renumber) — each failing with precisely the error its comment predicts.
-- **Best next tasks in Phase 1**, in dependency order:
-  - Then the `1.7.x` kiosk (12 tasks, none started). `D1` should be settled
-    before starting it, since it is what decides whether the kiosk is wanted.
+- **Remaining Phase 1 exit work:**
+  - Run the human `1.6.6` speed dry-run on the intended phone/tablet and record
+    the result.
+  - Supply the pilot dojo and its real export for `1.12.1`, train instructors,
+    run one live week, capture feedback, fix blockers, and confirm spreadsheet
+    cutover for `1.12.2`–`1.12.4`.
   - `D10` still blocks the `1.12` exit gate regardless of code. Scheduling still
     has **no editing UI** — `1.4.5`'s move/split and `1.4.8`'s assignment are
     service-level, and the calendar is deliberately read-only.
@@ -1170,10 +1192,10 @@ OUTPUT
   `apps.core.fields`. Task `1.1.2` (medical fields) is unblocked.
   ⚠ Encrypted columns cannot be filtered, ordered or indexed — the field
   constructor refuses `db_index` and `unique` rather than failing silently.
-- **Open questions blocking work:** none in Phase 0 or Phase 1. `D7` (licence) is
-  **decided** — AGPL-3.0-or-later plus a commercial exception; `LICENSE` is in
-  place. `D10` (pilot dojo) still blocks the Phase 1 exit gate `1.12`, and only
-  that.
+- **Open questions blocking work:** no further Phase 1 code decision is needed.
+  `D7` (licence) is **decided** — AGPL-3.0-or-later plus a commercial
+  exception; `LICENSE` is in place. `D10` (pilot dojo) still blocks the Phase 1
+  exit gate `1.12`, alongside the human `1.6.6` dry-run.
 - ✅ **The Phase 1 backlog is committed.** For eleven days ~70 untracked paths
   held work that was *ticked as done* — all of MFA / password reset / CSP, the
   backups, the first-run wizard, medical fields, guardians, every consent flow,
@@ -1502,9 +1524,9 @@ Apply to every task, including delegated ones. Violating these is the most likel
 - [x] `1.7.9` No-consent students fall back to a name tile in the same grid `§13.2`
 - [x] `1.7.10` `[DS]` No lingering roster: the grid is the only screen, and the
       session cannot reach anything else until the instructor's password ends it
-- [ ] `1.7.11` `[DS]` Printable QR student cards as a secondary check-in path `§12.8`
-      *(deferred — not needed for the tap-your-face flow; revisit if a dojo wants
-      cards)*
+- [x] `1.7.11` `[DS]` Printable QR student cards as a secondary check-in path `§12.8`
+      *(first-name-only cards link to a supervised confirmation page; attendance
+      is recorded through the canonical service as `KIOSK_QR`)*
 - [x] `1.7.12` ⚠ Test: a locked session cannot reach any other screen
       *(replaces the revoked-token test, which has no meaning without tokens)*
 

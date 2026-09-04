@@ -37,7 +37,10 @@
       {% endfor %}
     {% endif %}
 
-    <p class="mb-4 text-center text-base font-medium text-gray-600">{% translate "Tap your photo" %}</p>
+    <p class="mb-1 text-center text-base font-medium text-gray-600">{% translate "Tap your photo" %}</p>
+    <p class="mb-4 text-center text-sm text-gray-500">
+      {% translate "You can also scan a printed QR card with this device's camera, then confirm the check-in." %}
+    </p>
 
     {% if tiles %}
       <form id="kiosk-grid"
